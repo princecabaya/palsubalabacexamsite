@@ -647,16 +647,23 @@
     );
     if (!second) return;
 
-    const { error } = await db
-      .from("exams")
-      .delete()
-      .eq("id", exam.id);
+    const { data, error } = await db.rpc("admin_delete_exam", {
+      p_exam_id: exam.id
+    });
 
     if (error) {
-      alert(`Could not delete exam: ${error.message}`);
+      alert(
+        `Could not delete exam: ${error.message}\n\nRun supabase-fix-admin-delete.sql in Supabase SQL Editor, then refresh this page.`
+      );
       return;
     }
 
+    if (data !== true) {
+      alert("No exam was deleted. It may already have been removed.");
+      return;
+    }
+
+    alert(`Exam "${exam.title}" was deleted successfully.`);
     $("examResultsPanel")?.classList.add("hidden");
     await Promise.all([loadExams(), refreshAttempts()]);
   }
@@ -685,6 +692,13 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     })[c]);
   }
+
+  // Shared authenticated admin client/hooks for companion dashboard scripts.
+  window.ExamAdmin = {
+    db,
+    refreshAttempts,
+    loadExams
+  };
 
   // Public hooks used by the Excel importer. This reuses the same validated
   // question-builder UI instead of maintaining a second import-only format.
