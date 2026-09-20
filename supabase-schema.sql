@@ -245,7 +245,7 @@ $$;
 create or replace function public.get_exam_questions(p_attempt_token uuid)
 returns table(
   question_id uuid,
-  position integer,
+  "position" integer,
   prompt text,
   question_type text,
   choices jsonb,
