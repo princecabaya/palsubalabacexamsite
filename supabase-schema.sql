@@ -415,13 +415,14 @@ end;
 $$;
 
 
--- ---------- Admin maintenance RPC ----------
+
+-- ---------- Admin maintenance RPCs ----------
 create or replace function public.admin_delete_attempt(p_attempt_id uuid)
 returns boolean
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   v_deleted integer := 0;
 begin
@@ -435,10 +436,33 @@ begin
   get diagnostics v_deleted = row_count;
   return v_deleted = 1;
 end;
-$;
+$$;
+
+create or replace function public.admin_delete_exam(p_exam_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted integer := 0;
+begin
+  if auth.uid() is null or not public.exam_guard_current_user_is_admin() then
+    raise exception 'Administrator access required.';
+  end if;
+
+  delete from public.exams
+  where id = p_exam_id;
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted = 1;
+end;
+$$;
 
 revoke all on function public.admin_delete_attempt(uuid) from public;
+revoke all on function public.admin_delete_exam(uuid) from public;
 grant execute on function public.admin_delete_attempt(uuid) to authenticated;
+grant execute on function public.admin_delete_exam(uuid) to authenticated;
 
 -- Restrict execution explicitly.
 revoke all on function public.start_exam(text,text,text,text) from public;
