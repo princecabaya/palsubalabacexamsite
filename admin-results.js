@@ -1,7 +1,11 @@
 (() => {
-  const cfg = window.EXAM_CONFIG || {};
-  const db = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLISHABLE_KEY);
+  const db = window.ExamAdmin?.db;
   const $ = (id) => document.getElementById(id);
+
+  if (!db) {
+    console.error("Shared authenticated admin client is unavailable.");
+    return;
+  }
 
   const examRows = $("examRows");
   const panel = $("examResultsPanel");
@@ -161,23 +165,41 @@
       return;
     }
 
+    const deleteButton = [...document.querySelectorAll(".delete-attempt-btn")]
+      .find(btn => btn.closest("tr")?.querySelector("td:nth-child(3)")?.textContent?.trim() === studentNo);
+
+    if (deleteButton) {
+      deleteButton.disabled = true;
+      deleteButton.textContent = "Deleting…";
+    }
+
     const { data, error } = await db.rpc("admin_delete_attempt", {
       p_attempt_id: attempt.id
     });
 
     if (error) {
+      if (deleteButton) {
+        deleteButton.disabled = false;
+        deleteButton.textContent = "Delete Attempt";
+      }
       alert(
-        `Could not delete student exam record: ${error.message}\n\nRun supabase-fix-delete-attempt.sql in Supabase SQL Editor, then refresh the admin page.`
+        `Could not delete student exam record: ${error.message}\n\nRun supabase-fix-admin-delete.sql in Supabase SQL Editor, then refresh the admin page.`
       );
       return;
     }
 
     if (data !== true) {
+      if (deleteButton) {
+        deleteButton.disabled = false;
+        deleteButton.textContent = "Delete Attempt";
+      }
       alert("No attempt was deleted. It may already have been removed or the record no longer exists.");
       return;
     }
 
+    alert(`The exam record for ${studentName} was deleted successfully.`);
     await openExamResults(exam);
+    window.ExamAdmin?.refreshAttempts?.();
   }
 
   function numberOrNull(value) {
