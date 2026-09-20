@@ -85,6 +85,51 @@
             </div>
             <button id="closeDetail">Close</button>
           </div>
+
+          <section id="attemptSummary" class="attempt-summary">
+            <div class="summary-head">
+              <div>
+                <h3>Attempt Summary</h3>
+                <p class="muted">Plain-language interpretation of this student's exam activity.</p>
+              </div>
+              <span id="summaryReviewBadge" class="badge">Summary</span>
+            </div>
+
+            <div class="attempt-summary-grid">
+              <div class="summary-card"><span>Score</span><strong id="summaryScore">—</strong></div>
+              <div class="summary-card"><span>Percentage</span><strong id="summaryPercent">—</strong></div>
+              <div class="summary-card"><span>Exam Time</span><strong id="summaryDuration">—</strong></div>
+              <div class="summary-card"><span>Device</span><strong id="summaryDevice">—</strong></div>
+              <div class="summary-card"><span>Tab Hidden</span><strong id="summaryTabHidden">0</strong></div>
+              <div class="summary-card"><span>Window Blur</span><strong id="summaryBlur">0</strong></div>
+              <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
+              <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
+            </div>
+
+            <div id="summaryNarrative" class="summary-narrative"></div>
+
+            <details class="event-guide">
+              <summary>What do these event names mean?</summary>
+              <div class="event-guide-grid">
+                <p><strong>exam_started</strong> — The exam session began. Device, screen size, visibility, and fullscreen state may be recorded.</p>
+                <p><strong>tab_or_window_hidden</strong> — The exam page became hidden, such as switching tabs/apps or minimizing the browser. It does not identify where the student went.</p>
+                <p><strong>tab_or_window_visible</strong> — The exam page became visible again.</p>
+                <p><strong>window_blur</strong> — The browser window lost focus. This can happen when another app/window is tapped or when browser controls are used.</p>
+                <p><strong>window_focus</strong> — Focus returned to the exam browser window.</p>
+                <p><strong>fullscreen_exit</strong> — The exam left fullscreen after fullscreen had been active.</p>
+                <p><strong>copy/cut/paste/contextmenu blocked</strong> — A restricted editing or right-click action was attempted and blocked.</p>
+                <p><strong>keyboard/developer-tools/reload blocked</strong> — A monitored keyboard shortcut was attempted and blocked.</p>
+                <p><strong>print_attempt / printscreen_key_detected</strong> — A detectable print or screenshot-key action occurred. Screenshot-key detection is best-effort only.</p>
+                <p><strong>student_submit_clicked</strong> — The student pressed the Submit Exam button.</p>
+                <p><strong>exam_submitted</strong> — Supabase finalized the attempt and stored the auto-scored result.</p>
+              </div>
+            </details>
+
+            <div class="interpretation-note">
+              <strong>How to interpret:</strong> Focus and visibility changes are behavioral signals only. They cannot identify the exact app, website, or reason for the change and should not be treated alone as proof of misconduct.
+            </div>
+          </section>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -234,7 +279,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
-  <script src="admin.js?v=20260920-1806"></script>
+  <script src="admin.js?v=20260920-1815"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-1806"></script>
 </body>
