@@ -139,8 +139,15 @@
         <td><strong>${escapeHtml(percentage)}</strong></td>
         <td><span class="badge ${r.status === "submitted" ? "ok" : "warn"}">${escapeHtml(r.status)}</span></td>
         <td>${fmt(r.submitted_at)}</td>
-        <td><button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button></td>
+        <td class="action-cell">
+          ${r.status === "submitted" ? '<button type="button" class="result-pdf-btn">Result PDF</button>' : ""}
+          <button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button>
+        </td>
       `;
+
+      tr.querySelector(".result-pdf-btn")?.addEventListener("click", async (event) => {
+        await window.ExamReport?.generateTeacher(r.id, event.currentTarget);
+      });
 
       tr.querySelector(".delete-attempt-btn").addEventListener("click", async () => {
         await deleteAttempt(r, exam);
