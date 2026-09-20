@@ -8,6 +8,7 @@
   let pollHandle = null;
   let examsCache = [];
   let questionCounter = 0;
+  let editingExamId = null;
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -314,6 +315,7 @@
   function bindExamBuilder() {
     $("addQuestionBtn").addEventListener("click", () => addQuestionCard());
     $("clearExamFormBtn").addEventListener("click", clearExamForm);
+    $("cancelEditExamBtn")?.addEventListener("click", clearExamForm);
     $("saveExamBtn").addEventListener("click", saveExam);
     $("generateCodeBtn").addEventListener("click", generateExamCode);
     $("reloadExamsBtn").addEventListener("click", loadExams);
@@ -334,6 +336,16 @@
   }
 
   function clearExamForm() {
+    editingExamId = null;
+    const heading = $("examFormHeading");
+    const intro = $("examFormIntro");
+    const saveBtn = $("saveExamBtn");
+    const cancelBtn = $("cancelEditExamBtn");
+    if (heading) heading.textContent = "Create a New Exam";
+    if (intro) intro.textContent = "This lets you create an exam directly from the teacher dashboard without using SQL.";
+    if (saveBtn) saveBtn.textContent = "Save Exam";
+    if (cancelBtn) cancelBtn.classList.add("hidden");
+
     $("examTitleInput").value = "";
     $("examCodeInput").value = "";
     $("durationInput").value = "60";
@@ -539,6 +551,71 @@
 
     $("saveExamBtn").disabled = true;
 
+    if (editingExamId) {
+      const current = examsCache.find(e => e.id === editingExamId);
+      if (!current) {
+        $("saveExamBtn").disabled = false;
+        setCreateMessage("The exam being edited could not be found. Reload Existing Exams and try again.", true);
+        return;
+      }
+
+      if (current.status === "published") {
+        $("saveExamBtn").disabled = false;
+        setCreateMessage("Published examinations cannot be edited. Change the exam status before editing.", true);
+        return;
+      }
+
+      const { error: examUpdateError } = await db
+        .from("exams")
+        .update(payload.exam)
+        .eq("id", editingExamId);
+
+      if (examUpdateError) {
+        $("saveExamBtn").disabled = false;
+        setCreateMessage(`Exam update failed: ${examUpdateError.message}`, true);
+        return;
+      }
+
+      const { error: deleteQuestionsError } = await db
+        .from("questions")
+        .delete()
+        .eq("exam_id", editingExamId);
+
+      if (deleteQuestionsError) {
+        $("saveExamBtn").disabled = false;
+        setCreateMessage(`Exam details were updated, but old questions could not be replaced: ${deleteQuestionsError.message}`, true);
+        return;
+      }
+
+      const questions = payload.questions.map((q, i) => ({
+        exam_id: editingExamId,
+        position: i + 1,
+        prompt: q.prompt,
+        question_type: q.question_type,
+        choices: q.choices,
+        correct_answer: q.correct_answer,
+        points: q.points
+      }));
+
+      const { error: questionUpdateError } = await db
+        .from("questions")
+        .insert(questions);
+
+      $("saveExamBtn").disabled = false;
+
+      if (questionUpdateError) {
+        setCreateMessage(`Exam updated, but replacement questions failed: ${questionUpdateError.message}`, true);
+        return;
+      }
+
+      const title = payload.exam.title;
+      setCreateMessage(`Exam "${title}" updated successfully.`);
+      clearExamForm();
+      await loadExams();
+      activateTab("manage");
+      return;
+    }
+
     const { data: examRows, error: examError } = await db
       .from("exams")
       .insert([payload.exam])
@@ -577,6 +654,61 @@
     clearExamForm();
     await loadExams();
     activateTab("manage");
+  }
+
+  async function editExam(exam) {
+    if (!exam) return;
+
+    if (exam.status === "published") {
+      alert("Published examinations cannot be edited. Close the examination or return it to Draft status before editing.");
+      return;
+    }
+
+    const { data: questions, error } = await db
+      .from("questions")
+      .select("id,position,prompt,question_type,choices,correct_answer,points")
+      .eq("exam_id", exam.id)
+      .order("position", { ascending: true });
+
+    if (error) {
+      alert(`Could not load exam questions for editing: ${error.message}`);
+      return;
+    }
+
+    editingExamId = exam.id;
+
+    $("examTitleInput").value = exam.title || "";
+    $("examCodeInput").value = exam.code || "";
+    $("durationInput").value = exam.duration_minutes || 60;
+    $("statusInput").value = exam.status || "draft";
+    $("startAtInput").value = toLocalDateTimeInput(exam.start_at);
+    $("endAtInput").value = toLocalDateTimeInput(exam.end_at);
+
+    const heading = $("examFormHeading");
+    const intro = $("examFormIntro");
+    const saveBtn = $("saveExamBtn");
+    const cancelBtn = $("cancelEditExamBtn");
+    if (heading) heading.textContent = `Edit Examination — ${exam.title}`;
+    if (intro) intro.textContent = "Update the examination details and questions. Published examinations are locked from editing.";
+    if (saveBtn) saveBtn.textContent = "Update Exam";
+    if (cancelBtn) cancelBtn.classList.remove("hidden");
+
+    $("questionBuilder").innerHTML = "";
+    questionCounter = 0;
+    (questions || []).forEach(q => addQuestionCard(q));
+    if (!questions?.length) addQuestionCard();
+    renumberQuestionCards();
+
+    activateTab("create");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function toLocalDateTimeInput(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = n => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   function collectExamForm() {
@@ -731,6 +863,8 @@
           ${archived ? `
             <button type="button" data-exam-action="restore">Restore</button>
           ` : `
+            <button type="button" data-exam-action="edit" ${exam.status === "published" ? "disabled title=\"Published examinations cannot be edited\"" : ""}>Edit Exam</button>
+            ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
             <button type="button" data-action="draft">Draft</button>
             <button type="button" data-action="published">Publish</button>
             <button type="button" data-action="closed">Close</button>
@@ -749,6 +883,8 @@
       tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
         btn.addEventListener("click", async () => {
           const action = btn.dataset.examAction;
+          if (action === "edit") await editExam(exam);
+          if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
           if (action === "archive") await archiveExam(exam);
           if (action === "restore") await restoreExam(exam);
           if (action === "delete") await deleteExam(exam);
@@ -879,7 +1015,8 @@
   window.ExamAdmin = {
     db,
     refreshAttempts,
-    loadExams
+    loadExams,
+    editExam
   };
 
   // Public hooks used by the Excel importer. This reuses the same validated
