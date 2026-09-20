@@ -195,3 +195,11 @@ button.danger-outline:hover{background:#fff0ee}
   .student-roster-summary{grid-template-columns:1fr}
   .student-toolbar select{width:100%}
 }
+
+
+/* Result PDF controls */
+.result-report-panel{border-top:1px solid var(--line);margin-top:22px;padding-top:20px}
+.result-report-panel h2{margin:0}
+.result-pdf-actions{margin-top:14px;flex-wrap:wrap}
+.result-pdf-btn{border-color:#b8c7ef;color:var(--primary);background:#f5f8ff;font-weight:700}
+.result-pdf-btn:hover{background:#edf3ff}
