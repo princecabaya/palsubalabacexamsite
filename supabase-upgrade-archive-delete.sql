@@ -32,3 +32,30 @@ where table_schema = 'public'
   and table_name = 'exams'
   and column_name in ('archived','archived_at')
 order by column_name;
+
+
+-- 3) Reliable admin-only delete RPC.
+-- This avoids silent zero-row deletes caused by browser-side RLS filtering.
+create or replace function public.admin_delete_attempt(p_attempt_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted integer := 0;
+begin
+  if auth.uid() is null or not public.exam_guard_current_user_is_admin() then
+    raise exception 'Administrator access required.';
+  end if;
+
+  delete from public.attempts
+  where id = p_attempt_id;
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted = 1;
+end;
+$$;
+
+revoke all on function public.admin_delete_attempt(uuid) from public;
+grant execute on function public.admin_delete_attempt(uuid) to authenticated;
