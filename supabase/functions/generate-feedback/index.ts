@@ -142,10 +142,10 @@ Deno.serve(async (req) => {
       JSON.stringify(learningItems),
     ].join("\n");
 
-    const responseFormat = {
-      type: "json_schema",
-      json_schema: {
-        name: "feedback_response",
+    const responseFormat = [
+      {
+        type: "text",
+        mime_type: "application/json",
         schema: {
           type: "object",
           properties: {
@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
           required: ["feedback"],
         },
       },
-    };
+    ];
 
     const geminiResponse = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/interactions",
