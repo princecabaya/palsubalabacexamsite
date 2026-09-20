@@ -155,15 +155,25 @@
     );
     if (!ok) return;
 
-    const { error } = await db
-      .from("attempts")
-      .delete()
-      .eq("id", attempt.id);
+    const { data: sessionData } = await db.auth.getSession();
+    if (!sessionData?.session) {
+      alert("Your teacher session is no longer active. Please sign out and sign in again.");
+      return;
+    }
+
+    const { data, error } = await db.rpc("admin_delete_attempt", {
+      p_attempt_id: attempt.id
+    });
 
     if (error) {
       alert(
-        `Could not delete student exam record: ${error.message}\n\nRun supabase-upgrade-archive-delete.sql in Supabase SQL Editor if delete permission has not been enabled yet.`
+        `Could not delete student exam record: ${error.message}\n\nRun supabase-fix-delete-attempt.sql in Supabase SQL Editor, then refresh the admin page.`
       );
+      return;
+    }
+
+    if (data !== true) {
+      alert("No attempt was deleted. It may already have been removed or the record no longer exists.");
       return;
     }
 
