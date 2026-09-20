@@ -144,8 +144,8 @@
 
       <section id="createSection" class="tab-section hidden">
         <section class="card">
-          <h2>Create a New Exam</h2>
-          <p class="muted">This lets you create an exam directly from the teacher dashboard without using SQL.</p>
+          <h2 id="examFormHeading">Create a New Exam</h2>
+          <p id="examFormIntro" class="muted">This lets you create an exam directly from the teacher dashboard without using SQL.</p>
 
           <div class="form-grid">
             <label>Exam title
@@ -205,6 +205,7 @@
 
           <div class="row section-actions">
             <button id="saveExamBtn" class="primary" type="button">Save Exam</button>
+            <button id="cancelEditExamBtn" class="hidden" type="button">Cancel Editing</button>
             <span id="createExamMsg" class="message-inline"></span>
           </div>
         </section>
@@ -362,7 +363,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260920-2035"></script>
-  <script src="admin.js?v=20260920-2128"></script>
+  <script src="admin.js?v=20260920-2325"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-2035"></script>
   <script src="admin-students.js?v=20260920-1948"></script>
