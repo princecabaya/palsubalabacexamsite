@@ -585,5 +585,24 @@
     })[c]);
   }
 
+  // Public hooks used by the Excel importer. This reuses the same validated
+  // question-builder UI instead of maintaining a second import-only format.
+  window.ExamBuilder = {
+    replaceQuestions(questionList) {
+      $("questionBuilder").innerHTML = "";
+      questionCounter = 0;
+      (questionList || []).forEach(q => addQuestionCard(q));
+      if (!questionList?.length) addQuestionCard();
+      renumberQuestionCards();
+    },
+    appendQuestions(questionList) {
+      (questionList || []).forEach(q => addQuestionCard(q));
+      renumberQuestionCards();
+    },
+    setMessage(message, isError = false) {
+      setCreateMessage(message, isError);
+    }
+  };
+
   checkSession();
 })();
