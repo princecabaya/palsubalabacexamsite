@@ -72,7 +72,7 @@ create index if not exists proctor_events_attempt_time_idx
   on public.proctor_events(attempt_id, occurred_at desc);
 
 -- ---------- Teacher/admin auth ----------
-create table if not exists public.profiles (
+create table if not exists public.exam_admins (
   user_id uuid primary key references auth.users(id) on delete cascade,
   is_admin boolean not null default false,
   created_at timestamptz not null default now()
@@ -85,7 +85,7 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles(user_id) values (new.id)
+  insert into public.exam_admins(user_id) values (new.id)
   on conflict (user_id) do nothing;
   return new;
 end;
@@ -104,7 +104,7 @@ security definer
 set search_path = public
 as $$
   select exists(
-    select 1 from public.profiles
+    select 1 from public.exam_admins
     where user_id = auth.uid() and is_admin = true
   );
 $$;
@@ -116,7 +116,7 @@ alter table public.questions enable row level security;
 alter table public.attempts enable row level security;
 alter table public.responses enable row level security;
 alter table public.proctor_events enable row level security;
-alter table public.profiles enable row level security;
+alter table public.exam_admins enable row level security;
 
 -- No anonymous table policies: students interact through controlled RPC functions only.
 
@@ -153,8 +153,8 @@ create policy admin_events on public.proctor_events
 for select to authenticated
 using (public.current_user_is_admin());
 
-drop policy if exists own_profile on public.profiles;
-create policy own_profile on public.profiles
+drop policy if exists own_exam_admin on public.exam_admins;
+create policy own_exam_admin on public.exam_admins
 for select to authenticated
 using (user_id = auth.uid());
 
@@ -417,7 +417,7 @@ grant execute on function public.submit_exam(uuid) to anon, authenticated;
 
 -- Admin table reads/writes are still controlled by RLS.
 grant select, insert, update, delete on public.students, public.exams, public.questions to authenticated;
-grant select on public.attempts, public.responses, public.proctor_events, public.profiles to authenticated;
+grant select on public.attempts, public.responses, public.proctor_events, public.exam_admins to authenticated;
 
 -- ---------- Example seed data ----------
 -- Replace these with your real students/exam.
@@ -448,6 +448,6 @@ on conflict (exam_id,position) do nothing;
 -- IMPORTANT: after creating a teacher in Supabase Authentication > Users,
 -- make that account an admin by running:
 --
--- update public.profiles
+-- update public.exam_admins
 -- set is_admin = true
 -- where user_id = 'PASTE-TEACHER-AUTH-USER-UUID-HERE';
