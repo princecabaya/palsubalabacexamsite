@@ -99,3 +99,11 @@ tr.clickable:hover{background:#f8faff}
 .excel-import-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin-top:14px}
 .excel-import-controls input[type="file"]{background:#fff}
 @media(max-width:720px){.excel-import-controls{grid-template-columns:1fr}}
+
+
+/* Archive and deletion controls */
+button.danger-outline{border-color:#f1b4ae;color:var(--danger);background:#fff7f6}
+button.danger-outline:hover{background:#fff0ee}
+.badge.archived{background:#eceff4;color:#4b5565;margin-top:5px}
+.archived-row{background:#fafafa;opacity:.86}
+.archived-row .exam-title-link{color:#596579}
