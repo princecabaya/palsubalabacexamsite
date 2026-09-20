@@ -27,7 +27,7 @@
     panel.classList.remove("hidden");
     $("examResultsTitle").textContent = exam.title;
     $("examResultsMeta").textContent = `${exam.code} • Loading student results…`;
-    $("examStudentRows").innerHTML = `<tr><td colspan="7">Loading…</td></tr>`;
+    $("examStudentRows").innerHTML = `<tr><td colspan="8">Loading…</td></tr>`;
 
     const { data, error } = await db
       .from("attempts")
@@ -39,7 +39,7 @@
 
     if (error) {
       $("examResultsMeta").textContent = `${exam.code} • Could not load results`;
-      $("examStudentRows").innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+      $("examStudentRows").innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
       return;
     }
 
@@ -106,16 +106,16 @@
     $("resultHighest").textContent = highest === null ? "—" : `${formatPct(highest)}%`;
     $("examResultsMeta").textContent = `${exam.code} • ${rows.length} student${rows.length === 1 ? "" : "s"} took this exam`;
 
-    renderRows(rows, rankMap);
+    renderRows(rows, rankMap, exam);
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function renderRows(rows, rankMap) {
+  function renderRows(rows, rankMap, exam) {
     const tbody = $("examStudentRows");
     tbody.innerHTML = "";
 
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="7">No student has taken this exam yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8">No student has taken this exam yet.</td></tr>`;
       return;
     }
 
@@ -135,9 +135,39 @@
         <td><strong>${escapeHtml(percentage)}</strong></td>
         <td><span class="badge ${r.status === "submitted" ? "ok" : "warn"}">${escapeHtml(r.status)}</span></td>
         <td>${fmt(r.submitted_at)}</td>
+        <td><button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button></td>
       `;
+
+      tr.querySelector(".delete-attempt-btn").addEventListener("click", async () => {
+        await deleteAttempt(r, exam);
+      });
+
       tbody.appendChild(tr);
     }
+  }
+
+  async function deleteAttempt(attempt, exam) {
+    const studentName = attempt.students?.full_name || "this student";
+    const studentNo = attempt.students?.student_no || "";
+
+    const ok = confirm(
+      `Delete the exam record for ${studentName}${studentNo ? ` (${studentNo})` : ""}?\n\nThis removes the attempt, saved answers, AI feedback, score, and proctoring events for this exam. The student will be able to take the exam again if it is published and open.`
+    );
+    if (!ok) return;
+
+    const { error } = await db
+      .from("attempts")
+      .delete()
+      .eq("id", attempt.id);
+
+    if (error) {
+      alert(
+        `Could not delete student exam record: ${error.message}\n\nRun supabase-upgrade-archive-delete.sql in Supabase SQL Editor if delete permission has not been enabled yet.`
+      );
+      return;
+    }
+
+    await openExamResults(exam);
   }
 
   function numberOrNull(value) {
