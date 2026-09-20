@@ -4,5 +4,5 @@
 // NEVER put the Supabase service_role or secret key in a GitHub Pages site.
 window.EXAM_CONFIG = {
   SUPABASE_URL: "https://edfcehmttcwhhknywflq.supabase.co",
-  SUPABASE_PUBLISHABLE_KEY: "PASTE-YOUR-SUPABASE-PUBLISHABLE-OR-ANON-KEY-HERE"
+  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_XDI9PRlXfmA31Os3lQtthA_-gqwNXFI"
 };
