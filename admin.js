@@ -523,7 +523,7 @@
       const tr = document.createElement("tr");
       const qCount = counts[exam.id] || 0;
       tr.innerHTML = `
-        <td><strong>${escapeHtml(exam.title)}</strong></td>
+        <td><button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button></td>
         <td>${escapeHtml(exam.code)}</td>
         <td><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
         <td>${escapeHtml(String(exam.duration_minutes))} min</td>
