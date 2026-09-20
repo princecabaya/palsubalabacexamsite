@@ -203,3 +203,12 @@ button.danger-outline:hover{background:#fff0ee}
 .result-pdf-actions{margin-top:14px;flex-wrap:wrap}
 .result-pdf-btn{border-color:#b8c7ef;color:var(--primary);background:#f5f8ff;font-weight:700}
 .result-pdf-btn:hover{background:#edf3ff}
+
+.result-review-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}
+.result-review-table{margin-top:12px}
+.result-status{display:inline-block;border-radius:999px;padding:4px 8px;font-size:.78rem;font-weight:800}
+.result-status.result-correct{background:#e7f6ef;color:#067647}
+.result-status.result-wrong{background:#fff0ee;color:#b42318}
+.result-status.result-manual{background:#eef2f7;color:#68728a}
+@media(max-width:700px){.result-review-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.result-review-summary{grid-template-columns:1fr}}
