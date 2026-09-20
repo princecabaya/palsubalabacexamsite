@@ -103,10 +103,10 @@
 
     attempt = data[0];
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
-    await loadExam();
+    await loadExam({ restored: false, savedResponses: [] });
   });
 
-  async function loadExam() {
+  async function loadExam({ restored = false, savedResponses = [] } = {}) {
     const { data, error } = await db.rpc("get_exam_questions", {
       p_attempt_token: attempt.attempt_token
     });
@@ -123,13 +123,30 @@
     watermark.textContent = Array(18).fill(`${attempt.student_name}  ${attempt.student_no}`).join("     ");
     watermark.classList.add("active");
 
-    renderQuestions();
+    renderQuestions(savedResponses);
     startTimer();
-    await logEvent("exam_started", { userAgent: navigator.userAgent, screen: `${screen.width}x${screen.height}` });
+
+    if (restored) {
+      warn("Your saved exam session has been restored.");
+      await logEvent("exam_session_restored", {
+        userAgent: navigator.userAgent,
+        screen: `${screen.width}x${screen.height}`,
+        savedResponses: savedResponses.length
+      });
+    } else {
+      await logEvent("exam_started", {
+        userAgent: navigator.userAgent,
+        screen: `${screen.width}x${screen.height}`
+      });
+    }
   }
 
-  function renderQuestions() {
+  function renderQuestions(savedResponses = []) {
     examForm.innerHTML = "";
+    const savedByQuestion = new Map(
+      (savedResponses || []).map(r => [String(r.question_id), r])
+    );
+
     for (const q of questions) {
       const wrap = document.createElement("section");
       wrap.className = "question";
@@ -147,7 +164,10 @@
 
       const state = document.createElement("div");
       state.className = "save-state";
-      state.textContent = "Not answered";
+      const saved = savedByQuestion.get(String(q.question_id));
+      state.textContent = saved
+        ? `Saved ${saved.saved_at ? new Date(saved.saved_at).toLocaleTimeString() : ""}`.trim()
+        : "Not answered";
 
       if (q.question_type === "mcq") {
         const choices = Array.isArray(q.choices) ? q.choices : [];
@@ -158,6 +178,9 @@
           radio.type = "radio";
           radio.name = `q_${q.question_id}`;
           radio.value = String(choice);
+          if (saved && String(saved.answer ?? "") === radio.value) {
+            radio.checked = true;
+          }
           radio.addEventListener("change", () => saveAnswer(q.question_id, radio.value, state));
           const span = document.createElement("span");
           span.textContent = `${String.fromCharCode(65+i)}. ${choice}`;
@@ -168,6 +191,7 @@
         const ta = document.createElement("textarea");
         ta.rows = 5;
         ta.placeholder = "Type your answer here";
+        if (saved) ta.value = String(saved.answer ?? "");
         let debounce;
         ta.addEventListener("input", () => {
           state.textContent = "Saving…";
@@ -254,6 +278,49 @@
 
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
+
+  async function restoreSavedAttempt() {
+    const token = sessionStorage.getItem("exam_guard_token");
+    if (!token) return;
+
+    const msg = $("loginMsg");
+    msg.textContent = "Restoring your saved exam session…";
+    $("startBtn").disabled = true;
+
+    const { data: resumeData, error: resumeError } = await db.rpc("resume_exam", {
+      p_attempt_token: token
+    });
+
+    if (resumeError || !resumeData?.length) {
+      sessionStorage.removeItem("exam_guard_token");
+      $("startBtn").disabled = false;
+      msg.textContent = "";
+      return;
+    }
+
+    const { data: savedResponses, error: responseError } = await db.rpc("get_saved_exam_responses", {
+      p_attempt_token: token
+    });
+
+    if (responseError) {
+      $("startBtn").disabled = false;
+      msg.textContent = `Could not restore saved answers: ${responseError.message}`;
+      return;
+    }
+
+    attempt = resumeData[0];
+    submitted = false;
+    msg.textContent = "";
+
+    await loadExam({
+      restored: true,
+      savedResponses: savedResponses || []
+    });
+  }
+
+  // A normal browser refresh keeps sessionStorage for the same tab.
+  // Restore the active server-side attempt and its saved answers immediately.
+  restoreSavedAttempt();
 
   $("submitBtn").addEventListener("click", () => submitExam(false));
 
