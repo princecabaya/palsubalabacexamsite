@@ -247,7 +247,10 @@
 
     // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
     // The feedback helper fails gracefully if the Edge Function has not been deployed yet.
-    window.ExamAI?.generateFeedback(attempt.attempt_token);
+    window.ExamAI?.generateFeedback(attempt.attempt_token, {
+      score: row?.score ?? null,
+      maxScore: row?.max_score ?? null
+    });
 
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
