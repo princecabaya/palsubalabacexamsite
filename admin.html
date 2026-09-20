@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260920-1815">
+  <link rel="stylesheet" href="style.css?v=20260920-1930">
 </head>
 <body>
   <main class="shell wide">
@@ -52,6 +52,7 @@
         <button id="tabAttemptsBtn" class="tab-btn active" type="button">Attempts</button>
         <button id="tabCreateBtn" class="tab-btn" type="button">Create Exam</button>
         <button id="tabManageBtn" class="tab-btn" type="button">Manage Exams</button>
+        <button id="tabStudentsBtn" class="tab-btn" type="button">Students</button>
       </div>
 
       <section id="attemptsSection" class="tab-section">
@@ -273,14 +274,94 @@
           </section>
         </section>
       </section>
+
+      <section id="studentsSection" class="tab-section hidden">
+        <section class="card">
+          <div class="detail-head">
+            <div>
+              <h2>Student Enrollment</h2>
+              <p class="muted">Enroll students manually or import a class roster from Excel. Unenrolling prevents new exam access but keeps existing exam records.</p>
+            </div>
+            <button id="reloadStudentsBtn" type="button">Reload Students</button>
+          </div>
+
+          <div class="student-enroll-grid">
+            <section class="student-enroll-card">
+              <h3>Manual Enrollment</h3>
+              <div class="form-grid compact">
+                <label>Student ID
+                  <input id="studentEnrollId" autocomplete="off" placeholder="e.g. 2025-10-0038BL">
+                </label>
+                <label>Full Name
+                  <input id="studentEnrollName" autocomplete="off" placeholder="e.g. Onsong, Rosalyn U.">
+                </label>
+              </div>
+              <div class="row section-actions">
+                <button id="enrollStudentBtn" class="primary" type="button">Enroll Student</button>
+                <span id="studentEnrollMsg" class="message-inline"></span>
+              </div>
+            </section>
+
+            <section class="student-enroll-card">
+              <div class="detail-head">
+                <div>
+                  <h3>Bulk Excel Enrollment</h3>
+                  <p class="muted">Accepts Student ID + Full Name, or USG-style Student Number, Last Name, Given Name, Middle Initial.</p>
+                </div>
+                <button id="downloadStudentTemplateBtn" type="button">Download Template</button>
+              </div>
+              <div class="excel-import-controls">
+                <input id="studentExcelFile" type="file" accept=".xlsx,.xls">
+                <button id="importStudentsBtn" class="primary" type="button">Import Students</button>
+              </div>
+              <p id="studentImportMsg" class="message-inline"></p>
+            </section>
+          </div>
+
+          <div class="student-roster-summary">
+            <div class="metric-card"><span>Total Students</span><strong id="studentTotalCount">0</strong></div>
+            <div class="metric-card"><span>Enrolled</span><strong id="studentActiveCount">0</strong></div>
+            <div class="metric-card"><span>Unenrolled</span><strong id="studentInactiveCount">0</strong></div>
+            <div class="metric-card"><span>Total Exam Attempts</span><strong id="studentAttemptCount">0</strong></div>
+          </div>
+
+          <div class="toolbar student-toolbar">
+            <input id="studentSearchBox" placeholder="Search Student ID, name, or exam...">
+            <select id="studentStatusFilter">
+              <option value="all">All students</option>
+              <option value="active">Enrolled only</option>
+              <option value="inactive">Unenrolled only</option>
+            </select>
+            <span id="studentListStatus" class="muted"></span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Status</th>
+                  <th>Exams Taken</th>
+                  <th>Exam Records</th>
+                  <th>Last Exam</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="studentRosterRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
     </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
-  <script src="admin.js?v=20260920-1815"></script>
+  <script src="admin.js?v=20260920-1930"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-1806"></script>
+  <script src="admin-students.js?v=20260920-1930"></script>
 </body>
 </html>
