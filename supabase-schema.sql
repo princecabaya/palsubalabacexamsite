@@ -22,8 +22,14 @@ create table if not exists public.exams (
   status text not null default 'draft' check (status in ('draft','published','closed')),
   start_at timestamptz,
   end_at timestamptz,
+  archived boolean not null default false,
+  archived_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Keep upgrades idempotent for projects created with an earlier schema.
+alter table public.exams add column if not exists archived boolean not null default false;
+alter table public.exams add column if not exists archived_at timestamptz;
 
 create table if not exists public.questions (
   id uuid primary key default gen_random_uuid(),
@@ -143,6 +149,11 @@ create policy admin_attempts on public.attempts
 for select to authenticated
 using (public.exam_guard_current_user_is_admin());
 
+drop policy if exists admin_attempts_delete on public.attempts;
+create policy admin_attempts_delete on public.attempts
+for delete to authenticated
+using (public.exam_guard_current_user_is_admin());
+
 drop policy if exists admin_responses on public.responses;
 create policy admin_responses on public.responses
 for select to authenticated
@@ -185,7 +196,8 @@ begin
   select * into v_exam
   from public.exams
   where lower(code) = lower(trim(p_exam_code))
-    and status = 'published';
+    and status = 'published'
+    and coalesce(archived, false) = false;
 
   if not found then
     raise exception 'Exam code is invalid or the exam is not published.';
@@ -417,7 +429,8 @@ grant execute on function public.submit_exam(uuid) to anon, authenticated;
 
 -- Admin table reads/writes are still controlled by RLS.
 grant select, insert, update, delete on public.students, public.exams, public.questions to authenticated;
-grant select on public.attempts, public.responses, public.proctor_events, public.exam_admins to authenticated;
+grant select, delete on public.attempts to authenticated;
+grant select on public.responses, public.proctor_events, public.exam_admins to authenticated;
 
 -- ---------- Example seed data ----------
 -- Replace these with your real students/exam.
