@@ -418,6 +418,7 @@
     addChoiceBtn.addEventListener("click", () => {
       addChoiceInput(card, "");
       refreshCorrectAnswerOptions(card);
+      refreshChoiceOrderControls(card);
     });
     typeSelect.addEventListener("change", () => toggleQuestionMode(card));
 
@@ -432,12 +433,36 @@
     const row = document.createElement("div");
     row.className = "choice-row";
     row.innerHTML = `
+      <span class="choice-order-label" aria-hidden="true"></span>
       <input class="choice-input" placeholder="Choice text" value="${escapeAttr(value)}">
+      <div class="choice-move-controls">
+        <button type="button" class="choice-up-btn" title="Move option up" aria-label="Move option up">↑ Up</button>
+        <button type="button" class="choice-down-btn" title="Move option down" aria-label="Move option down">↓ Down</button>
+      </div>
       <button type="button" class="remove-choice-btn">Remove</button>
     `;
     list.appendChild(row);
 
     row.querySelector(".choice-input").addEventListener("input", () => refreshCorrectAnswerOptions(card));
+
+    row.querySelector(".choice-up-btn").addEventListener("click", () => {
+      const previous = row.previousElementSibling;
+      if (!previous) return;
+      const selectedAnswer = card.querySelector(".q-correct").value;
+      list.insertBefore(row, previous);
+      refreshCorrectAnswerOptions(card, selectedAnswer);
+      refreshChoiceOrderControls(card);
+    });
+
+    row.querySelector(".choice-down-btn").addEventListener("click", () => {
+      const next = row.nextElementSibling;
+      if (!next) return;
+      const selectedAnswer = card.querySelector(".q-correct").value;
+      list.insertBefore(next, row);
+      refreshCorrectAnswerOptions(card, selectedAnswer);
+      refreshChoiceOrderControls(card);
+    });
+
     row.querySelector(".remove-choice-btn").addEventListener("click", () => {
       const rows = card.querySelectorAll(".choice-row");
       if (rows.length <= 2) {
@@ -446,6 +471,24 @@
       }
       row.remove();
       refreshCorrectAnswerOptions(card);
+      refreshChoiceOrderControls(card);
+    });
+
+    refreshChoiceOrderControls(card);
+  }
+
+  function refreshChoiceOrderControls(card) {
+    const rows = [...card.querySelectorAll(".choice-row")];
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    rows.forEach((row, index) => {
+      const label = row.querySelector(".choice-order-label");
+      const up = row.querySelector(".choice-up-btn");
+      const down = row.querySelector(".choice-down-btn");
+
+      if (label) label.textContent = letters[index] || String(index + 1);
+      if (up) up.disabled = index === 0;
+      if (down) down.disabled = index === rows.length - 1;
     });
   }
 
