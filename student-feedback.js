@@ -50,7 +50,31 @@
         }
       } catch (err) {
         console.warn("AI feedback unavailable:", err);
-        status.textContent = "AI feedback is not available right now. Your exam submission was still recorded successfully.";
+
+        const detail = await readFunctionError(err);
+        if (/not found|404/i.test(detail)) {
+          status.textContent = "AI feedback is not configured yet: the Supabase Edge Function generate-feedback was not found.";
+        } else if (/GEMINI_API_KEY|not been configured|503/i.test(detail)) {
+          status.textContent = "AI feedback is not configured yet: the Gemini API key is missing from Supabase Edge Function secrets.";
+        } else if (/feedback_generated_at|ai_feedback|column/i.test(detail)) {
+          status.textContent = "AI feedback database storage is not configured yet. Run the AI feedback Supabase upgrade SQL.";
+        } else {
+          status.textContent = "AI feedback is unavailable right now. Your exam submission was still recorded successfully.";
+        }
+      }
+
+      async function readFunctionError(err) {
+        try {
+          const context = err?.context;
+          if (context && typeof context.json === "function") {
+            const body = await context.clone().json();
+            return JSON.stringify(body);
+          }
+          if (context && typeof context.text === "function") {
+            return await context.clone().text();
+          }
+        } catch (_) {}
+        return String(err?.message || err || "");
       }
     }
   };
