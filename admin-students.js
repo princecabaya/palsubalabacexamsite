@@ -285,8 +285,12 @@
       let inserted = 0;
       let updated = 0;
 
-      // Update logical matches first so punctuation/hyphen variants do not create duplicate identities.
-      for (const item of prepared.filter(x => x.existing)) {
+      // Only normalized matches whose stored ID uses different punctuation need an individual update.
+      const variantMatches = prepared.filter(
+        x => x.existing && normalizeStudentId(x.existing.student_no) !== x.studentNo
+      );
+
+      for (const item of variantMatches) {
         const { error } = await db
           .from("students")
           .update({
@@ -300,15 +304,32 @@
         updated += 1;
       }
 
-      const newStudents = prepared
-        .filter(x => !x.existing)
-        .map(x => ({ student_no: x.studentNo, full_name: x.fullName, active: true }));
+      const variantIds = new Set(variantMatches.map(x => normalizedIdKey(x.studentNo)));
+      const batchRows = prepared
+        .filter(x => !variantIds.has(normalizedIdKey(x.studentNo)))
+        .map(x => ({
+          student_no: x.studentNo,
+          full_name: x.fullName,
+          active: true
+        }));
 
-      for (let i = 0; i < newStudents.length; i += 200) {
-        const chunk = newStudents.slice(i, i + 200);
-        const { error } = await db.from("students").insert(chunk);
-        if (error) throw new Error(`Could not add students: ${error.message}`);
-        inserted += chunk.length;
+      // Exact Student IDs are safely upserted in batches for much faster large-roster imports.
+      for (let i = 0; i < batchRows.length; i += 200) {
+        const chunk = batchRows.slice(i, i + 200);
+        const existingKeys = new Set(
+          chunk
+            .map(x => normalizedIdKey(x.student_no))
+            .filter(key => existingByNormalizedId.has(key))
+        );
+
+        const { error } = await db
+          .from("students")
+          .upsert(chunk, { onConflict: "student_no" });
+
+        if (error) throw new Error(`Could not import students: ${error.message}`);
+
+        updated += existingKeys.size;
+        inserted += chunk.length - existingKeys.size;
       }
 
       input.value = "";
