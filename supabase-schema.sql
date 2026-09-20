@@ -191,7 +191,6 @@ $;
 create or replace function public.start_exam(
   p_exam_code text,
   p_student_no text,
-  p_student_name text,
   p_user_agent text default null
 )
 returns table(
@@ -224,6 +223,7 @@ begin
   if v_exam.start_at is not null and now() < v_exam.start_at then
     raise exception 'This exam has not opened yet.';
   end if;
+
   if v_exam.end_at is not null and now() > v_exam.end_at then
     raise exception 'This exam is already closed.';
   end if;
@@ -232,12 +232,10 @@ begin
   from public.students as s
   where public.exam_guard_normalize_student_no(s.student_no)
         = public.exam_guard_normalize_student_no(p_student_no)
-    and public.exam_guard_normalize_name(s.full_name)
-        = public.exam_guard_normalize_name(p_student_name)
     and s.active = true;
 
   if not found then
-    raise exception 'Student number and full name do not match an active student record.';
+    raise exception 'Student ID does not match an active student record.';
   end if;
 
   select * into v_attempt
@@ -248,6 +246,7 @@ begin
     if v_attempt.status = 'submitted' then
       raise exception 'This student has already submitted this exam.';
     end if;
+
     if now() > v_attempt.started_at + make_interval(mins => v_exam.duration_minutes) then
       update public.attempts
       set status = 'expired'
@@ -485,13 +484,13 @@ grant execute on function public.admin_delete_attempt(uuid) to authenticated;
 grant execute on function public.admin_delete_exam(uuid) to authenticated;
 
 -- Restrict execution explicitly.
-revoke all on function public.start_exam(text,text,text,text) from public;
+revoke all on function public.start_exam(text,text,text) from public;
 revoke all on function public.get_exam_questions(uuid) from public;
 revoke all on function public.save_exam_response(uuid,uuid,text) from public;
 revoke all on function public.log_proctor_event(uuid,text,jsonb) from public;
 revoke all on function public.submit_exam(uuid) from public;
 
-grant execute on function public.start_exam(text,text,text,text) to anon, authenticated;
+grant execute on function public.start_exam(text,text,text) to anon, authenticated;
 grant execute on function public.get_exam_questions(uuid) to anon, authenticated;
 grant execute on function public.save_exam_response(uuid,uuid,text) to anon, authenticated;
 grant execute on function public.log_proctor_event(uuid,text,jsonb) to anon, authenticated;
