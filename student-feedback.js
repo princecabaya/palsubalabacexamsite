@@ -63,14 +63,31 @@
         console.warn("AI feedback unavailable:", err);
 
         const detail = await readFunctionError(err);
-        if (/not found|404/i.test(detail)) {
+        if (/missing_gemini_api_key|GEMINI_API_KEY is missing|not been configured|503/i.test(detail)) {
+          status.textContent = "AI feedback is not configured yet: GEMINI_API_KEY is missing from Supabase Edge Function Secrets.";
+        } else if (/not found|404/i.test(detail) && /function|generate-feedback/i.test(detail)) {
           status.textContent = "AI feedback is not configured yet: the Supabase Edge Function generate-feedback was not found.";
-        } else if (/GEMINI_API_KEY|not been configured|503/i.test(detail)) {
-          status.textContent = "AI feedback is not configured yet: the Gemini API key is missing from Supabase Edge Function secrets.";
         } else if (/feedback_generated_at|ai_feedback|column/i.test(detail)) {
           status.textContent = "AI feedback database storage is not configured yet. Run the AI feedback Supabase upgrade SQL.";
+        } else if (/gemini_api_error|Gemini rejected/i.test(detail)) {
+          const reason = extractServerReason(detail);
+          status.textContent = "Gemini could not generate feedback" + (reason ? `: ${reason}` : ". Check the API key and model.");
+        } else if (/Invalid JWT|JWT/i.test(detail)) {
+          status.textContent = "The Edge Function authorization settings rejected the browser request. Check the generate-feedback function authentication setting.";
         } else {
-          status.textContent = "AI feedback is unavailable right now. Your exam submission was still recorded successfully.";
+          const reason = extractServerReason(detail);
+          status.textContent = reason
+            ? `AI feedback is unavailable: ${reason}`
+            : "AI feedback is unavailable right now. Your exam submission was still recorded successfully.";
+        }
+      }
+
+      function extractServerReason(detail) {
+        try {
+          const parsed = JSON.parse(detail);
+          return String(parsed?.detail || parsed?.error || parsed?.message || "").trim();
+        } catch (_) {
+          return "";
         }
       }
 
