@@ -172,3 +172,26 @@ button.danger-outline:hover{background:#fff0ee}
   .timer-box{width:100%}
   .watermark{font-size:15px;line-height:3.7;padding:5vh 2vw}
 }
+
+
+/* Student enrollment dashboard */
+.student-enroll-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}
+.student-enroll-card{border:1px solid var(--line);border-radius:16px;background:#fbfcff;padding:18px;min-width:0}
+.student-enroll-card h3{margin:0}
+.student-roster-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}
+.student-toolbar{flex-wrap:wrap}
+.student-toolbar input{flex:1;min-width:260px}
+.student-toolbar select{width:auto;min-width:170px}
+.unenrolled-row{background:#fafafa;opacity:.82}
+.student-exam-records{min-width:230px}
+.student-exam-line{line-height:1.4;margin-bottom:4px}
+.student-exam-line:last-child{margin-bottom:0}
+.small-text{font-size:.8rem}
+@media(max-width:900px){
+  .student-enroll-grid{grid-template-columns:1fr}
+  .student-roster-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .student-roster-summary{grid-template-columns:1fr}
+  .student-toolbar select{width:100%}
+}
