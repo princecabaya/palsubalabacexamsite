@@ -11,6 +11,7 @@
   let logoDataPromise = null;
   let studentToken = null;
   let studentBound = false;
+  let studentReport = null;
 
   function getJsPdf() {
     const jsPDF = window.jspdf?.jsPDF;
@@ -296,15 +297,87 @@
     return data;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    })[c]);
+  }
+
+  function renderStudentReview(report) {
+    const scoreNode = document.getElementById("studentResultScore");
+    const pctNode = document.getElementById("studentResultPercent");
+    const correctNode = document.getElementById("studentCorrectCount");
+    const wrongNode = document.getElementById("studentWrongCount");
+    const rowsNode = document.getElementById("studentResultRows");
+
+    const items = Array.isArray(report?.items) ? report.items : [];
+    const correct = items.filter(item => item.result === "correct").length;
+    const wrong = items.filter(item => item.result === "wrong").length;
+
+    if (scoreNode) scoreNode.textContent = `${fmtNumber(report?.score)}/${fmtNumber(report?.max_score)}`;
+    if (pctNode) pctNode.textContent = report?.percentage == null ? "—" : `${fmtNumber(report.percentage)}%`;
+    if (correctNode) correctNode.textContent = String(correct);
+    if (wrongNode) wrongNode.textContent = String(wrong);
+
+    if (!rowsNode) return;
+    rowsNode.innerHTML = "";
+
+    if (!items.length) {
+      rowsNode.innerHTML = '<tr><td colspan="4">No auto-scored items were found.</td></tr>';
+      return;
+    }
+
+    for (const item of items) {
+      const tr = document.createElement("tr");
+      const cssClass = item.result === "correct" ? "result-correct" : item.result === "wrong" ? "result-wrong" : "result-manual";
+      const answer = item.student_answer || "No answer";
+      const correctAnswer = item.correct_answer == null ? "Not auto-scored" : item.correct_answer;
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(item.position ?? "")}</strong></td>
+        <td><span class="result-status ${cssClass}">${escapeHtml(resultLabel(item))}</span></td>
+        <td>${escapeHtml(answer)}</td>
+        <td>${escapeHtml(correctAnswer)}</td>
+      `;
+      rowsNode.appendChild(tr);
+    }
+  }
+
+  async function prepareStudentReport() {
+    const button = document.getElementById("resultPdfBtn");
+    const message = document.getElementById("resultPdfMsg");
+    if (!studentToken || !button || !message) return;
+
+    button.disabled = true;
+    message.textContent = "Preparing your result report…";
+    message.classList.remove("error", "success");
+
+    try {
+      studentReport = await fetchStudentReport(studentToken);
+      renderStudentReview(studentReport);
+      button.disabled = false;
+      message.textContent = "Your result review is ready. You may also download the PDF copy.";
+      message.classList.add("success");
+    } catch (error) {
+      console.error("Student result review error:", error);
+      studentReport = null;
+      message.textContent = error?.message || "Could not load the submitted result report.";
+      message.classList.add("error");
+      const rowsNode = document.getElementById("studentResultRows");
+      if (rowsNode) rowsNode.innerHTML = '<tr><td colspan="4">Result review is unavailable until the result-report database upgrade is installed.</td></tr>';
+    }
+  }
+
   function enableStudent(attemptToken) {
     studentToken = attemptToken || null;
+    studentReport = null;
+
     const panel = document.getElementById("resultReportPanel");
     const button = document.getElementById("resultPdfBtn");
     const message = document.getElementById("resultPdfMsg");
-    if (!panel || !button || !studentToken) return;
+    if (!panel || !button || !message || !studentToken) return;
 
     panel.classList.remove("hidden");
-    message.textContent = "";
+    prepareStudentReport();
 
     if (studentBound) return;
     studentBound = true;
@@ -316,7 +389,9 @@
       message.textContent = "";
 
       try {
-        const report = await fetchStudentReport(studentToken);
+        const report = studentReport || await fetchStudentReport(studentToken);
+        studentReport = report;
+        renderStudentReview(report);
         const filename = await saveReport(report);
         message.textContent = `Result PDF generated: ${filename}`;
         message.classList.remove("error");
@@ -327,7 +402,7 @@
         message.classList.remove("success");
         message.classList.add("error");
       } finally {
-        button.disabled = false;
+        button.disabled = !studentReport;
         button.textContent = "Download Result PDF";
       }
     });
