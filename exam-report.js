@@ -1,0 +1,365 @@
+(() => {
+  const cfg = window.EXAM_CONFIG || {};
+  const studentDb = window.supabase?.createClient
+    ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+      })
+    : null;
+
+  const PSU_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/f/fa/Palawan_State_University_seal.png";
+  const WATERMARK_TEACHER = "Sir Prince Jobetroh N. Cabaya Cruz";
+  let logoDataPromise = null;
+  let studentToken = null;
+  let studentBound = false;
+
+  function getJsPdf() {
+    const jsPDF = window.jspdf?.jsPDF;
+    if (!jsPDF) throw new Error("PDF library is not available. Refresh the page and try again.");
+    return jsPDF;
+  }
+
+  async function loadLogoData() {
+    if (logoDataPromise) return logoDataPromise;
+    logoDataPromise = (async () => {
+      try {
+        const response = await fetch(PSU_LOGO_URL, { mode: "cors", cache: "force-cache" });
+        if (!response.ok) throw new Error("Logo request failed.");
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.warn("PSU logo could not be loaded for PDF:", error);
+        return null;
+      }
+    })();
+    return logoDataPromise;
+  }
+
+  function safeFilePart(value) {
+    return String(value || "report")
+      .trim()
+      .replace(/[^a-z0-9_-]+/gi, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "report";
+  }
+
+  function asNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function fmtNumber(value) {
+    const number = asNumber(value);
+    if (number === null) return "—";
+    return number.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+
+  function fmtDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString();
+  }
+
+  function resultLabel(item) {
+    if (item?.result === "correct") return "CORRECT";
+    if (item?.result === "wrong") return "WRONG";
+    return "NOT AUTO-SCORED";
+  }
+
+  function drawHeader(doc, logoData) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    if (logoData) {
+      try {
+        doc.addImage(logoData, "PNG", 18, 10, 24, 24, undefined, "FAST");
+      } catch (error) {
+        console.warn("Could not place PSU logo in PDF:", error);
+      }
+    } else {
+      doc.setDrawColor(80);
+      doc.circle(30, 22, 11);
+      doc.setFont("times", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(50);
+      doc.text("PSU", 30, 24, { align: "center" });
+    }
+
+    doc.setTextColor(25);
+    doc.setFont("times", "normal");
+    doc.setFontSize(10);
+    doc.text("Republic of the Philippines", pageWidth / 2 + 7, 14, { align: "center" });
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(13);
+    doc.text("PALAWAN STATE UNIVERSITY", pageWidth / 2 + 7, 20, { align: "center" });
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(10);
+    doc.text("Puerto Princesa City, Palawan", pageWidth / 2 + 7, 26, { align: "center" });
+
+    doc.setDrawColor(80);
+    doc.setLineWidth(0.35);
+    doc.line(18, 36, pageWidth - 18, 36);
+  }
+
+  function drawWatermark(doc, report) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const text = `${WATERMARK_TEACHER} • ${report.student_no || ""}`;
+
+    doc.saveGraphicsState?.();
+    doc.setFont("times", "bold");
+    doc.setFontSize(20);
+    doc.setTextColor(230, 230, 230);
+
+    for (let y = 82; y < pageHeight - 24; y += 62) {
+      doc.text(text, pageWidth / 2, y, {
+        align: "center",
+        angle: 32
+      });
+    }
+
+    doc.restoreGraphicsState?.();
+  }
+
+  function drawFooter(doc, pageNumber, pageCount) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.setFont("times", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(95);
+    doc.text(
+      `Exam result report • Page ${pageNumber} of ${pageCount}`,
+      pageWidth / 2,
+      pageHeight - 8,
+      { align: "center" }
+    );
+  }
+
+  async function buildPdf(report) {
+    if (!report || !Array.isArray(report.items)) {
+      throw new Error("The result report data is incomplete.");
+    }
+
+    const jsPDF = getJsPdf();
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true
+    });
+
+    const logoData = await loadLogoData();
+    drawHeader(doc, logoData);
+    drawWatermark(doc, report);
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const score = fmtNumber(report.score);
+    const maxScore = fmtNumber(report.max_score);
+    const percentage = asNumber(report.percentage);
+
+    doc.setTextColor(20);
+    doc.setFont("times", "bold");
+    doc.setFontSize(13);
+    doc.text("EXAMINATION RESULT REPORT", pageWidth / 2, 45, { align: "center" });
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(10.5);
+    doc.text(`Student Name: ${report.student_name || "—"}`, 18, 54);
+    doc.text(`Student ID: ${report.student_no || "—"}`, 18, 60);
+    doc.text(`Examination: ${report.exam_title || "—"}`, 18, 66);
+    doc.text(`Exam Code: ${report.exam_code || "—"}`, 18, 72);
+
+    doc.text(`Submitted: ${fmtDate(report.submitted_at)}`, 112, 54);
+    doc.text(`Score: ${score}/${maxScore}`, 112, 60);
+    doc.text(
+      `Percentage: ${percentage === null ? "—" : fmtNumber(percentage) + "%"}`,
+      112,
+      66
+    );
+
+    doc.setFont("times", "italic");
+    doc.setFontSize(9);
+    doc.setTextColor(85);
+    doc.text(
+      "This report shows the student's saved answer and the answer key for auto-scored items.",
+      18,
+      79
+    );
+
+    const body = report.items.map(item => [
+      String(item.position ?? ""),
+      String(item.prompt || ""),
+      String(item.student_answer || "No answer"),
+      item.correct_answer == null ? "Not auto-scored" : String(item.correct_answer),
+      resultLabel(item),
+      item.points_awarded == null
+        ? "—"
+        : `${fmtNumber(item.points_awarded)}/${fmtNumber(item.points)}`
+    ]);
+
+    if (typeof doc.autoTable !== "function") {
+      throw new Error("PDF table library is not available. Refresh the page and try again.");
+    }
+
+    doc.autoTable({
+      startY: 85,
+      margin: { top: 42, right: 14, bottom: 16, left: 14 },
+      head: [["Item", "Question", "Student Answer", "Correct Answer", "Result", "Points"]],
+      body,
+      theme: "grid",
+      styles: {
+        font: "times",
+        fontSize: 8.5,
+        cellPadding: 2.2,
+        valign: "top",
+        lineColor: [190, 195, 205],
+        lineWidth: 0.15,
+        textColor: [30, 30, 30]
+      },
+      headStyles: {
+        font: "times",
+        fontStyle: "bold",
+        fillColor: [235, 239, 247],
+        textColor: [20, 32, 51],
+        lineColor: [160, 170, 185],
+        lineWidth: 0.2
+      },
+      columnStyles: {
+        0: { cellWidth: 11, halign: "center" },
+        1: { cellWidth: 61 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 35 },
+        4: { cellWidth: 24, halign: "center" },
+        5: { cellWidth: 20, halign: "center" }
+      },
+      didParseCell(data) {
+        if (data.section !== "body" || data.column.index !== 4) return;
+        const value = String(data.cell.raw || "");
+        data.cell.styles.fontStyle = "bold";
+        if (value === "CORRECT") {
+          data.cell.styles.textColor = [6, 118, 71];
+        } else if (value === "WRONG") {
+          data.cell.styles.textColor = [180, 35, 24];
+        } else {
+          data.cell.styles.textColor = [104, 114, 138];
+        }
+      }
+    });
+
+    const pages = doc.getNumberOfPages();
+    for (let page = 1; page <= pages; page += 1) {
+      doc.setPage(page);
+      if (page > 1) drawHeader(doc, logoData);
+      if (page > 1) drawWatermark(doc, report);
+      drawFooter(doc, page, pages);
+    }
+
+    return doc;
+  }
+
+  async function saveReport(report) {
+    const doc = await buildPdf(report);
+    const filename = [
+      "Exam_Result",
+      safeFilePart(report.student_no),
+      safeFilePart(report.exam_code || report.exam_title)
+    ].join("_") + ".pdf";
+    doc.save(filename);
+    return filename;
+  }
+
+  async function fetchStudentReport(attemptToken) {
+    if (!studentDb) throw new Error("Supabase is unavailable.");
+    const { data, error } = await studentDb.rpc("get_submitted_exam_report", {
+      p_attempt_token: attemptToken
+    });
+    if (error) throw error;
+    if (!data) throw new Error("Result report is not available.");
+    return data;
+  }
+
+  async function fetchTeacherReport(attemptId) {
+    const db = window.ExamAdmin?.db;
+    if (!db) throw new Error("Teacher session is unavailable.");
+    const { data, error } = await db.rpc("admin_get_attempt_report", {
+      p_attempt_id: attemptId
+    });
+    if (error) throw error;
+    if (!data) throw new Error("Result report is not available.");
+    return data;
+  }
+
+  function enableStudent(attemptToken) {
+    studentToken = attemptToken || null;
+    const panel = document.getElementById("resultReportPanel");
+    const button = document.getElementById("resultPdfBtn");
+    const message = document.getElementById("resultPdfMsg");
+    if (!panel || !button || !studentToken) return;
+
+    panel.classList.remove("hidden");
+    message.textContent = "";
+
+    if (studentBound) return;
+    studentBound = true;
+
+    button.addEventListener("click", async () => {
+      if (!studentToken) return;
+      button.disabled = true;
+      button.textContent = "Generating PDF…";
+      message.textContent = "";
+
+      try {
+        const report = await fetchStudentReport(studentToken);
+        const filename = await saveReport(report);
+        message.textContent = `Result PDF generated: ${filename}`;
+        message.classList.remove("error");
+        message.classList.add("success");
+      } catch (error) {
+        console.error("Student result PDF error:", error);
+        message.textContent = error?.message || "Could not generate the result PDF.";
+        message.classList.remove("success");
+        message.classList.add("error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Download Result PDF";
+      }
+    });
+  }
+
+  async function generateTeacher(attemptId, button = null) {
+    if (!attemptId) return;
+
+    const oldText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Generating…";
+    }
+
+    try {
+      const report = await fetchTeacherReport(attemptId);
+      await saveReport(report);
+    } catch (error) {
+      console.error("Teacher result PDF error:", error);
+      alert(
+        `Could not generate result PDF: ${error?.message || error}\n\nIf the database report function is missing, run supabase-upgrade-result-pdf.sql in Supabase SQL Editor.`
+      );
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldText || "Result PDF";
+      }
+    }
+  }
+
+  window.ExamReport = {
+    enableStudent,
+    generateTeacher
+  };
+})();
