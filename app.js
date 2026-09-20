@@ -250,6 +250,8 @@
       maxScore: row?.max_score ?? null
     });
 
+    window.ExamReport?.enableStudent(attempt.attempt_token);
+
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
