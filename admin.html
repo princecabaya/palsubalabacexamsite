@@ -134,6 +134,22 @@
             </label>
           </div>
 
+          <section class="excel-import-card">
+            <div class="detail-head">
+              <div>
+                <h3>Import Questions from Excel</h3>
+                <p class="muted">Expected columns: Item Number, Item Stem, Option A, Option B, Option C, Option D, Correct Answer.</p>
+              </div>
+              <button id="downloadExamTemplateBtn" type="button">Download Excel Template</button>
+            </div>
+
+            <div class="excel-import-controls">
+              <input id="examExcelFile" type="file" accept=".xlsx,.xls">
+              <button id="importExamExcelBtn" class="primary" type="button">Import Excel</button>
+            </div>
+            <p id="excelImportMsg" class="message-inline"></p>
+          </section>
+
           <div class="row section-actions">
             <button id="addQuestionBtn" class="primary" type="button">Add Question</button>
             <button id="clearExamFormBtn" type="button">Clear Form</button>
@@ -215,8 +231,10 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="admin.js"></script>
+  <script src="admin-import.js"></script>
   <script src="admin-results.js"></script>
 </body>
 </html>
