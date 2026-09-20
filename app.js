@@ -69,12 +69,11 @@
   $("startBtn").addEventListener("click", async () => {
     const examCode = $("examCode").value.trim();
     const studentNo = $("studentNo").value.trim();
-    const studentName = $("studentName").value.trim();
     const consent = $("consentBox").checked;
     const msg = $("loginMsg");
 
-    if (!examCode || !studentNo || !studentName) {
-      msg.textContent = "Complete the exam code, student number, and full name.";
+    if (!examCode || !studentNo) {
+      msg.textContent = "Complete the exam code and Student ID.";
       return;
     }
     if (!consent) {
@@ -92,7 +91,6 @@
     const { data, error } = await db.rpc("start_exam", {
       p_exam_code: examCode,
       p_student_no: studentNo,
-      p_student_name: studentName,
       p_user_agent: navigator.userAgent
     });
 
