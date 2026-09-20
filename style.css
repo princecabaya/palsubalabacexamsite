@@ -69,3 +69,25 @@ tr.clickable:hover{background:#f8faff}
   .inline-field{flex-direction:column;align-items:stretch}
   .choice-row{grid-template-columns:1fr}
 }
+
+
+/* Exam drill-down results */
+.exam-title-link{appearance:none;border:0;background:transparent;padding:0;color:var(--primary);font-weight:800;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.exam-title-link:hover{opacity:.8}
+.exam-results-panel{margin-top:20px}
+.result-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.metric-card{border:1px solid var(--line);border-radius:14px;background:#f8faff;padding:14px}
+.metric-card span{display:block;color:var(--muted);font-size:.82rem;margin-bottom:4px}
+.metric-card strong{font-size:1.35rem}
+.result-note{margin-top:12px}
+
+/* Student AI feedback */
+.ai-feedback-panel{border-top:1px solid var(--line);margin-top:22px;padding-top:20px}
+.feedback-head h2{margin:0}
+.feedback-list{display:grid;gap:12px;margin-top:14px}
+.feedback-item{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fbfcff}
+.feedback-item h3{margin:0 0 8px;font-size:1rem}
+.feedback-answer{font-size:.9rem;margin:6px 0;color:var(--muted)}
+.feedback-text{line-height:1.55;margin:8px 0 0}
+@media(max-width:820px){.result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.result-summary{grid-template-columns:1fr}}
