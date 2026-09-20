@@ -48,13 +48,15 @@
     $("tabAttemptsBtn").onclick = () => activateTab("attempts");
     $("tabCreateBtn").onclick = () => activateTab("create");
     $("tabManageBtn").onclick = () => activateTab("manage");
+    $("tabStudentsBtn").onclick = () => activateTab("students");
   }
 
   function activateTab(name) {
     const map = {
       attempts: { btn: $("tabAttemptsBtn"), section: $("attemptsSection") },
       create: { btn: $("tabCreateBtn"), section: $("createSection") },
-      manage: { btn: $("tabManageBtn"), section: $("manageSection") }
+      manage: { btn: $("tabManageBtn"), section: $("manageSection") },
+      students: { btn: $("tabStudentsBtn"), section: $("studentsSection") }
     };
 
     Object.values(map).forEach(({btn, section}) => {
@@ -66,6 +68,7 @@
     map[name].section.classList.remove("hidden");
 
     if (name === "manage") loadExams();
+    if (name === "students") window.StudentAdmin?.loadStudents?.();
   }
 
   async function refreshAttempts() {
