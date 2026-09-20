@@ -245,6 +245,10 @@
       ? "Your responses have been recorded."
       : `Your responses have been recorded. Auto-scored result: ${row.score}/${row.max_score}.`;
 
+    // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
+    // The feedback helper fails gracefully if the Edge Function has not been deployed yet.
+    window.ExamAI?.generateFeedback(attempt.attempt_token);
+
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
