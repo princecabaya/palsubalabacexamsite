@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Exam Guard — Teacher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell wide">
+    <section id="adminLogin" class="card login-card">
+      <div class="brand">
+        <div class="logo">EG</div>
+        <div>
+          <h1>Teacher Dashboard</h1>
+          <p class="muted">Supabase Auth administrator access</p>
+        </div>
+      </div>
+
+      <label>Email
+        <input id="adminEmail" type="email" autocomplete="username">
+      </label>
+      <label>Password
+        <input id="adminPassword" type="password" autocomplete="current-password">
+      </label>
+      <button id="adminLoginBtn" class="primary">Sign in</button>
+      <p id="adminLoginMsg" class="message" role="status"></p>
+      <a class="teacher-link" href="index.html">Back to exam</a>
+    </section>
+
+    <section id="dashboard" class="hidden">
+      <header class="admin-header">
+        <div>
+          <h1>Exam Guard Dashboard</h1>
+          <p class="muted">Review attempts and proctoring signals</p>
+        </div>
+        <div class="row">
+          <button id="refreshBtn">Refresh</button>
+          <button id="signOutBtn">Sign out</button>
+        </div>
+      </header>
+
+      <div class="notice">
+        <strong>Interpretation reminder.</strong>
+        Visibility/focus events show that the exam was no longer the active visible
+        page. They do not reveal which desktop application or unrelated website was used.
+        Review patterns and context rather than treating one event as conclusive proof.
+      </div>
+
+      <div class="toolbar">
+        <input id="searchBox" placeholder="Filter student, number, exam...">
+        <span id="lastRefresh" class="muted"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Exam</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Submitted</th>
+              <th>Score</th>
+              <th>Signals</th>
+            </tr>
+          </thead>
+          <tbody id="attemptRows"></tbody>
+        </table>
+      </div>
+
+      <section id="detailPanel" class="card hidden">
+        <div class="detail-head">
+          <div>
+            <h2 id="detailTitle">Attempt details</h2>
+            <p id="detailMeta" class="muted"></p>
+          </div>
+          <button id="closeDetail">Close</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Event</th><th>Details</th></tr>
+            </thead>
+            <tbody id="eventRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

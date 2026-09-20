@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Exam Guard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="watermark" class="watermark" aria-hidden="true"></div>
+
+  <main class="shell">
+    <section id="loginView" class="card login-card">
+      <div class="brand">
+        <div class="logo">EG</div>
+        <div>
+          <h1>Exam Guard</h1>
+          <p class="muted">Secure browser-based examination</p>
+        </div>
+      </div>
+
+      <div class="notice">
+        <strong>Monitoring notice.</strong>
+        During the exam, this site records when the exam tab becomes hidden,
+        the browser loses focus, fullscreen is exited, and copy/paste, print,
+        right-click, reload/leave, and detectable screenshot-key attempts occur.
+        A website cannot identify which desktop app you opened or inspect the URLs
+        of unrelated browser tabs.
+      </div>
+
+      <label>Exam code
+        <input id="examCode" autocomplete="off" placeholder="e.g. MATH101-MIDTERM">
+      </label>
+      <label>Student number
+        <input id="studentNo" autocomplete="off" placeholder="Student number">
+      </label>
+      <label>Full name
+        <input id="studentName" autocomplete="name" placeholder="Full name">
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="consentBox">
+        <span>I understand that exam-behavior events will be recorded for the teacher.</span>
+      </label>
+
+      <button id="startBtn" class="primary">Enter Fullscreen & Start Exam</button>
+      <p id="loginMsg" class="message" role="status"></p>
+
+      <a class="teacher-link" href="admin.html">Teacher dashboard</a>
+    </section>
+
+    <section id="examView" class="hidden">
+      <header class="exam-header">
+        <div>
+          <h1 id="examTitle">Exam</h1>
+          <div id="studentLabel" class="muted"></div>
+        </div>
+        <div class="timer-box">
+          <span>Time remaining</span>
+          <strong id="timer">--:--</strong>
+        </div>
+      </header>
+
+      <div id="warningBar" class="warning hidden" role="alert"></div>
+
+      <form id="examForm" class="question-list"></form>
+
+      <div class="submit-panel">
+        <div>
+          <strong>Ready to submit?</strong>
+          <p class="muted">Your latest answers are saved automatically.</p>
+        </div>
+        <button id="submitBtn" type="button" class="danger">Submit Exam</button>
+      </div>
+    </section>
+
+    <section id="doneView" class="card hidden">
+      <h1>Exam submitted</h1>
+      <p id="doneText">Your responses have been recorded.</p>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
