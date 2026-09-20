@@ -169,6 +169,24 @@ create policy own_exam_admin on public.exam_admins
 for select to authenticated
 using (user_id = auth.uid());
 
+
+-- Normalize student identifiers for tolerant matching.
+create or replace function public.exam_guard_normalize_student_no(p_value text)
+returns text
+language sql
+immutable
+as $
+  select regexp_replace(lower(coalesce(p_value,'')), '[^a-z0-9]', '', 'g');
+$;
+
+create or replace function public.exam_guard_normalize_name(p_value text)
+returns text
+language sql
+immutable
+as $
+  select regexp_replace(lower(coalesce(p_value,'')), '[^a-z0-9]', '', 'g');
+$;
+
 -- ---------- Student RPC API ----------
 create or replace function public.start_exam(
   p_exam_code text,
@@ -212,8 +230,10 @@ begin
 
   select s.* into v_student
   from public.students as s
-  where lower(s.student_no) = lower(trim(p_student_no))
-    and lower(s.full_name) = lower(trim(p_student_name))
+  where public.exam_guard_normalize_student_no(s.student_no)
+        = public.exam_guard_normalize_student_no(p_student_no)
+    and public.exam_guard_normalize_name(s.full_name)
+        = public.exam_guard_normalize_name(p_student_name)
     and s.active = true;
 
   if not found then
