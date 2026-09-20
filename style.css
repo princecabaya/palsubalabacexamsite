@@ -127,3 +127,48 @@ button.danger-outline:hover{background:#fff0ee}
 .interpretation-note{margin-top:14px;padding:12px 14px;border-radius:10px;background:#fff8e8;border:1px solid #f0dfb0;line-height:1.5}
 @media(max-width:900px){.attempt-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.event-guide-grid{grid-template-columns:1fr}}
 @media(max-width:520px){.attempt-summary-grid{grid-template-columns:1fr}.summary-head{flex-direction:column}}
+
+
+/* Student exam layout and watermark */
+.watermark{
+  position:fixed;
+  inset:0;
+  z-index:999;
+  display:none;
+  pointer-events:none;
+  overflow:hidden;
+  padding:7vh 4vw;
+  color:rgba(23,32,51,.08);
+  font-size:18px;
+  font-weight:700;
+  line-height:3.2;
+  letter-spacing:.02em;
+  transform:rotate(-18deg) scale(1.08);
+  transform-origin:center;
+  white-space:pre-wrap;
+  user-select:none;
+}
+.watermark.active{display:block}
+#doneView{position:relative;z-index:1}
+#examView{position:relative;z-index:1}
+.question-list{display:grid;gap:18px;margin:18px 0}
+.question{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}
+.q-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
+.q-no{font-weight:800}
+.points{color:var(--muted);font-size:.9rem}
+.prompt{font-weight:650;line-height:1.5;margin-bottom:14px}
+.choice{display:flex;gap:10px;align-items:flex-start;margin:10px 0;font-weight:500}
+.choice input{width:auto;margin-top:3px}
+.save-state{margin-top:10px;color:var(--muted);font-size:.85rem}
+.timer-box{min-width:128px;text-align:center;border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px 14px}
+.timer-box span{display:block;color:var(--muted);font-size:.78rem}
+.timer-box strong{font-size:1.35rem}
+.warning{margin:14px 0;background:#fff4df;border:1px solid #f0d7a2;color:#7a4300;border-radius:12px;padding:12px}
+.check{display:flex;gap:10px;align-items:flex-start;font-weight:500}
+.check input{width:auto;margin-top:3px}
+.submit-panel{margin-top:20px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}
+@media(max-width:640px){
+  .exam-header,.submit-panel{align-items:flex-start;flex-direction:column}
+  .timer-box{width:100%}
+  .watermark{font-size:15px;line-height:3.7;padding:5vh 2vw}
+}
