@@ -198,11 +198,11 @@ begin
     raise exception 'This exam is already closed.';
   end if;
 
-  select * into v_student
-  from public.students
-  where lower(student_no) = lower(trim(p_student_no))
-    and lower(full_name) = lower(trim(p_student_name))
-    and active = true;
+  select s.* into v_student
+  from public.students as s
+  where lower(s.student_no) = lower(trim(p_student_no))
+    and lower(s.full_name) = lower(trim(p_student_name))
+    and s.active = true;
 
   if not found then
     raise exception 'Student number and full name do not match an active student record.';
