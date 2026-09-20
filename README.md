@@ -60,7 +60,7 @@ Authentication → Users → create the teacher user.
 Copy that user's UUID, then run:
 
 ```sql
-update public.profiles
+update public.exam_admins
 set is_admin = true
 where user_id = 'TEACHER-AUTH-USER-UUID';
 ```
