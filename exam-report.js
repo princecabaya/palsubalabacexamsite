@@ -433,8 +433,175 @@
     }
   }
 
+  async function fetchPublishedExam(examId) {
+    const db = window.ExamAdmin?.db;
+    if (!db) throw new Error("Teacher session is unavailable.");
+
+    const { data: exam, error: examError } = await db
+      .from("exams")
+      .select("id,title,code,duration_minutes,status,start_at,end_at")
+      .eq("id", examId)
+      .maybeSingle();
+
+    if (examError) throw examError;
+    if (!exam) throw new Error("Examination was not found.");
+    if (exam.status !== "published") {
+      throw new Error("Only published examinations can be generated as an Exam PDF.");
+    }
+
+    const { data: questions, error: questionError } = await db
+      .from("questions")
+      .select("position,prompt,question_type,choices,points")
+      .eq("exam_id", examId)
+      .order("position", { ascending: true });
+
+    if (questionError) throw questionError;
+
+    return {
+      ...exam,
+      questions: questions || []
+    };
+  }
+
+  async function buildExamPdf(exam) {
+    const jsPDF = getJsPdf();
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true
+    });
+
+    const logoData = await loadLogoData();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const left = 18;
+    const right = pageWidth - 18;
+    const bottomLimit = doc.internal.pageSize.getHeight() - 18;
+
+    const totalPoints = (exam.questions || []).reduce((sum, q) => {
+      const points = Number(q.points);
+      return sum + (Number.isFinite(points) ? points : 0);
+    }, 0);
+
+    function beginPage(firstPage = false) {
+      if (!firstPage) doc.addPage();
+      drawHeader(doc, logoData);
+
+      doc.setTextColor(20);
+      doc.setFont("times", "bold");
+      doc.setFontSize(13);
+      doc.text(String(exam.title || "EXAMINATION").toUpperCase(), pageWidth / 2, 45, { align: "center" });
+
+      doc.setFont("times", "normal");
+      doc.setFontSize(10);
+      doc.text(`Exam Code: ${exam.code || "—"}`, left, 53);
+      doc.text(`Time: ${exam.duration_minutes || "—"} minutes`, pageWidth / 2, 53, { align: "center" });
+      doc.text(`Total Points: ${fmtNumber(totalPoints)}`, right, 53, { align: "right" });
+
+      doc.text("Name: _______________________________________________", left, 62);
+      doc.text("Student ID: ___________________________", 122, 62);
+      doc.text("Date: __________________", 122, 69);
+
+      doc.setFont("times", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(80);
+      doc.text("Read each item carefully. Select or write the best answer as instructed.", left, 77);
+
+      return 86;
+    }
+
+    let y = beginPage(true);
+
+    const ensureSpace = (needed = 20) => {
+      if (y + needed > bottomLimit) {
+        y = beginPage(false);
+      }
+    };
+
+    const split = (text, width) => doc.splitTextToSize(String(text || ""), width);
+
+    for (const q of exam.questions || []) {
+      const qNo = Number(q.position) || "";
+      const pointText = Number(q.points) === 1 ? "1 point" : `${fmtNumber(q.points)} points`;
+      const promptLines = split(`${qNo}. ${q.prompt || ""}`, 157);
+
+      ensureSpace(8 + promptLines.length * 5);
+      doc.setTextColor(20);
+      doc.setFont("times", "bold");
+      doc.setFontSize(10.5);
+      doc.text(promptLines, left, y);
+
+      doc.setFont("times", "italic");
+      doc.setFontSize(8.5);
+      doc.setTextColor(95);
+      doc.text(pointText, right, y, { align: "right" });
+
+      y += promptLines.length * 5 + 3;
+
+      if (q.question_type === "mcq" && Array.isArray(q.choices)) {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        q.choices.forEach((choice, index) => {
+          const choiceLines = split(`${letters[index] || index + 1}. ${choice}`, 160);
+          ensureSpace(choiceLines.length * 4.6 + 2);
+          doc.setFont("times", "normal");
+          doc.setFontSize(10);
+          doc.setTextColor(30);
+          doc.text(choiceLines, left + 7, y);
+          y += choiceLines.length * 4.6 + 1.5;
+        });
+      } else {
+        for (let line = 0; line < 4; line += 1) {
+          ensureSpace(7);
+          doc.setDrawColor(150);
+          doc.line(left + 4, y + 2, right, y + 2);
+          y += 7;
+        }
+      }
+
+      y += 4;
+    }
+
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      drawFooter(doc, page, pageCount);
+    }
+
+    return doc;
+  }
+
+  async function generateExamPdf(examId, button = null) {
+    if (!examId) return;
+
+    const oldText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Generating…";
+    }
+
+    try {
+      const exam = await fetchPublishedExam(examId);
+      const doc = await buildExamPdf(exam);
+      const filename = [
+        "Examination",
+        safeFilePart(exam.code),
+        safeFilePart(exam.title)
+      ].join("_") + ".pdf";
+      doc.save(filename);
+    } catch (error) {
+      console.error("Exam PDF error:", error);
+      alert(error?.message || "Could not generate the examination PDF.");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldText || "Exam PDF";
+      }
+    }
+  }
+
   window.ExamReport = {
     enableStudent,
-    generateTeacher
+    generateTeacher,
+    generateExamPdf
   };
 })();
