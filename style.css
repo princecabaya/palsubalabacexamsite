@@ -91,3 +91,11 @@ tr.clickable:hover{background:#f8faff}
 .feedback-text{line-height:1.55;margin:8px 0 0}
 @media(max-width:820px){.result-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.result-summary{grid-template-columns:1fr}}
+
+
+/* Excel question import */
+.excel-import-card{margin-top:22px;border:1px dashed #b9c5df;background:#f8faff;border-radius:16px;padding:18px}
+.excel-import-card h3{margin:0}
+.excel-import-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin-top:14px}
+.excel-import-controls input[type="file"]{background:#fff}
+@media(max-width:720px){.excel-import-controls{grid-template-columns:1fr}}
