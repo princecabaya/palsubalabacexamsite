@@ -162,7 +162,10 @@
       return;
     }
 
-    for (const e of data || []) {
+    const events = data || [];
+    renderAttemptSummary(a, events);
+
+    for (const e of events) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${fmt(e.occurred_at)}</td>
@@ -170,6 +173,139 @@
         <td class="event-json">${escapeHtml(JSON.stringify(e.details || {}, null, 2))}</td>`;
       rows.appendChild(tr);
     }
+  }
+
+  function renderAttemptSummary(attempt, events) {
+    const count = (type) => events.filter(e => e.event_type === type).length;
+    const countAny = (types) => events.filter(e => types.includes(e.event_type)).length;
+
+    const score = numberOrNull(attempt.score);
+    const maxScore = numberOrNull(attempt.max_score);
+    const percent = score !== null && maxScore !== null && maxScore > 0
+      ? (score / maxScore) * 100
+      : null;
+
+    $("summaryScore").textContent = score === null
+      ? "—"
+      : `${trimNumber(score)}/${maxScore === null ? "—" : trimNumber(maxScore)}`;
+    $("summaryPercent").textContent = percent === null ? "—" : `${formatPercent(percent)}%`;
+    $("summaryDuration").textContent = formatDuration(attempt.started_at, attempt.submitted_at);
+
+    const startedEvent = [...events].reverse().find(e => e.event_type === "exam_started");
+    const device = describeDevice(startedEvent?.details || {});
+    $("summaryDevice").textContent = device.label;
+    $("summaryDevice").title = device.full;
+
+    const tabHidden = count("tab_or_window_hidden");
+    const blur = count("window_blur");
+    const fullscreenExit = count("fullscreen_exit");
+    const restricted = countAny([
+      "copy_blocked","cut_blocked","paste_blocked","contextmenu_blocked","dragstart_blocked",
+      "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
+      "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
+    ]);
+
+    $("summaryTabHidden").textContent = String(tabHidden);
+    $("summaryBlur").textContent = String(blur);
+    $("summaryFullscreen").textContent = String(fullscreenExit);
+    $("summaryRestricted").textContent = String(restricted);
+
+    const badge = $("summaryReviewBadge");
+    const attentionSignals = tabHidden + blur + fullscreenExit + restricted;
+    badge.className = "badge " + (attentionSignals > 0 ? "warn" : "ok");
+    badge.textContent = attentionSignals > 0 ? "Review signals present" : "No review signals recorded";
+
+    const narrative = [];
+    if (attempt.status === "submitted") {
+      narrative.push(
+        `The attempt was submitted${attempt.submitted_at ? " at " + new Date(attempt.submitted_at).toLocaleTimeString() : ""}.`
+      );
+    } else {
+      narrative.push(`The current attempt status is "${attempt.status}".`);
+    }
+
+    if (percent !== null) {
+      narrative.push(`The auto-scored result is ${trimNumber(score)} out of ${trimNumber(maxScore)} (${formatPercent(percent)}%).`);
+    }
+
+    if (tabHidden > 0) {
+      narrative.push(
+        `The exam page became hidden ${tabHidden} time${tabHidden === 1 ? "" : "s"}. This usually means the student switched away from the page, minimized it, or the browser/app moved to the background; the system cannot determine the exact destination.`
+      );
+    } else {
+      narrative.push("No tab/window-hidden event was recorded.");
+    }
+
+    if (blur > 0) {
+      narrative.push(
+        `The exam window lost focus ${blur} time${blur === 1 ? "" : "s"}. Blur can happen for several reasons and should be reviewed together with nearby events.`
+      );
+    }
+
+    if (fullscreenExit > 0) {
+      narrative.push(`Fullscreen was exited ${fullscreenExit} time${fullscreenExit === 1 ? "" : "s"} after being active.`);
+    } else if (startedEvent?.details?.fullscreen === false) {
+      narrative.push("The session began without fullscreen active on this device/browser.");
+    }
+
+    if (restricted > 0) {
+      narrative.push(`${restricted} restricted-action attempt${restricted === 1 ? " was" : "s were"} recorded, such as copy/paste, print/screenshot-key, reload, developer-tools, or navigation attempts.`);
+    } else {
+      narrative.push("No restricted copy/paste, print, screenshot-key, reload, developer-tools, or navigation attempt was recorded.");
+    }
+
+    $("summaryNarrative").innerHTML = narrative.map(t => `<p>${escapeHtml(t)}</p>`).join("");
+  }
+
+  function describeDevice(details) {
+    const ua = String(details?.userAgent || "");
+    const screenSize = String(details?.screen || "");
+    let label = "Unknown device";
+
+    if (/iPhone/i.test(ua)) label = "iPhone";
+    else if (/iPad/i.test(ua)) label = "iPad";
+    else if (/Android/i.test(ua)) label = "Android device";
+    else if (/Windows/i.test(ua)) label = "Windows PC";
+    else if (/Macintosh|Mac OS X/i.test(ua)) label = "Mac";
+    else if (/Linux/i.test(ua)) label = "Linux device";
+
+    let browser = "";
+    if (/CriOS/i.test(ua)) browser = "Chrome";
+    else if (/FxiOS/i.test(ua)) browser = "Firefox";
+    else if (/EdgiOS|Edg\//i.test(ua)) browser = "Edge";
+    else if (/Safari/i.test(ua) && /Version\//i.test(ua)) browser = "Safari";
+    else if (/Chrome/i.test(ua)) browser = "Chrome";
+    else if (/Firefox/i.test(ua)) browser = "Firefox";
+
+    const short = [label, browser].filter(Boolean).join(" • ") + (screenSize ? ` • ${screenSize}` : "");
+    return { label: short || "Unknown device", full: ua || "No user-agent recorded" };
+  }
+
+  function formatDuration(startedAt, submittedAt) {
+    if (!startedAt) return "—";
+    const start = new Date(startedAt).getTime();
+    const end = submittedAt ? new Date(submittedAt).getTime() : Date.now();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
+
+    const totalSeconds = Math.round((end - start) / 1000);
+    const min = Math.floor(totalSeconds / 60);
+    const sec = totalSeconds % 60;
+    if (min <= 0) return `${sec}s`;
+    return `${min}m ${sec}s`;
+  }
+
+  function numberOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function trimNumber(value) {
+    return Number(value).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+
+  function formatPercent(value) {
+    return Number(value).toFixed(2).replace(/\.00$/, "");
   }
 
   function bindExamBuilder() {
