@@ -175,17 +175,17 @@ create or replace function public.exam_guard_normalize_student_no(p_value text)
 returns text
 language sql
 immutable
-as $
+as $norm$
   select regexp_replace(lower(coalesce(p_value,'')), '[^a-z0-9]', '', 'g');
-$;
+$norm$;
 
 create or replace function public.exam_guard_normalize_name(p_value text)
 returns text
 language sql
 immutable
-as $
+as $norm$
   select regexp_replace(lower(coalesce(p_value,'')), '[^a-z0-9]', '', 'g');
-$;
+$norm$;
 
 -- ---------- Student RPC API ----------
 create or replace function public.start_exam(
