@@ -482,10 +482,20 @@
   }
 
   async function loadExams() {
-    const { data: exams, error } = await db
+    let { data: exams, error } = await db
       .from("exams")
-      .select("id, code, title, duration_minutes, status, start_at, end_at")
+      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at")
       .order("created_at", { ascending: false });
+
+    // Keep the dashboard usable before the one-time archive database upgrade is run.
+    if (error && /archived/i.test(error.message || "")) {
+      const fallback = await db
+        .from("exams")
+        .select("id, code, title, duration_minutes, status, start_at, end_at")
+        .order("created_at", { ascending: false });
+      exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null }));
+      error = fallback.error;
+    }
 
     if (error) {
       $("examRows").innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
@@ -522,8 +532,13 @@
     for (const exam of examsCache) {
       const tr = document.createElement("tr");
       const qCount = counts[exam.id] || 0;
+      const archived = Boolean(exam.archived);
+      tr.classList.toggle("archived-row", archived);
       tr.innerHTML = `
-        <td><button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button></td>
+        <td>
+          <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
+          ${archived ? '<br><span class="badge archived">Archived</span>' : ''}
+        </td>
         <td>${escapeHtml(exam.code)}</td>
         <td><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
         <td>${escapeHtml(String(exam.duration_minutes))} min</td>
@@ -531,15 +546,30 @@
         <td>${fmt(exam.start_at)}</td>
         <td>${fmt(exam.end_at)}</td>
         <td class="action-cell">
-          <button type="button" data-action="draft">Draft</button>
-          <button type="button" data-action="published">Publish</button>
-          <button type="button" data-action="closed">Close</button>
+          ${archived ? `
+            <button type="button" data-exam-action="restore">Restore</button>
+          ` : `
+            <button type="button" data-action="draft">Draft</button>
+            <button type="button" data-action="published">Publish</button>
+            <button type="button" data-action="closed">Close</button>
+            <button type="button" data-exam-action="archive">Archive</button>
+          `}
+          <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
         </td>
       `;
 
       tr.querySelectorAll("button[data-action]").forEach(btn => {
         btn.addEventListener("click", async () => {
           await updateExamStatus(exam.id, btn.dataset.action);
+        });
+      });
+
+      tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const action = btn.dataset.examAction;
+          if (action === "archive") await archiveExam(exam);
+          if (action === "restore") await restoreExam(exam);
+          if (action === "delete") await deleteExam(exam);
         });
       });
 
@@ -558,6 +588,77 @@
       return;
     }
     await loadExams();
+  }
+
+  async function archiveExam(exam) {
+    const ok = confirm(
+      `Archive "${exam.title}"?\n\nThe exam and all student results will be kept, but the exam will be closed and marked archived.`
+    );
+    if (!ok) return;
+
+    const { error } = await db
+      .from("exams")
+      .update({
+        archived: true,
+        archived_at: new Date().toISOString(),
+        status: "closed"
+      })
+      .eq("id", exam.id);
+
+    if (error) {
+      alert(
+        `Could not archive exam: ${error.message}\n\nIf this mentions the archived column, run supabase-upgrade-archive-delete.sql in Supabase SQL Editor.`
+      );
+      return;
+    }
+    await loadExams();
+  }
+
+  async function restoreExam(exam) {
+    const ok = confirm(
+      `Restore "${exam.title}"?\n\nIt will return as a draft. You can publish it again when ready.`
+    );
+    if (!ok) return;
+
+    const { error } = await db
+      .from("exams")
+      .update({
+        archived: false,
+        archived_at: null,
+        status: "draft"
+      })
+      .eq("id", exam.id);
+
+    if (error) {
+      alert(`Could not restore exam: ${error.message}`);
+      return;
+    }
+    await loadExams();
+  }
+
+  async function deleteExam(exam) {
+    const ok = confirm(
+      `PERMANENTLY DELETE "${exam.title}"?\n\nThis will also delete its questions, every student's attempt, saved answers, AI feedback, and proctoring events. This cannot be undone.`
+    );
+    if (!ok) return;
+
+    const second = confirm(
+      `Final confirmation: delete exam code "${exam.code}" and all associated records?`
+    );
+    if (!second) return;
+
+    const { error } = await db
+      .from("exams")
+      .delete()
+      .eq("id", exam.id);
+
+    if (error) {
+      alert(`Could not delete exam: ${error.message}`);
+      return;
+    }
+
+    $("examResultsPanel")?.classList.add("hidden");
+    await Promise.all([loadExams(), refreshAttempts()]);
   }
 
   $("searchBox").addEventListener("input", renderAttempts);
