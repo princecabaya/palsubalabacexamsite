@@ -5,11 +5,22 @@
   });
 
   window.ExamAI = {
-    async generateFeedback(attemptToken) {
+    async generateFeedback(attemptToken, result = {}) {
       const panel = document.getElementById("aiFeedbackPanel");
       const status = document.getElementById("aiFeedbackStatus");
       const list = document.getElementById("aiFeedbackItems");
       if (!panel || !status || !list || !attemptToken) return;
+
+      const score = Number(result?.score);
+      const maxScore = Number(result?.maxScore);
+      const hasValidScore = Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0;
+
+      if (hasValidScore && score >= maxScore) {
+        panel.classList.remove("hidden");
+        list.innerHTML = "";
+        status.textContent = "Excellent work — all auto-scored answers were correct, so no corrective AI feedback is needed.";
+        return;
+      }
 
       panel.classList.remove("hidden");
       list.innerHTML = "";
