@@ -33,7 +33,7 @@
       <header class="admin-header">
         <div>
           <h1>Exam Guard Dashboard</h1>
-          <p class="muted">Review attempts and proctoring signals</p>
+          <p class="muted">Manage examinations, review attempts, and inspect proctoring signals</p>
         </div>
         <div class="row">
           <button id="refreshBtn">Refresh</button>
@@ -48,44 +48,133 @@
         Review patterns and context rather than treating one event as conclusive proof.
       </div>
 
-      <div class="toolbar">
-        <input id="searchBox" placeholder="Filter student, number, exam...">
-        <span id="lastRefresh" class="muted"></span>
+      <div class="tabbar">
+        <button id="tabAttemptsBtn" class="tab-btn active" type="button">Attempts</button>
+        <button id="tabCreateBtn" class="tab-btn" type="button">Create Exam</button>
+        <button id="tabManageBtn" class="tab-btn" type="button">Manage Exams</button>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Student</th>
-              <th>Exam</th>
-              <th>Status</th>
-              <th>Started</th>
-              <th>Submitted</th>
-              <th>Score</th>
-              <th>Signals</th>
-            </tr>
-          </thead>
-          <tbody id="attemptRows"></tbody>
-        </table>
-      </div>
-
-      <section id="detailPanel" class="card hidden">
-        <div class="detail-head">
-          <div>
-            <h2 id="detailTitle">Attempt details</h2>
-            <p id="detailMeta" class="muted"></p>
-          </div>
-          <button id="closeDetail">Close</button>
+      <section id="attemptsSection" class="tab-section">
+        <div class="toolbar">
+          <input id="searchBox" placeholder="Filter student, number, exam...">
+          <span id="lastRefresh" class="muted"></span>
         </div>
+
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Time</th><th>Event</th><th>Details</th></tr>
+              <tr>
+                <th>Student</th>
+                <th>Exam</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Submitted</th>
+                <th>Score</th>
+                <th>Signals</th>
+              </tr>
             </thead>
-            <tbody id="eventRows"></tbody>
+            <tbody id="attemptRows"></tbody>
           </table>
         </div>
+
+        <section id="detailPanel" class="card hidden">
+          <div class="detail-head">
+            <div>
+              <h2 id="detailTitle">Attempt details</h2>
+              <p id="detailMeta" class="muted"></p>
+            </div>
+            <button id="closeDetail">Close</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Time</th><th>Event</th><th>Details</th></tr>
+              </thead>
+              <tbody id="eventRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="createSection" class="tab-section hidden">
+        <section class="card">
+          <h2>Create a New Exam</h2>
+          <p class="muted">This lets you create an exam directly from the teacher dashboard without using SQL.</p>
+
+          <div class="form-grid">
+            <label>Exam title
+              <input id="examTitleInput" placeholder="e.g. SC-Math 1 Midterm Examination">
+            </label>
+
+            <label>Exam code
+              <div class="inline-field">
+                <input id="examCodeInput" placeholder="e.g. SC-MATH1-MIDTERM">
+                <button id="generateCodeBtn" type="button">Generate</button>
+              </div>
+            </label>
+
+            <label>Duration (minutes)
+              <input id="durationInput" type="number" min="1" max="600" value="60">
+            </label>
+
+            <label>Status
+              <select id="statusInput">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="closed">Closed</option>
+              </select>
+            </label>
+
+            <label>Start date/time
+              <input id="startAtInput" type="datetime-local">
+            </label>
+
+            <label>End date/time
+              <input id="endAtInput" type="datetime-local">
+            </label>
+          </div>
+
+          <div class="row section-actions">
+            <button id="addQuestionBtn" class="primary" type="button">Add Question</button>
+            <button id="clearExamFormBtn" type="button">Clear Form</button>
+          </div>
+
+          <div id="questionBuilder" class="builder-list"></div>
+
+          <div class="row section-actions">
+            <button id="saveExamBtn" class="primary" type="button">Save Exam</button>
+            <span id="createExamMsg" class="message-inline"></span>
+          </div>
+        </section>
+      </section>
+
+      <section id="manageSection" class="tab-section hidden">
+        <section class="card">
+          <div class="detail-head">
+            <div>
+              <h2>Existing Exams</h2>
+              <p class="muted">Review created exams and quickly change their status.</p>
+            </div>
+            <button id="reloadExamsBtn" type="button">Reload Exams</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Code</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Questions</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="examRows"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </section>
   </main>
