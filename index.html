@@ -76,11 +76,23 @@
     <section id="doneView" class="card hidden">
       <h1>Exam submitted</h1>
       <p id="doneText">Your responses have been recorded.</p>
+
+      <section id="aiFeedbackPanel" class="ai-feedback-panel hidden">
+        <div class="feedback-head">
+          <div>
+            <h2>Feedback on Incorrect Answers</h2>
+            <p class="muted">AI-generated learning feedback. Use it as guidance and verify with your instructor when needed.</p>
+          </div>
+        </div>
+        <p id="aiFeedbackStatus" class="muted"></p>
+        <div id="aiFeedbackItems" class="feedback-list"></div>
+      </section>
     </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script src="student-feedback.js"></script>
 </body>
 </html>
