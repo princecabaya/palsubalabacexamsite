@@ -7,6 +7,7 @@
   let attemptsByStudent = new Map();
   let totalAttempts = 0;
   let bound = false;
+  let loading = false;
 
   function bind() {
     if (bound) return;
@@ -22,7 +23,33 @@
 
   async function loadStudents() {
     bind();
+    if (loading) return;
+    loading = true;
     setListStatus("Loading students…");
+
+    const { data: sessionData } = await db.auth.getSession();
+    if (!sessionData?.session?.user?.id) {
+      loading = false;
+      setListStatus("Teacher session not found. Please sign out and sign in again.", true);
+      renderLoadError("Teacher session not found. Please sign out and sign in again.");
+      return;
+    }
+
+    const { data: adminRows, error: adminError } = await db
+      .from("exam_admins")
+      .select("is_admin")
+      .eq("user_id", sessionData.session.user.id)
+      .limit(1);
+
+    if (adminError || !adminRows?.[0]?.is_admin) {
+      loading = false;
+      const message = adminError
+        ? `Administrator check failed: ${adminError.message}`
+        : "This signed-in teacher account is not marked as an exam administrator.";
+      setListStatus(message, true);
+      renderLoadError(message);
+      return;
+    }
 
     const { data: studentRows, error: studentError } = await db
       .from("students")
@@ -31,7 +58,10 @@
       .limit(5000);
 
     if (studentError) {
-      setListStatus(`Could not load students: ${studentError.message}`, true);
+      loading = false;
+      const message = `Could not load students: ${studentError.message}`;
+      setListStatus(message, true);
+      renderLoadError(message);
       return;
     }
 
@@ -65,7 +95,21 @@
 
     updateSummary();
     renderStudents();
-    setListStatus(`${students.length} student${students.length === 1 ? "" : "s"} loaded.`);
+
+    if (!students.length) {
+      setListStatus("No student rows were returned from Supabase. Check the students table and administrator RLS policy.", true);
+      renderLoadError("No student rows were returned from Supabase.");
+    } else {
+      setListStatus(`${students.length} student${students.length === 1 ? "" : "s"} loaded.`);
+    }
+    loading = false;
+  }
+
+  function renderLoadError(message) {
+    const body = $("studentRosterRows");
+    if (body) {
+      body.innerHTML = `<tr><td colspan="7" class="student-load-error">${escapeHtml(message)}</td></tr>`;
+    }
   }
 
   function updateSummary() {
@@ -504,4 +548,15 @@
 
   bind();
   window.StudentAdmin = { loadStudents };
+
+  $("tabStudentsBtn")?.addEventListener("click", () => {
+    loadStudents();
+  });
+
+  db.auth.getSession().then(({ data }) => {
+    if (data?.session) {
+      // Preload the roster so the Students tab is ready immediately.
+      loadStudents();
+    }
+  });
 })();
