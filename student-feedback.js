@@ -63,7 +63,7 @@
         console.warn("AI feedback unavailable:", err);
 
         const detail = await readFunctionError(err);
-        if (/missing_gemini_api_key|GEMINI_API_KEY is missing|not been configured|503/i.test(detail)) {
+        if (/missing_gemini_api_key|GEMINI_API_KEY is missing from this Edge Function environment/i.test(detail)) {
           status.textContent = "AI feedback is not configured yet: GEMINI_API_KEY is missing from Supabase Edge Function Secrets.";
         } else if (/not found|404/i.test(detail) && /function|generate-feedback/i.test(detail)) {
           status.textContent = "AI feedback is not configured yet: the Supabase Edge Function generate-feedback was not found.";
@@ -76,9 +76,10 @@
           status.textContent = "The Edge Function authorization settings rejected the browser request. Check the generate-feedback function authentication setting.";
         } else {
           const reason = extractServerReason(detail);
+          const statusCode = err?.context?.status || err?.status || "";
           status.textContent = reason
-            ? `AI feedback is unavailable: ${reason}`
-            : "AI feedback is unavailable right now. Your exam submission was still recorded successfully.";
+            ? `AI feedback is unavailable${statusCode ? ` (HTTP ${statusCode})` : ""}: ${reason}`
+            : `AI feedback is unavailable right now${statusCode ? ` (HTTP ${statusCode})` : ""}. Your exam submission was still recorded successfully.`;
         }
       }
 
