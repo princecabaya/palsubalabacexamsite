@@ -78,7 +78,7 @@ create table if not exists public.exam_admins (
   created_at timestamptz not null default now()
 );
 
-create or replace function public.handle_new_auth_user()
+create or replace function public.exam_guard_handle_new_auth_user()
 returns trigger
 language plpgsql
 security definer
@@ -91,12 +91,12 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
+drop trigger if exists exam_guard_on_auth_user_created on auth.users;
+create trigger exam_guard_on_auth_user_created
 after insert on auth.users
-for each row execute function public.handle_new_auth_user();
+for each row execute function public.exam_guard_handle_new_auth_user();
 
-create or replace function public.current_user_is_admin()
+create or replace function public.exam_guard_current_user_is_admin()
 returns boolean
 language sql
 stable
@@ -123,35 +123,35 @@ alter table public.exam_admins enable row level security;
 drop policy if exists admin_students on public.students;
 create policy admin_students on public.students
 for all to authenticated
-using (public.current_user_is_admin())
-with check (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin())
+with check (public.exam_guard_current_user_is_admin());
 
 drop policy if exists admin_exams on public.exams;
 create policy admin_exams on public.exams
 for all to authenticated
-using (public.current_user_is_admin())
-with check (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin())
+with check (public.exam_guard_current_user_is_admin());
 
 drop policy if exists admin_questions on public.questions;
 create policy admin_questions on public.questions
 for all to authenticated
-using (public.current_user_is_admin())
-with check (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin())
+with check (public.exam_guard_current_user_is_admin());
 
 drop policy if exists admin_attempts on public.attempts;
 create policy admin_attempts on public.attempts
 for select to authenticated
-using (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin());
 
 drop policy if exists admin_responses on public.responses;
 create policy admin_responses on public.responses
 for select to authenticated
-using (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin());
 
 drop policy if exists admin_events on public.proctor_events;
 create policy admin_events on public.proctor_events
 for select to authenticated
-using (public.current_user_is_admin());
+using (public.exam_guard_current_user_is_admin());
 
 drop policy if exists own_exam_admin on public.exam_admins;
 create policy own_exam_admin on public.exam_admins
