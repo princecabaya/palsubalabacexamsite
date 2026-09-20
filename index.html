@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260920-2015">
+  <link rel="stylesheet" href="style.css?v=20260920-2035">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -77,13 +77,37 @@
       <section id="resultReportPanel" class="result-report-panel hidden">
         <div class="feedback-head">
           <div>
-            <h2>Exam Result PDF</h2>
-            <p class="muted">Download your official result report showing your score and which auto-scored items were correct or incorrect.</p>
+            <h2>Your Exam Results</h2>
+            <p class="muted">Review your score and each auto-scored item after submission.</p>
           </div>
         </div>
+
+        <div class="result-review-summary">
+          <div class="metric-card"><span>Score</span><strong id="studentResultScore">—</strong></div>
+          <div class="metric-card"><span>Percentage</span><strong id="studentResultPercent">—</strong></div>
+          <div class="metric-card"><span>Correct Items</span><strong id="studentCorrectCount">—</strong></div>
+          <div class="metric-card"><span>Wrong Items</span><strong id="studentWrongCount">—</strong></div>
+        </div>
+
+        <div class="table-wrap result-review-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Result</th>
+                <th>Your Answer</th>
+                <th>Correct Answer</th>
+              </tr>
+            </thead>
+            <tbody id="studentResultRows">
+              <tr><td colspan="4">Loading result review…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <div class="row result-pdf-actions">
-          <button id="resultPdfBtn" class="primary" type="button">Download Result PDF</button>
-          <span id="resultPdfMsg" class="message-inline"></span>
+          <button id="resultPdfBtn" class="primary" type="button" disabled>Download Result PDF</button>
+          <span id="resultPdfMsg" class="message-inline">Preparing your result report…</span>
         </div>
       </section>
 
@@ -104,7 +128,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
-  <script src="exam-report.js?v=20260920-2015"></script>
+  <script src="exam-report.js?v=20260920-2035"></script>
   <script src="app.js?v=20260920-2022"></script>
   <script src="student-feedback.js?v=20260920-2022"></script>
 </body>
