@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260920-1841">
+  <link rel="stylesheet" href="style.css?v=20260920-2015">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -74,6 +74,19 @@
       <h1>Exam submitted</h1>
       <p id="doneText">Your responses have been recorded.</p>
 
+      <section id="resultReportPanel" class="result-report-panel hidden">
+        <div class="feedback-head">
+          <div>
+            <h2>Exam Result PDF</h2>
+            <p class="muted">Download your official result report showing your score and which auto-scored items were correct or incorrect.</p>
+          </div>
+        </div>
+        <div class="row result-pdf-actions">
+          <button id="resultPdfBtn" class="primary" type="button">Download Result PDF</button>
+          <span id="resultPdfMsg" class="message-inline"></span>
+        </div>
+      </section>
+
       <section id="aiFeedbackPanel" class="ai-feedback-panel hidden">
         <div class="feedback-head">
           <div>
@@ -88,8 +101,11 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
+  <script src="exam-report.js?v=20260920-2015"></script>
   <script src="app.js?v=20260920-1905"""></script>
-  <script src="student-feedback.js?v=20260920-1852""></script>
+  <script src="student-feedback.js?v=20260920-2015"></script>
 </body>
 </html>
