@@ -24,7 +24,7 @@ The SQL creates these tables:
 - `attempts`
 - `responses`
 - `proctor_events`
-- `profiles`
+- `exam_admins`
 
 It also creates the RPC functions used by the student website.
 
@@ -65,7 +65,7 @@ Copy the teacher user's UUID.
 Then return to **SQL Editor** and run:
 
 ```sql
-update public.profiles
+update public.exam_admins
 set is_admin = true
 where user_id = 'PASTE-TEACHER-AUTH-USER-UUID-HERE';
 ```
