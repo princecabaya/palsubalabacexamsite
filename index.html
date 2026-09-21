@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260920-2035">
+  <link rel="stylesheet" href="style.css?v=20260921-1525">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -44,6 +44,24 @@
 
       <a class="teacher-link" href="admin.html">Teacher dashboard</a>
     </section>
+
+    <div id="identityConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="identityConfirmTitle">
+      <section class="card identity-confirm-card">
+        <h2 id="identityConfirmTitle">Confirm Your Identity</h2>
+        <p id="identityConfirmQuestion" class="identity-confirm-question">Are you really this student?</p>
+        <div class="identity-confirm-details">
+          <div><span>Student Name</span><strong id="identityStudentName">—</strong></div>
+          <div><span>Student ID</span><strong id="identityStudentNo">—</strong></div>
+          <div><span>Examination</span><strong id="identityExamTitle">—</strong></div>
+        </div>
+        <p class="muted">Please confirm before the examination enters fullscreen mode. If this is not you, correct the Student ID before continuing.</p>
+        <div class="row identity-confirm-actions">
+          <button id="identityNoBtn" type="button">No, change Student ID</button>
+          <button id="identityYesBtn" type="button" class="primary">Yes, that's me</button>
+        </div>
+        <p id="identityConfirmMsg" class="message" role="status"></p>
+      </section>
+    </div>
 
     <section id="examView" class="hidden">
       <header class="exam-header">
@@ -129,7 +147,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="app.js?v=20260921-0145"></script>
+  <script src="app.js?v=20260921-1525"></script>
   <script src="student-feedback.js?v=20260920-2115"></script>
 </body>
 </html>
