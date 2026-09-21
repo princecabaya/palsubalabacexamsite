@@ -351,19 +351,22 @@
       header.className = "attempt-exam-group";
       header.innerHTML = `
         <td colspan="7">
-          <button type="button" class="attempt-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
-            <span class="attempt-group-chevron">${expanded ? "▾" : "▸"}</span>
-            <span class="attempt-group-title">
-              <strong>${escapeHtml(group.title)}</strong>
-              <span class="muted">${escapeHtml(group.code)}</span>
-            </span>
-            <span class="attempt-group-summary">
-              ${group.attempts.length} attempt${group.attempts.length === 1 ? "" : "s"}
-              • ${submittedCount} submitted
-              ${activeCount ? ` • ${activeCount} active` : ""}
-              • ${totalSignals} signal${totalSignals === 1 ? "" : "s"}
-            </span>
-          </button>
+          <div class="attempt-group-bar">
+            <button type="button" class="attempt-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
+              <span class="attempt-group-chevron">${expanded ? "▾" : "▸"}</span>
+              <span class="attempt-group-title">
+                <strong>${escapeHtml(group.title)}</strong>
+                <span class="muted">${escapeHtml(group.code)}</span>
+              </span>
+              <span class="attempt-group-summary">
+                ${group.attempts.length} attempt${group.attempts.length === 1 ? "" : "s"}
+                • ${submittedCount} submitted
+                ${activeCount ? ` • ${activeCount} active` : ""}
+                • ${totalSignals} signal${totalSignals === 1 ? "" : "s"}
+              </span>
+            </button>
+            <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
+          </div>
         </td>
       `;
 
@@ -372,6 +375,12 @@
         else expandedAttemptExams.add(group.key);
         renderAttempts();
       });
+
+      header.querySelector(".exam-excel-btn").addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
+      });
+
       rows.appendChild(header);
 
       if (!expanded) continue;
@@ -394,6 +403,233 @@
         rows.appendChild(tr);
       }
     }
+  }
+
+  async function exportExamAttemptsExcel(examId, examTitle, examCode, button) {
+    if (!window.XLSX) {
+      alert("Excel export library is unavailable. Refresh the dashboard and try again.");
+      return;
+    }
+
+    const oldText = button?.textContent || "Excel";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Preparing…";
+    }
+
+    try {
+      const { data: attempts, error: attemptError } = await db
+        .from("attempts")
+        .select(`
+          id,status,started_at,submitted_at,score,max_score,
+          students(student_no,full_name)
+        `)
+        .eq("exam_id", examId)
+        .order("started_at", { ascending: true });
+
+      if (attemptError) throw attemptError;
+
+      const attemptRows = attempts || [];
+      const attemptIds = attemptRows.map(a => a.id);
+
+      const { data: questions, error: questionError } = await db
+        .from("questions")
+        .select("id,position,question_type,choices")
+        .eq("exam_id", examId)
+        .order("position", { ascending: true });
+
+      if (questionError) throw questionError;
+
+      let responses = [];
+      let signalEvents = [];
+
+      if (attemptIds.length) {
+        const responseResult = await db
+          .from("responses")
+          .select("attempt_id,question_id,answer")
+          .in("attempt_id", attemptIds);
+
+        if (responseResult.error) throw responseResult.error;
+        responses = responseResult.data || [];
+
+        const eventResult = await db
+          .from("proctor_events")
+          .select("attempt_id,event_type")
+          .in("attempt_id", attemptIds);
+
+        if (eventResult.error) throw eventResult.error;
+        signalEvents = eventResult.data || [];
+      }
+
+      const responseMap = new Map();
+      for (const response of responses) {
+        responseMap.set(
+          `${response.attempt_id}::${response.question_id}`,
+          response.answer == null ? "" : String(response.answer)
+        );
+      }
+
+      const flaggedByAttempt = new Map();
+      for (const event of signalEvents) {
+        if (!suspiciousTypes.has(event.event_type)) continue;
+        flaggedByAttempt.set(
+          event.attempt_id,
+          (flaggedByAttempt.get(event.attempt_id) || 0) + 1
+        );
+      }
+
+      const questionList = questions || [];
+      const itemHeaders = questionList.map(q => `Item ${q.position}`);
+      const headers = [
+        "Student Number",
+        "Student Name",
+        "Status",
+        "Score",
+        "Time Taken",
+        "Time Submitted",
+        "Flagged Signals",
+        ...itemHeaders
+      ];
+
+      const records = attemptRows.map(a => {
+        const row = {
+          "Student Number": a.students?.student_no || "",
+          "Student Name": a.students?.full_name || "",
+          "Status": a.status || "",
+          "Score": a.score == null
+            ? ""
+            : `${trimNumber(Number(a.score))}/${a.max_score == null ? "" : trimNumber(Number(a.max_score))}`,
+          "Time Taken": formatExcelDuration(a.started_at, a.submitted_at),
+          "Time Submitted": a.submitted_at ? new Date(a.submitted_at) : "",
+          "Flagged Signals": flaggedByAttempt.get(a.id) || 0
+        };
+
+        for (const question of questionList) {
+          const answer = responseMap.get(`${a.id}::${question.id}`) ?? "";
+          row[`Item ${question.position}`] = getOptionLetter(question, answer);
+        }
+
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(records, {
+        header: headers,
+        skipHeader: false
+      });
+
+      // Keep timestamps as real Excel dates where available.
+      for (let index = 0; index < records.length; index += 1) {
+        const excelRow = index + 2;
+        const cell = ws[`F${excelRow}`];
+        if (cell && cell.v instanceof Date) {
+          cell.t = "d";
+          cell.z = "yyyy-mm-dd hh:mm AM/PM";
+        }
+      }
+
+      const itemColumnWidth = 10;
+      ws["!cols"] = [
+        { wch: 18 },
+        { wch: 30 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 23 },
+        { wch: 16 },
+        ...questionList.map(() => ({ wch: itemColumnWidth }))
+      ];
+
+      if (headers.length) {
+        ws["!autofilter"] = {
+          ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${Math.max(1, records.length + 1)}`
+        };
+      }
+
+      const infoRows = [
+        ["Examination", examTitle || ""],
+        ["Exam Code", examCode || ""],
+        ["Generated", new Date()],
+        ["Attempts", records.length],
+        ["Note", "Item columns show the option letter selected by the student. Blank means unanswered. Text-response items contain the saved response text."]
+      ];
+      const infoSheet = XLSX.utils.aoa_to_sheet(infoRows);
+      infoSheet["!cols"] = [{ wch: 18 }, { wch: 90 }];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, ws, "Attempt Records");
+      XLSX.utils.book_append_sheet(workbook, infoSheet, "Exam Info");
+
+      const safeName = safeExcelFilename(examCode || examTitle || "Exam");
+      XLSX.writeFile(workbook, `${safeName}_Attempt_Records.xlsx`, {
+        compression: true
+      });
+    } catch (error) {
+      console.error("Excel export error:", error);
+      alert(`Could not generate Excel file: ${error?.message || error}`);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    }
+  }
+
+  function getOptionLetter(question, answer) {
+    const value = String(answer ?? "").trim();
+    if (!value) return "";
+
+    if (question.question_type !== "mcq") {
+      return value;
+    }
+
+    const choices = Array.isArray(question.choices) ? question.choices : [];
+    const normalized = value.toLocaleLowerCase();
+
+    const index = choices.findIndex(choice =>
+      String(choice ?? "").trim().toLocaleLowerCase() === normalized
+    );
+
+    if (index < 0) return "";
+    return excelOptionLabel(index);
+  }
+
+  function excelOptionLabel(index) {
+    let n = Number(index) + 1;
+    let label = "";
+    while (n > 0) {
+      n -= 1;
+      label = String.fromCharCode(65 + (n % 26)) + label;
+      n = Math.floor(n / 26);
+    }
+    return label;
+  }
+
+  function formatExcelDuration(startedAt, submittedAt) {
+    if (!startedAt) return "";
+    if (!submittedAt) return "Not submitted";
+
+    const start = new Date(startedAt).getTime();
+    const end = new Date(submittedAt).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+
+    let seconds = Math.floor((end - start) / 1000);
+    const hours = Math.floor(seconds / 3600);
+    seconds -= hours * 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds -= minutes * 60;
+
+    if (hours > 0) {
+      return `${hours}h ${String(minutes).padStart(2,"0")}m ${String(seconds).padStart(2,"0")}s`;
+    }
+    return `${minutes}m ${String(seconds).padStart(2,"0")}s`;
+  }
+
+  function safeExcelFilename(value) {
+    return String(value || "Exam")
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "Exam";
   }
 
   async function openDetail(a) {
