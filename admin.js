@@ -637,6 +637,8 @@
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
+    await loadSavedResponses(a);
+
     const { data, error } = await db
       .from("proctor_events")
       .select("occurred_at,event_type,details")
@@ -662,6 +664,108 @@
         <td class="event-json">${escapeHtml(JSON.stringify(e.details || {}, null, 2))}</td>`;
       rows.appendChild(tr);
     }
+  }
+
+  async function loadSavedResponses(attempt) {
+    const rows = $("savedResponseRows");
+    const note = $("savedResponsesNote");
+    const countBadge = $("savedResponsesCount");
+
+    if (!rows || !note || !countBadge) return;
+
+    rows.innerHTML = '<tr><td colspan="3">Loading saved responses…</td></tr>';
+    countBadge.textContent = "Loading…";
+
+    const examId = attempt.exams?.id;
+    if (!examId) {
+      rows.innerHTML = '<tr><td colspan="3">Exam information is unavailable.</td></tr>';
+      note.textContent = "Could not identify the examination for this attempt.";
+      countBadge.textContent = "0 answered";
+      return;
+    }
+
+    const [questionResult, responseResult] = await Promise.all([
+      db
+        .from("questions")
+        .select("id,position,prompt,question_type,choices")
+        .eq("exam_id", examId)
+        .order("position", { ascending: true }),
+      db
+        .from("responses")
+        .select("question_id,answer,saved_at")
+        .eq("attempt_id", attempt.id)
+    ]);
+
+    if (questionResult.error || responseResult.error) {
+      const message = questionResult.error?.message || responseResult.error?.message || "Could not load saved responses.";
+      rows.innerHTML = `<tr><td colspan="3">${escapeHtml(message)}</td></tr>`;
+      note.textContent = "Saved responses could not be loaded.";
+      countBadge.textContent = "—";
+      return;
+    }
+
+    const responsesByQuestion = new Map(
+      (responseResult.data || []).map(r => [String(r.question_id), r])
+    );
+
+    const questions = questionResult.data || [];
+    const answered = questions.filter(q => {
+      const r = responsesByQuestion.get(String(q.id));
+      return r && String(r.answer ?? "").trim() !== "";
+    }).length;
+
+    if (attempt.status === "submitted") {
+      note.textContent = "These are the responses saved in Supabase for the submitted examination.";
+    } else if (attempt.status === "expired") {
+      note.textContent = "These responses were autosaved before the examination attempt expired. They were not submitted.";
+    } else {
+      note.textContent = "These responses are currently autosaved in Supabase. The student has not submitted the examination yet.";
+    }
+
+    countBadge.textContent = `${answered}/${questions.length} answered`;
+    rows.innerHTML = "";
+
+    if (!questions.length) {
+      rows.innerHTML = '<tr><td colspan="3">No questions were found for this examination.</td></tr>';
+      return;
+    }
+
+    for (const question of questions) {
+      const saved = responsesByQuestion.get(String(question.id));
+      const rawAnswer = String(saved?.answer ?? "").trim();
+      const displayedAnswer = formatSavedResponseForTeacher(question, rawAnswer);
+
+      const tr = document.createElement("tr");
+      tr.className = rawAnswer ? "" : "unanswered-response-row";
+      tr.innerHTML = `
+        <td>
+          <strong>Item ${escapeHtml(String(question.position))}</strong>
+          <div class="saved-response-prompt">${escapeHtml(question.prompt || "")}</div>
+        </td>
+        <td>${displayedAnswer ? escapeHtml(displayedAnswer) : '<span class="muted">Unanswered</span>'}</td>
+        <td>${saved?.saved_at ? fmt(saved.saved_at) : "—"}</td>
+      `;
+      rows.appendChild(tr);
+    }
+  }
+
+  function formatSavedResponseForTeacher(question, answer) {
+    if (!answer) return "";
+
+    if (question.question_type !== "mcq") {
+      return answer;
+    }
+
+    const choices = Array.isArray(question.choices) ? question.choices : [];
+    const normalized = answer.trim().toLocaleLowerCase();
+    const index = choices.findIndex(choice =>
+      String(choice ?? "").trim().toLocaleLowerCase() === normalized
+    );
+
+    if (index < 0) return answer;
+
+    const letter = excelOptionLabel(index);
+    return `${letter}. ${answer}`;
   }
 
   function renderAttemptSummary(attempt, events) {
