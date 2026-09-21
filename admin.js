@@ -636,10 +636,15 @@
     $("detailPanel").classList.remove("hidden");
     const savedDetails = $("savedResponsesSection");
     if (savedDetails && "open" in savedDetails) savedDetails.open = false;
+    const photoDetails = $("proctorPhotosSection");
+    if (photoDetails && "open" in photoDetails) photoDetails.open = false;
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
-    await loadSavedResponses(a);
+    await Promise.all([
+      loadSavedResponses(a),
+      loadProctorPhotos(a)
+    ]);
 
     const { data, error } = await db
       .from("proctor_events")
@@ -665,6 +670,61 @@
         <td>${escapeHtml(e.event_type)}</td>
         <td class="event-json">${escapeHtml(JSON.stringify(e.details || {}, null, 2))}</td>`;
       rows.appendChild(tr);
+    }
+  }
+
+  async function loadProctorPhotos(attempt) {
+    const grid = $("proctorPhotoGrid");
+    const note = $("proctorPhotosNote");
+    const count = $("proctorPhotosCount");
+    if (!grid || !note || !count) return;
+
+    grid.innerHTML = '<p class="muted">Loading proctoring photos…</p>';
+    count.textContent = "Loading…";
+
+    try {
+      const { data, error } = await db.functions.invoke("list-proctor-photos", {
+        body: { attempt_id: attempt.id }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const photos = data?.photos || [];
+      count.textContent = `${photos.length} photo${photos.length === 1 ? "" : "s"}`;
+
+      if (!photos.length) {
+        note.textContent = "No unexpired front-camera photos are currently available for this attempt.";
+        grid.innerHTML = '<p class="muted">No photos available.</p>';
+        return;
+      }
+
+      note.textContent = "Front-camera photos are private and automatically expire after 24 hours.";
+      grid.innerHTML = "";
+
+      for (const photo of photos) {
+        const figure = document.createElement("figure");
+        figure.className = "proctor-photo-card";
+
+        const img = document.createElement("img");
+        img.src = photo.url;
+        img.alt = `Proctoring photo captured ${fmt(photo.captured_at)}`;
+        img.loading = "lazy";
+
+        const caption = document.createElement("figcaption");
+        caption.innerHTML = `
+          <strong>${escapeHtml(fmt(photo.captured_at))}</strong>
+          <span>Expires ${escapeHtml(fmt(photo.expires_at))}</span>
+        `;
+
+        figure.append(img, caption);
+        grid.appendChild(figure);
+      }
+    } catch (error) {
+      console.warn("Could not load proctor photos:", error);
+      count.textContent = "Unavailable";
+      note.textContent = "Proctoring photos could not be loaded.";
+      grid.innerHTML = `<p class="muted">${escapeHtml(error?.message || String(error))}</p>`;
     }
   }
 
