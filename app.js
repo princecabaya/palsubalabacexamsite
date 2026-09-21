@@ -24,6 +24,10 @@
   let suppressBlurUntil = 0;
   const queuedEvents = [];
   let pendingIdentity = null;
+  let cameraStream = null;
+  let cameraInterval = null;
+  let cameraInitialTimeout = null;
+  let cameraCaptureBusy = false;
 
   const safeDetails = (extra = {}) => ({
     visibility: document.visibilityState,
@@ -58,6 +62,116 @@
     warningBar.classList.remove("hidden");
     clearTimeout(warn._t);
     warn._t = setTimeout(() => warningBar.classList.add("hidden"), 5000);
+  }
+
+  async function requestFrontCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("This browser does not support front-camera access.");
+    }
+
+    if (cameraStream?.active) return cameraStream;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "user" },
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      },
+      audio: false
+    });
+
+    cameraStream = stream;
+    const preview = $("proctorCameraPreview");
+    if (preview) {
+      preview.srcObject = stream;
+      try { await preview.play(); } catch (_) {}
+    }
+    updateCameraStatus("Camera active");
+    return stream;
+  }
+
+  function updateCameraStatus(text) {
+    const node = $("cameraStatus");
+    if (node) node.textContent = text;
+  }
+
+  function stopCameraMonitoring() {
+    clearInterval(cameraInterval);
+    clearTimeout(cameraInitialTimeout);
+    cameraInterval = null;
+    cameraInitialTimeout = null;
+    cameraCaptureBusy = false;
+
+    for (const track of cameraStream?.getTracks?.() || []) {
+      try { track.stop(); } catch (_) {}
+    }
+    cameraStream = null;
+
+    const preview = $("proctorCameraPreview");
+    if (preview) preview.srcObject = null;
+    updateCameraStatus("Stopped");
+  }
+
+  function startCameraCaptureSchedule() {
+    if (!attempt?.attempt_token || submitted || !cameraStream?.active) return;
+
+    clearInterval(cameraInterval);
+    clearTimeout(cameraInitialTimeout);
+
+    // Capture once shortly after the examination begins, then approximately
+    // every 60 seconds while the attempt remains active.
+    cameraInitialTimeout = setTimeout(() => captureAndUploadProctorPhoto(), 2500);
+    cameraInterval = setInterval(() => captureAndUploadProctorPhoto(), 60_000);
+  }
+
+  async function captureAndUploadProctorPhoto() {
+    if (!attempt?.attempt_token || submitted || !cameraStream?.active || cameraCaptureBusy) return;
+
+    const video = $("proctorCameraPreview");
+    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+
+    cameraCaptureBusy = true;
+    updateCameraStatus("Saving photo…");
+
+    try {
+      const maxWidth = 480;
+      const scale = Math.min(1, maxWidth / video.videoWidth);
+      const width = Math.max(240, Math.round(video.videoWidth * scale));
+      const height = Math.max(180, Math.round(video.videoHeight * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (!ctx) throw new Error("Camera image could not be prepared.");
+
+      ctx.drawImage(video, 0, 0, width, height);
+      const imageBase64 = canvas.toDataURL("image/jpeg", 0.58);
+
+      const { data, error } = await db.functions.invoke("capture-proctor-photo", {
+        body: {
+          attempt_token: attempt.attempt_token,
+          image_base64: imageBase64
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      updateCameraStatus("Photo saved");
+      await logEvent("camera_photo_saved", { capturedAt: data?.captured_at || null });
+      setTimeout(() => {
+        if (cameraStream?.active && !submitted) updateCameraStatus("Camera active");
+      }, 1800);
+    } catch (error) {
+      console.warn("Proctor photo capture failed:", error);
+      updateCameraStatus("Photo save failed");
+      await logEvent("camera_photo_failed", {
+        message: String(error?.message || error).slice(0, 300)
+      });
+    } finally {
+      cameraCaptureBusy = false;
+    }
   }
 
   async function enterFullscreen() {
@@ -135,7 +249,19 @@
     yesBtn.disabled = true;
     noBtn.disabled = true;
 
-    // This click is the user gesture used for fullscreen.
+    try {
+      confirmMsg.textContent = "Requesting front-camera permission…";
+      await requestFrontCamera();
+    } catch (cameraError) {
+      confirmMsg.textContent = `Front-camera access is required for this examination. ${cameraError?.message || "Please allow camera access and try again."}`;
+      yesBtn.disabled = false;
+      noBtn.disabled = false;
+      return;
+    }
+
+    confirmMsg.textContent = "";
+
+    // This click is also the user gesture used for fullscreen.
     await enterFullscreen();
 
     const { data, error } = await db.rpc("start_exam", {
@@ -149,6 +275,7 @@
 
     if (error || !data?.length) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      stopCameraMonitoring();
       confirmMsg.textContent = error?.message || "Could not start the exam.";
       return;
     }
@@ -158,6 +285,7 @@
     $("identityConfirmModal").classList.add("hidden");
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     await loadExam({ restored: false, savedResponses: [] });
+    startCameraCaptureSchedule();
   });
 
   async function loadExam({ restored = false, savedResponses = [] } = {}) {
@@ -311,6 +439,7 @@
 
     submitted = true;
     clearInterval(timerHandle);
+    stopCameraMonitoring();
     sessionStorage.removeItem("exam_guard_token");
     examView.classList.add("hidden");
     watermark.classList.remove("active");
@@ -370,6 +499,17 @@
       restored: true,
       savedResponses: savedResponses || []
     });
+
+    try {
+      await requestFrontCamera();
+      startCameraCaptureSchedule();
+    } catch (cameraError) {
+      updateCameraStatus("Camera unavailable");
+      warn("Your exam session was restored, but the front camera could not be restarted. Please allow camera access if prompted.");
+      await logEvent("camera_unavailable_after_restore", {
+        message: String(cameraError?.message || cameraError).slice(0, 300)
+      });
+    }
   }
 
   // A normal browser refresh keeps sessionStorage for the same tab.
