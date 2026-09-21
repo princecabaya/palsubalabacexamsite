@@ -272,3 +272,21 @@ button.danger-outline:hover{background:#fff0ee}
 .saved-response-prompt{margin-top:4px;color:var(--muted);font-size:.82rem;line-height:1.35;max-width:520px}
 .unanswered-response-row{opacity:.72}
 .saved-responses-table td:nth-child(2){white-space:pre-wrap}
+
+
+/* Student identity confirmation */
+.modal-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.62);display:grid;place-items:center;padding:20px}
+.modal-backdrop.hidden{display:none}
+.identity-confirm-card{width:min(560px,100%);margin:0;box-shadow:0 24px 70px rgba(15,23,42,.28)}
+.identity-confirm-card h2{margin-top:0}
+.identity-confirm-question{font-size:1.15rem;font-weight:800;margin:12px 0 16px}
+.identity-confirm-details{display:grid;gap:10px;margin:14px 0 16px}
+.identity-confirm-details>div{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc}
+.identity-confirm-details span{color:var(--muted);font-size:.85rem}
+.identity-confirm-details strong{word-break:break-word}
+.identity-confirm-actions{justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+@media(max-width:560px){
+  .identity-confirm-details>div{grid-template-columns:1fr}
+  .identity-confirm-actions{flex-direction:column-reverse}
+  .identity-confirm-actions button{width:100%}
+}
