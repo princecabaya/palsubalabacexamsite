@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260921-1425">
+  <link rel="stylesheet" href="style.css?v=20260921-1438">
 </head>
 <body>
   <main class="shell wide">
@@ -142,28 +142,30 @@
             </div>
           </section>
 
-          <section id="savedResponsesSection" class="saved-responses-section">
-            <div class="detail-head">
-              <div>
-                <h3>Saved Responses</h3>
-                <p id="savedResponsesNote" class="muted">Loading autosaved responses…</p>
-              </div>
+          <details id="savedResponsesSection" class="saved-responses-section">
+            <summary class="saved-responses-summary">
+              <span>
+                <strong>Saved Responses</strong>
+                <span id="savedResponsesNote" class="muted">Loading autosaved responses…</span>
+              </span>
               <span id="savedResponsesCount" class="badge">0 answered</span>
-            </div>
+            </summary>
 
-            <div class="table-wrap">
-              <table class="saved-responses-table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Saved Answer</th>
-                    <th>Last Saved</th>
-                  </tr>
-                </thead>
-                <tbody id="savedResponseRows"></tbody>
-              </table>
+            <div class="saved-responses-body">
+              <div class="table-wrap">
+                <table class="saved-responses-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Saved Answer</th>
+                      <th>Last Saved</th>
+                    </tr>
+                  </thead>
+                  <tbody id="savedResponseRows"></tbody>
+                </table>
+              </div>
             </div>
-          </section>
+          </details>
 
           <div class="table-wrap">
             <table>
@@ -442,7 +444,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="admin.js?v=20260921-1425"></script>
+  <script src="admin.js?v=20260921-1438"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-2035"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
