@@ -23,6 +23,7 @@
   let submitted = false;
   let suppressBlurUntil = 0;
   const queuedEvents = [];
+  let pendingIdentity = null;
 
   const safeDetails = (extra = {}) => ({
     visibility: document.visibilityState,
@@ -81,27 +82,80 @@
       return;
     }
 
-    msg.textContent = "";
+    msg.textContent = "Checking Student ID…";
     $("startBtn").disabled = true;
 
-    // Fullscreen must be requested from a user gesture. The exam still works if
-    // the browser/platform refuses it, but the refusal/exit is logged once started.
+    const { data, error } = await db.rpc("preview_exam_identity", {
+      p_exam_code: examCode,
+      p_student_no: studentNo
+    });
+
+    $("startBtn").disabled = false;
+
+    if (error || !data?.length) {
+      msg.textContent = error?.message || "Could not verify the student identity.";
+      return;
+    }
+
+    const identity = data[0];
+    pendingIdentity = {
+      examCode,
+      studentNo: identity.student_no || studentNo,
+      studentName: identity.student_name || "",
+      examTitle: identity.exam_title || ""
+    };
+
+    msg.textContent = "";
+    $("identityStudentName").textContent = pendingIdentity.studentName;
+    $("identityStudentNo").textContent = pendingIdentity.studentNo;
+    $("identityExamTitle").textContent = pendingIdentity.examTitle;
+    $("identityConfirmQuestion").textContent = `Are you really ${pendingIdentity.studentName}?`;
+    $("identityConfirmMsg").textContent = "";
+    $("identityConfirmModal").classList.remove("hidden");
+    $("identityYesBtn").focus();
+  });
+
+  $("identityNoBtn").addEventListener("click", () => {
+    pendingIdentity = null;
+    $("identityConfirmModal").classList.add("hidden");
+    $("studentNo").focus();
+    $("studentNo").select();
+    $("loginMsg").textContent = "Please enter your own Student ID.";
+  });
+
+  $("identityYesBtn").addEventListener("click", async () => {
+    if (!pendingIdentity) return;
+
+    const identity = { ...pendingIdentity };
+    const confirmMsg = $("identityConfirmMsg");
+    const yesBtn = $("identityYesBtn");
+    const noBtn = $("identityNoBtn");
+
+    confirmMsg.textContent = "";
+    yesBtn.disabled = true;
+    noBtn.disabled = true;
+
+    // This click is the user gesture used for fullscreen.
     await enterFullscreen();
 
     const { data, error } = await db.rpc("start_exam", {
-      p_exam_code: examCode,
-      p_student_no: studentNo,
+      p_exam_code: identity.examCode,
+      p_student_no: identity.studentNo,
       p_user_agent: navigator.userAgent
     });
 
+    yesBtn.disabled = false;
+    noBtn.disabled = false;
+
     if (error || !data?.length) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      msg.textContent = error?.message || "Could not start the exam.";
-      $("startBtn").disabled = false;
+      confirmMsg.textContent = error?.message || "Could not start the exam.";
       return;
     }
 
     attempt = data[0];
+    pendingIdentity = null;
+    $("identityConfirmModal").classList.add("hidden");
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     await loadExam({ restored: false, savedResponses: [] });
   });
