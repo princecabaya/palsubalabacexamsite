@@ -112,7 +112,8 @@
   function drawWatermark(doc, report) {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const text = `${WATERMARK_TEACHER} • ${report.student_no || ""}`;
+    const teacherName = String(report?.teacher_name || WATERMARK_TEACHER || "Teacher").trim();
+    const text = `${teacherName} • ${report.student_no || ""}`;
 
     doc.saveGraphicsState?.();
     doc.setFont("times", "bold");
