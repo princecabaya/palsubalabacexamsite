@@ -222,3 +222,15 @@ button.danger-outline:hover{background:#fff0ee}
   .choice-move-controls{grid-column:2;justify-content:flex-start}
   .choice-row .remove-choice-btn{grid-column:2;justify-self:start}
 }
+
+
+/* Multi-teacher workspace */
+.teacher-workspace-bar{display:flex;justify-content:space-between;gap:20px;align-items:center;border:1px solid #b8c7ef;background:#f5f8ff;border-radius:14px;padding:14px 16px;margin:16px 0}
+.teacher-workspace-bar p{margin:.25rem 0 0}
+.teacher-workspace-bar label{margin:0;min-width:310px}
+.teacher-add-card{border:1px solid var(--line);border-radius:16px;background:#fbfcff;padding:18px;margin:18px 0}
+.teacher-add-card h3{margin:0}
+@media(max-width:760px){
+  .teacher-workspace-bar{align-items:stretch;flex-direction:column}
+  .teacher-workspace-bar label{min-width:0}
+}
