@@ -260,8 +260,14 @@ button.danger-outline:hover{background:#fff0ee}
 
 
 /* Autosaved student responses */
-.saved-responses-section{margin:20px 0;padding-top:4px}
-.saved-responses-section .detail-head{margin-bottom:10px}
+.saved-responses-section{margin:20px 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.saved-responses-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;cursor:pointer;background:#f8fafc;list-style:none}
+.saved-responses-summary::-webkit-details-marker{display:none}
+.saved-responses-summary::before{content:"▸";font-weight:900;color:var(--primary);margin-right:4px}
+.saved-responses-section[open] .saved-responses-summary::before{content:"▾"}
+.saved-responses-summary>span:first-child{display:flex;flex-direction:column;gap:3px;flex:1}
+.saved-responses-summary:hover{background:#f1f5f9}
+.saved-responses-body{padding:0 14px 14px}
 .saved-responses-table td:first-child{min-width:240px}
 .saved-response-prompt{margin-top:4px;color:var(--muted);font-size:.82rem;line-height:1.35;max-width:520px}
 .unanswered-response-row{opacity:.72}
