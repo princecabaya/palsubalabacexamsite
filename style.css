@@ -304,3 +304,13 @@ button.danger-outline:hover{background:#fff0ee}
   .exam-header-tools{flex-direction:column-reverse;align-items:stretch}
   .camera-monitor-box{min-width:0}
 }
+
+
+/* Proctor photo viewer */
+.proctor-photos-section{margin:20px 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.proctor-photos-body{padding:14px}
+.proctor-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.proctor-photo-card{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.proctor-photo-card img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#111}
+.proctor-photo-card figcaption{display:flex;flex-direction:column;gap:3px;padding:8px 9px;font-size:.76rem}
+.proctor-photo-card figcaption span{color:var(--muted)}
