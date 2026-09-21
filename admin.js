@@ -634,6 +634,8 @@
 
   async function openDetail(a) {
     $("detailPanel").classList.remove("hidden");
+    const savedDetails = $("savedResponsesSection");
+    if (savedDetails && "open" in savedDetails) savedDetails.open = false;
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
