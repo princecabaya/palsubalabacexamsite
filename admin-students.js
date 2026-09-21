@@ -72,7 +72,7 @@
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await db
         .from("attempts")
-        .select("id,student_id,status,score,max_score,started_at,submitted_at,exams(title,code)")
+        .select("id,student_id,status,score,max_score,started_at,submitted_at,exams(title,code,owner_id)")
         .order("started_at", { ascending: false })
         .range(from, from + pageSize - 1);
 
@@ -82,7 +82,10 @@
       }
 
       const page = data || [];
-      allAttempts.push(...page);
+      const workspaceOwnerId = window.ExamAdmin?.getWorkspaceOwnerId?.();
+      allAttempts.push(...page.filter(a =>
+        !workspaceOwnerId || a.exams?.owner_id === workspaceOwnerId
+      ));
       if (page.length < pageSize) break;
     }
 
