@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260920-2128">
+  <link rel="stylesheet" href="style.css?v=20260921-1215">
 </head>
 <body>
   <main class="shell wide">
@@ -41,6 +41,16 @@
         </div>
       </header>
 
+      <section id="teacherWorkspaceBar" class="teacher-workspace-bar hidden">
+        <div>
+          <strong>Main Admin Support Mode</strong>
+          <p id="teacherWorkspaceNote" class="muted">Choose a teacher to view and support that teacher's examination workspace.</p>
+        </div>
+        <label>Teacher workspace
+          <select id="teacherWorkspaceSelect"></select>
+        </label>
+      </section>
+
       <div class="notice">
         <strong>Interpretation reminder.</strong>
         Visibility/focus events show that the exam was no longer the active visible
@@ -53,6 +63,7 @@
         <button id="tabCreateBtn" class="tab-btn" type="button">Create Exam</button>
         <button id="tabManageBtn" class="tab-btn" type="button">Manage Exams</button>
         <button id="tabStudentsBtn" class="tab-btn" type="button">Students</button>
+        <button id="tabTeachersBtn" class="tab-btn hidden" type="button">Teachers</button>
       </div>
 
       <section id="attemptsSection" class="tab-section">
@@ -354,6 +365,51 @@
           </div>
         </section>
       </section>
+
+      <section id="teachersSection" class="tab-section hidden">
+        <section class="card">
+          <div class="detail-head">
+            <div>
+              <h2>Teacher Access</h2>
+              <p class="muted">Main Admin only. Authorize existing Supabase Authentication users as teachers and open their exam workspace for support.</p>
+            </div>
+            <button id="reloadTeachersBtn" type="button">Reload Teachers</button>
+          </div>
+
+          <div class="teacher-add-card">
+            <h3>Authorize Teacher</h3>
+            <p class="muted">First create the teacher under Supabase Authentication → Users. Then enter the same email here.</p>
+            <div class="form-grid compact">
+              <label>Teacher Email
+                <input id="teacherEmailInput" type="email" placeholder="teacher@example.com">
+              </label>
+              <label>Display Name
+                <input id="teacherNameInput" placeholder="e.g. Ma'am Maria Santos">
+              </label>
+            </div>
+            <div class="row section-actions">
+              <button id="authorizeTeacherBtn" class="primary" type="button">Authorize Teacher</button>
+              <span id="teacherAccessMsg" class="message-inline"></span>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Teacher</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Access</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="teacherRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
     </section>
   </main>
 
@@ -363,7 +419,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260920-2340"></script>
-  <script src="admin.js?v=20260920-2325"></script>
+  <script src="admin.js?v=20260921-1215"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-2035"></script>
   <script src="admin-students.js?v=20260920-1948"></script>
