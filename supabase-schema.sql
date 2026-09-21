@@ -554,6 +554,7 @@ as $report$
     'student_no', s.student_no,
     'exam_title', e.title,
     'exam_code', e.code,
+    'teacher_name', coalesce(nullif(ea.display_name, ''), nullif(ea.email, ''), 'Teacher'),
     'started_at', a.started_at,
     'submitted_at', a.submitted_at,
     'score', a.score,
@@ -596,6 +597,7 @@ as $report$
   from public.attempts a
   join public.students s on s.id = a.student_id
   join public.exams e on e.id = a.exam_id
+  left join public.exam_admins ea on ea.user_id = e.owner_id
   where a.id = p_attempt_id
     and a.status = 'submitted';
 $report$;
