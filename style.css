@@ -257,3 +257,12 @@ button.danger-outline:hover{background:#fff0ee}
   .attempt-group-bar{align-items:stretch;flex-direction:column}
   .exam-excel-btn{align-self:flex-end;margin:0 12px 10px}
 }
+
+
+/* Autosaved student responses */
+.saved-responses-section{margin:20px 0;padding-top:4px}
+.saved-responses-section .detail-head{margin-bottom:10px}
+.saved-responses-table td:first-child{min-width:240px}
+.saved-response-prompt{margin-top:4px;color:var(--muted);font-size:.82rem;line-height:1.35;max-width:520px}
+.unanswered-response-row{opacity:.72}
+.saved-responses-table td:nth-child(2){white-space:pre-wrap}
