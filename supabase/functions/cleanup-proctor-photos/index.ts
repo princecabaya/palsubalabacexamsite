@@ -23,26 +23,34 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const now = new Date().toISOString();
-    const { data: expired, error } = await admin
-      .from("proctor_photos")
-      .select("id,object_path")
-      .lte("expires_at", now)
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Query Storage metadata so cleanup also removes orphaned objects if an
+    // attempt was deleted before its 24-hour photo-retention period elapsed.
+    const { data: expiredObjects, error: objectError } = await admin
+      .schema("storage")
+      .from("objects")
+      .select("name,created_at")
+      .eq("bucket_id", BUCKET)
+      .lte("created_at", cutoff)
       .limit(1000);
 
-    if (error) throw error;
-    const rows = expired || [];
-    if (!rows.length) return json({ ok: true, deleted: 0 });
+    if (objectError) throw objectError;
+    const paths = (expiredObjects || []).map((r) => String(r.name || "")).filter(Boolean);
+    if (!paths.length) return json({ ok: true, deleted: 0 });
 
-    const paths = rows.map((r) => r.object_path);
     const { error: removeError } = await admin.storage.from(BUCKET).remove(paths);
     if (removeError) throw removeError;
 
-    const ids = rows.map((r) => r.id);
-    const { error: deleteError } = await admin.from("proctor_photos").delete().in("id", ids);
+    // Metadata rows normally disappear here as well. Delete explicitly in case
+    // a row remains after a partial earlier cleanup.
+    const { error: deleteError } = await admin
+      .from("proctor_photos")
+      .delete()
+      .in("object_path", paths);
     if (deleteError) throw deleteError;
 
-    return json({ ok: true, deleted: rows.length });
+    return json({ ok: true, deleted: paths.length });
   } catch (error) {
     console.error("cleanup-proctor-photos error", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
