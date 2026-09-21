@@ -13,6 +13,7 @@
   let currentTeacherProfile = null;
   let teacherWorkspaces = [];
   let activeWorkspaceOwnerId = null;
+  let teacherManagementBound = false;
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -152,6 +153,8 @@
   }
 
   function bindTeacherManagement() {
+    if (teacherManagementBound) return;
+    teacherManagementBound = true;
     $("reloadTeachersBtn")?.addEventListener("click", loadTeacherAccessList);
     $("authorizeTeacherBtn")?.addEventListener("click", authorizeTeacher);
   }
