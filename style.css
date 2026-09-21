@@ -238,7 +238,8 @@ button.danger-outline:hover{background:#fff0ee}
 
 /* Grouped attempts by examination */
 .attempt-exam-group td{padding:0;background:#f7f9fd}
-.attempt-group-toggle{width:100%;display:grid;grid-template-columns:auto minmax(220px,1fr) auto;gap:12px;align-items:center;text-align:left;border:0;border-radius:0;background:#f7f9fd;padding:14px 16px}
+.attempt-group-bar{display:flex;align-items:stretch;width:100%}
+.attempt-group-toggle{flex:1;display:grid;grid-template-columns:auto minmax(220px,1fr) auto;gap:12px;align-items:center;text-align:left;border:0;border-radius:0;background:#f7f9fd;padding:14px 16px}
 .attempt-group-toggle:hover{background:#eef3ff}
 .attempt-group-chevron{font-size:1.1rem;font-weight:900;color:var(--primary)}
 .attempt-group-title{display:flex;flex-direction:column;gap:2px}
@@ -248,4 +249,11 @@ button.danger-outline:hover{background:#fff0ee}
 @media(max-width:760px){
   .attempt-group-toggle{grid-template-columns:auto 1fr}
   .attempt-group-summary{grid-column:2;white-space:normal}
+}
+
+.exam-excel-btn{align-self:center;margin:8px 12px 8px 6px;white-space:nowrap}
+.exam-excel-btn:disabled{opacity:.55;cursor:wait}
+@media(max-width:760px){
+  .attempt-group-bar{align-items:stretch;flex-direction:column}
+  .exam-excel-btn{align-self:flex-end;margin:0 12px 10px}
 }
