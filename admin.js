@@ -14,6 +14,7 @@
   let teacherWorkspaces = [];
   let activeWorkspaceOwnerId = null;
   let teacherManagementBound = false;
+  const expandedAttemptExams = new Set();
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -266,7 +267,7 @@
       .select(`
         id,status,started_at,submitted_at,score,max_score,
         students(student_no,full_name),
-        exams(code,title,owner_id)
+        exams(id,code,title,owner_id)
       `)
       .order("started_at", { ascending: false })
       .limit(500);
@@ -319,21 +320,79 @@
       return !q || s.includes(q);
     });
 
-    for (const a of filtered) {
-      const tr = document.createElement("tr");
-      tr.className = "clickable";
-      const signals = signalCount(a.id);
-      const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
-      tr.innerHTML = `
-        <td><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
-        <td>${escapeHtml(a.exams?.title || "")}<br><span class="muted">${escapeHtml(a.exams?.code || "")}</span></td>
-        <td><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
-        <td>${fmt(a.started_at)}</td>
-        <td>${fmt(a.submitted_at)}</td>
-        <td>${score}</td>
-        <td><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>`;
-      tr.addEventListener("click", () => openDetail(a));
-      rows.appendChild(tr);
+    if (!filtered.length) {
+      rows.innerHTML = '<tr><td colspan="7">No attempts match this search.</td></tr>';
+      return;
+    }
+
+    const groups = new Map();
+    for (const attempt of filtered) {
+      const examKey = attempt.exams?.id || attempt.exams?.code || attempt.exams?.title || "unknown-exam";
+      if (!groups.has(examKey)) {
+        groups.set(examKey, {
+          key: examKey,
+          title: attempt.exams?.title || "Untitled Exam",
+          code: attempt.exams?.code || "",
+          attempts: []
+        });
+      }
+      groups.get(examKey).attempts.push(attempt);
+    }
+
+    for (const group of groups.values()) {
+      const submittedCount = group.attempts.filter(a => a.status === "submitted").length;
+      const activeCount = group.attempts.filter(a => a.status === "active").length;
+      const totalSignals = group.attempts.reduce((sum, a) => sum + signalCount(a.id), 0);
+
+      if (q) expandedAttemptExams.add(group.key);
+      const expanded = expandedAttemptExams.has(group.key);
+
+      const header = document.createElement("tr");
+      header.className = "attempt-exam-group";
+      header.innerHTML = `
+        <td colspan="7">
+          <button type="button" class="attempt-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
+            <span class="attempt-group-chevron">${expanded ? "▾" : "▸"}</span>
+            <span class="attempt-group-title">
+              <strong>${escapeHtml(group.title)}</strong>
+              <span class="muted">${escapeHtml(group.code)}</span>
+            </span>
+            <span class="attempt-group-summary">
+              ${group.attempts.length} attempt${group.attempts.length === 1 ? "" : "s"}
+              • ${submittedCount} submitted
+              ${activeCount ? ` • ${activeCount} active` : ""}
+              • ${totalSignals} signal${totalSignals === 1 ? "" : "s"}
+            </span>
+          </button>
+        </td>
+      `;
+
+      header.querySelector(".attempt-group-toggle").addEventListener("click", () => {
+        if (expandedAttemptExams.has(group.key)) expandedAttemptExams.delete(group.key);
+        else expandedAttemptExams.add(group.key);
+        renderAttempts();
+      });
+      rows.appendChild(header);
+
+      if (!expanded) continue;
+
+      for (const a of group.attempts) {
+        const tr = document.createElement("tr");
+        tr.className = "clickable attempt-student-row";
+        const signals = signalCount(a.id);
+        const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
+          <td><span class="muted">Student attempt</span></td>
+          <td><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
+          <td>${fmt(a.started_at)}</td>
+          <td>${fmt(a.submitted_at)}</td>
+          <td>${escapeHtml(score)}</td>
+          <td><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>
+        `;
+        tr.addEventListener("click", () => openDetail(a));
+        rows.appendChild(tr);
+      }
     }
   }
 
