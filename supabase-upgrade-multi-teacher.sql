@@ -365,6 +365,94 @@ $teachers$;
 revoke all on function public.get_teacher_workspaces() from public;
 grant execute on function public.get_teacher_workspaces() to authenticated;
 
+-- Main Admin can authorize an existing Supabase Authentication user as a teacher.
+create or replace function public.main_admin_add_teacher(
+  p_email text,
+  p_display_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, auth
+as $teachers$
+declare
+  v_user auth.users%rowtype;
+begin
+  if not public.exam_guard_current_user_is_main_admin() then
+    raise exception 'Main Admin access required.';
+  end if;
+
+  select * into v_user
+  from auth.users
+  where lower(email) = lower(trim(p_email))
+  limit 1;
+
+  if not found then
+    raise exception 'No Supabase Authentication user exists with that email. Create the user in Authentication > Users first.';
+  end if;
+
+  insert into public.exam_admins(user_id, email, display_name, role, is_admin)
+  values (
+    v_user.id,
+    v_user.email,
+    coalesce(nullif(trim(p_display_name),''), split_part(v_user.email,'@',1)),
+    case when lower(v_user.email) = 'sir.princejobetroh@gmail.com' then 'main_admin' else 'teacher' end,
+    true
+  )
+  on conflict (user_id) do update
+  set email = excluded.email,
+      display_name = coalesce(nullif(trim(p_display_name),''), public.exam_admins.display_name, excluded.display_name),
+      role = case when lower(excluded.email) = 'sir.princejobetroh@gmail.com' then 'main_admin' else 'teacher' end,
+      is_admin = true;
+
+  return jsonb_build_object(
+    'user_id', v_user.id,
+    'email', v_user.email,
+    'display_name', coalesce(nullif(trim(p_display_name),''), split_part(v_user.email,'@',1)),
+    'enabled', true
+  );
+end;
+$teachers$;
+
+create or replace function public.main_admin_set_teacher_access(
+  p_user_id uuid,
+  p_enabled boolean
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $teachers$
+declare
+  v_email text;
+begin
+  if not public.exam_guard_current_user_is_main_admin() then
+    raise exception 'Main Admin access required.';
+  end if;
+
+  select email into v_email
+  from public.exam_admins
+  where user_id = p_user_id;
+
+  if lower(coalesce(v_email,'')) = 'sir.princejobetroh@gmail.com' then
+    raise exception 'The Main Admin account cannot be disabled.';
+  end if;
+
+  update public.exam_admins
+  set is_admin = coalesce(p_enabled,false),
+      role = 'teacher'
+  where user_id = p_user_id;
+
+  return found;
+end;
+$teachers$;
+
+revoke all on function public.main_admin_add_teacher(text,text) from public;
+revoke all on function public.main_admin_set_teacher_access(uuid,boolean) from public;
+grant execute on function public.main_admin_add_teacher(text,text) to authenticated;
+grant execute on function public.main_admin_set_teacher_access(uuid,boolean) to authenticated;
+
+
 grant select on public.exam_admins to authenticated;
 
 -- Optional check after running:
