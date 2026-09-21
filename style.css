@@ -290,3 +290,17 @@ button.danger-outline:hover{background:#fff0ee}
   .identity-confirm-actions{flex-direction:column-reverse}
   .identity-confirm-actions button{width:100%}
 }
+
+
+/* Front-camera proctoring */
+.exam-header-tools{display:flex;align-items:center;gap:12px}
+.camera-monitor-box{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px 9px;min-width:170px}
+.camera-monitor-box video{width:54px;height:40px;object-fit:cover;border-radius:8px;background:#111;transform:scaleX(-1)}
+.camera-monitor-box div{display:flex;flex-direction:column;line-height:1.15}
+.camera-monitor-box span{font-size:.72rem;color:var(--muted)}
+.camera-monitor-box strong{font-size:.78rem}
+@media(max-width:720px){
+  .exam-header{align-items:flex-start}
+  .exam-header-tools{flex-direction:column-reverse;align-items:stretch}
+  .camera-monitor-box{min-width:0}
+}
