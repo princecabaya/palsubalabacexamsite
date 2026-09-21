@@ -9,6 +9,10 @@
   let examsCache = [];
   let questionCounter = 0;
   let editingExamId = null;
+  let currentUserId = null;
+  let currentTeacherProfile = null;
+  let teacherWorkspaces = [];
+  let activeWorkspaceOwnerId = null;
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -40,6 +44,7 @@
     clearExamForm();
     if (!$("questionBuilder").children.length) addQuestionCard();
 
+    await initializeTeacherWorkspace();
     await Promise.all([refreshAttempts(), loadExams()]);
     clearInterval(pollHandle);
     pollHandle = setInterval(refreshAttempts, 5000);
@@ -50,6 +55,7 @@
     $("tabCreateBtn").onclick = () => activateTab("create");
     $("tabManageBtn").onclick = () => activateTab("manage");
     $("tabStudentsBtn").onclick = () => activateTab("students");
+    $("tabTeachersBtn").onclick = () => activateTab("teachers");
   }
 
   function activateTab(name) {
@@ -57,7 +63,8 @@
       attempts: { btn: $("tabAttemptsBtn"), section: $("attemptsSection") },
       create: { btn: $("tabCreateBtn"), section: $("createSection") },
       manage: { btn: $("tabManageBtn"), section: $("manageSection") },
-      students: { btn: $("tabStudentsBtn"), section: $("studentsSection") }
+      students: { btn: $("tabStudentsBtn"), section: $("studentsSection") },
+      teachers: { btn: $("tabTeachersBtn"), section: $("teachersSection") }
     };
 
     Object.values(map).forEach(({btn, section}) => {
@@ -70,6 +77,184 @@
 
     if (name === "manage") loadExams();
     if (name === "students") window.StudentAdmin?.loadStudents?.();
+    if (name === "teachers") loadTeacherAccessList();
+  }
+
+  async function initializeTeacherWorkspace() {
+    const { data: sessionData } = await db.auth.getSession();
+    currentUserId = sessionData?.session?.user?.id || null;
+    if (!currentUserId) return;
+
+    const { data, error } = await db.rpc("get_teacher_workspaces");
+    if (error) {
+      console.warn("Teacher workspace setup unavailable:", error);
+      activeWorkspaceOwnerId = currentUserId;
+      return;
+    }
+
+    teacherWorkspaces = data || [];
+    currentTeacherProfile = teacherWorkspaces.find(t => t.user_id === currentUserId) || null;
+    activeWorkspaceOwnerId = currentUserId;
+
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    $("teacherWorkspaceBar")?.classList.toggle("hidden", !isMainAdmin);
+    $("tabTeachersBtn")?.classList.toggle("hidden", !isMainAdmin);
+
+    if (!isMainAdmin) return;
+
+    const select = $("teacherWorkspaceSelect");
+    select.innerHTML = "";
+
+    for (const teacher of teacherWorkspaces.filter(t => t.is_admin)) {
+      const option = document.createElement("option");
+      option.value = teacher.user_id;
+      option.textContent = teacher.user_id === currentUserId
+        ? `${teacher.display_name || teacher.email || "Main Admin"} — My Dashboard`
+        : `${teacher.display_name || teacher.email || "Teacher"} — Support View`;
+      select.appendChild(option);
+    }
+
+    select.value = activeWorkspaceOwnerId;
+    updateWorkspaceNote();
+
+    select.onchange = async () => {
+      activeWorkspaceOwnerId = select.value || currentUserId;
+      editingExamId = null;
+      clearExamForm();
+      $("examResultsPanel")?.classList.add("hidden");
+      $("detailPanel")?.classList.add("hidden");
+      updateWorkspaceNote();
+      await Promise.all([
+        refreshAttempts(),
+        loadExams(),
+        window.StudentAdmin?.loadStudents?.()
+      ]);
+    };
+
+    bindTeacherManagement();
+  }
+
+  function updateWorkspaceNote() {
+    const teacher = teacherWorkspaces.find(t => t.user_id === activeWorkspaceOwnerId);
+    const note = $("teacherWorkspaceNote");
+    if (!note) return;
+
+    if (!teacher || activeWorkspaceOwnerId === currentUserId) {
+      note.textContent = "You are viewing your Main Admin examination workspace.";
+      return;
+    }
+
+    note.textContent = `Support view: ${teacher.display_name || teacher.email}. Exams you create while this workspace is selected will belong to this teacher.`;
+  }
+
+  function getActiveWorkspaceOwnerId() {
+    return activeWorkspaceOwnerId || currentUserId;
+  }
+
+  function bindTeacherManagement() {
+    $("reloadTeachersBtn")?.addEventListener("click", loadTeacherAccessList);
+    $("authorizeTeacherBtn")?.addEventListener("click", authorizeTeacher);
+  }
+
+  async function loadTeacherAccessList() {
+    if (currentTeacherProfile?.role !== "main_admin") return;
+
+    const { data, error } = await db
+      .from("exam_admins")
+      .select("user_id,email,display_name,role,is_admin,created_at")
+      .order("display_name", { ascending: true });
+
+    const tbody = $("teacherRows");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+      return;
+    }
+
+    for (const teacher of data || []) {
+      const tr = document.createElement("tr");
+      const isMain = teacher.role === "main_admin";
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(teacher.display_name || "—")}</strong></td>
+        <td>${escapeHtml(teacher.email || "—")}</td>
+        <td><span class="badge ${isMain ? "ok" : ""}">${isMain ? "Main Admin" : "Teacher"}</span></td>
+        <td><span class="badge ${teacher.is_admin ? "ok" : "archived"}">${teacher.is_admin ? "Enabled" : "Disabled"}</span></td>
+        <td class="action-cell">
+          ${!isMain && teacher.is_admin ? '<button type="button" class="open-teacher-workspace-btn">Open Workspace</button>' : ""}
+          ${!isMain ? `<button type="button" class="${teacher.is_admin ? "danger-outline" : "primary"} toggle-teacher-access-btn">${teacher.is_admin ? "Disable Access" : "Enable Access"}</button>` : ""}
+        </td>
+      `;
+
+      tr.querySelector(".open-teacher-workspace-btn")?.addEventListener("click", async () => {
+        const select = $("teacherWorkspaceSelect");
+        if (select) {
+          select.value = teacher.user_id;
+          select.dispatchEvent(new Event("change"));
+          activateTab("manage");
+        }
+      });
+
+      tr.querySelector(".toggle-teacher-access-btn")?.addEventListener("click", async () => {
+        const enabled = !teacher.is_admin;
+        const ok = confirm(`${enabled ? "Enable" : "Disable"} dashboard access for ${teacher.display_name || teacher.email}?`);
+        if (!ok) return;
+
+        const { error: toggleError } = await db.rpc("main_admin_set_teacher_access", {
+          p_user_id: teacher.user_id,
+          p_enabled: enabled
+        });
+
+        if (toggleError) {
+          alert(`Could not change teacher access: ${toggleError.message}`);
+          return;
+        }
+
+        await initializeTeacherWorkspace();
+        await loadTeacherAccessList();
+      });
+
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function authorizeTeacher() {
+    if (currentTeacherProfile?.role !== "main_admin") return;
+
+    const email = $("teacherEmailInput")?.value?.trim() || "";
+    const displayName = $("teacherNameInput")?.value?.trim() || "";
+    const msg = $("teacherAccessMsg");
+
+    msg.textContent = "";
+    msg.classList.remove("error", "success");
+
+    if (!email) {
+      msg.textContent = "Enter the teacher's Supabase Authentication email.";
+      msg.classList.add("error");
+      return;
+    }
+
+    $("authorizeTeacherBtn").disabled = true;
+    const { error } = await db.rpc("main_admin_add_teacher", {
+      p_email: email,
+      p_display_name: displayName || null
+    });
+    $("authorizeTeacherBtn").disabled = false;
+
+    if (error) {
+      msg.textContent = error.message;
+      msg.classList.add("error");
+      return;
+    }
+
+    msg.textContent = "Teacher access enabled.";
+    msg.classList.add("success");
+    $("teacherEmailInput").value = "";
+    $("teacherNameInput").value = "";
+
+    await initializeTeacherWorkspace();
+    await loadTeacherAccessList();
   }
 
   async function refreshAttempts() {
@@ -78,7 +263,7 @@
       .select(`
         id,status,started_at,submitted_at,score,max_score,
         students(student_no,full_name),
-        exams(code,title)
+        exams(code,title,owner_id)
       `)
       .order("started_at", { ascending: false })
       .limit(500);
@@ -88,7 +273,9 @@
       return;
     }
 
-    attemptsCache = data || [];
+    attemptsCache = (data || []).filter(a =>
+      !getActiveWorkspaceOwnerId() || a.exams?.owner_id === getActiveWorkspaceOwnerId()
+    );
 
     const ids = attemptsCache.map(a => a.id);
     eventsByAttempt = new Map();
@@ -769,6 +956,7 @@
       exam: {
         title,
         code,
+        owner_id: getActiveWorkspaceOwnerId(),
         duration_minutes: duration,
         status,
         start_at: startAt,
@@ -798,14 +986,14 @@
   async function loadExams() {
     let { data: exams, error } = await db
       .from("exams")
-      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at")
+      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at, owner_id")
       .order("created_at", { ascending: false });
 
     // Keep the dashboard usable before the one-time archive database upgrade is run.
     if (error && /archived/i.test(error.message || "")) {
       const fallback = await db
         .from("exams")
-        .select("id, code, title, duration_minutes, status, start_at, end_at")
+        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id")
         .order("created_at", { ascending: false });
       exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null }));
       error = fallback.error;
@@ -816,7 +1004,9 @@
       return;
     }
 
-    examsCache = exams || [];
+    examsCache = (exams || []).filter(e =>
+      !getActiveWorkspaceOwnerId() || e.owner_id === getActiveWorkspaceOwnerId()
+    );
     const ids = examsCache.map(e => e.id);
 
     let counts = {};
@@ -1016,7 +1206,8 @@
     db,
     refreshAttempts,
     loadExams,
-    editExam
+    editExam,
+    getWorkspaceOwnerId: getActiveWorkspaceOwnerId
   };
 
   // Public hooks used by the Excel importer. This reuses the same validated
