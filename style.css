@@ -532,3 +532,11 @@ button.danger-outline:hover{background:#fff0ee}
   .rubric-row{grid-template-columns:1fr}
   .rubric-row button{width:100%}
 }
+
+
+/* Student essay rubric */
+.student-rubric{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+.student-rubric summary{cursor:pointer;padding:10px 12px;font-weight:750;background:#f8fafc}
+.student-rubric table{width:100%;border-collapse:collapse}
+.student-rubric th,.student-rubric td{padding:8px 10px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:.86rem}
+.student-rubric th:last-child,.student-rubric td:last-child{text-align:center;white-space:nowrap}
