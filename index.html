@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260922-1155">
+  <link rel="stylesheet" href="style.css?v=20260922-1145">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -24,7 +24,7 @@
         <strong>Monitoring notice.</strong>
         During the exam, this site records when the exam tab becomes hidden,
         the browser loses focus, fullscreen is exited, and copy/paste, print,
-        right-click, reload/leave, and detectable screenshot-key attempts occur.
+        right-click, reload/leave, detectable screenshot-key attempts, and possible speech events occur. Microphone audio is analyzed locally and is not recorded or uploaded.
       </div>
 
       <label>Exam code
@@ -36,7 +36,7 @@
 
       <label class="check">
         <input type="checkbox" id="consentBox">
-        <span>I understand that exam-behavior events will be recorded and that the front camera will take a proctoring photo approximately every 1 minute during the exam. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
+        <span>I understand that exam-behavior events will be recorded, the front camera will take a proctoring photo approximately every 1 minute, and the microphone will be used only to detect possible speech events. Microphone audio is not recorded or uploaded. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
       </label>
 
       <button id="startBtn" class="primary">Enter Fullscreen & Start Exam</button>
@@ -75,6 +75,13 @@
             <div>
               <span>Front camera</span>
               <strong id="cameraStatus">Waiting…</strong>
+            </div>
+          </div>
+          <div class="microphone-monitor-box" aria-label="Microphone speech-event detection is active">
+            <div class="microphone-indicator" aria-hidden="true">●</div>
+            <div>
+              <span>Microphone</span>
+              <strong id="microphoneStatus">Waiting…</strong>
             </div>
           </div>
           <div class="timer-box">
@@ -156,7 +163,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="app.js?v=20260922-1155"></script>
+  <script src="app.js?v=20260922-1145"></script>
   <script src="student-feedback.js?v=20260920-2115"></script>
 </body>
 </html>
