@@ -219,7 +219,7 @@
       const parsed = parseLatexExam(source);
 
       if (!parsed.length) {
-        throw new Error("No supported \\\\question entries were found in the LaTeX file.");
+        throw new Error("No supported \\question entries were found in the LaTeX file.");
       }
 
       const builder = window.ExamBuilder;
@@ -276,7 +276,7 @@
 
     for (const originalLine of lines) {
       const line = originalLine.trim();
-      const match = line.match(/^\\\\question(?:\\[([^\\]]+)\\])?\\s*(.*)$/);
+      const match = line.match(/^\\question(?:\\[([^\\]]+)\\])?\\s*(.*)$/);
 
       if (match) {
         if (current) blocks.push(current);
@@ -300,11 +300,11 @@
 
   function parseLatexQuestionBlock(block, number) {
     const raw = [block.firstPrompt].concat(block.lines).join("\\n").trim();
-    const hasBinary = /\\\\begin\\{binary\\}/i.test(raw);
-    const hasChoices = /\\\\begin\\{choices\\}/i.test(raw);
-    const hasCriteria = /\\\\begin\\{essay\\}/i.test(raw) ||
-      /\\\\begin\\{criteria\\}/i.test(raw) ||
-      /\\\\criterion(?:\\[|\\{)/i.test(raw);
+    const hasBinary = /\\begin\\{binary\\}/i.test(raw);
+    const hasChoices = /\\begin\\{choices\\}/i.test(raw);
+    const hasCriteria = /\\begin\\{essay\\}/i.test(raw) ||
+      /\\begin\\{criteria\\}/i.test(raw) ||
+      /\\criterion(?:\\[|\\{)/i.test(raw);
 
     const prompt = extractLatexPrompt(raw).trim();
     if (!prompt) throw new Error("LaTeX question " + number + " has no question text.");
@@ -321,7 +321,7 @@
         throw new Error("LaTeX question " + number + " Binary Response must contain exactly two choices.");
       }
       if (!parsed.correct) {
-        throw new Error("LaTeX question " + number + " needs one \\\\CorrectChoice.");
+        throw new Error("LaTeX question " + number + " needs one \\CorrectChoice.");
       }
 
       return {
@@ -338,7 +338,7 @@
       const env = extractEnvironment(raw, "criteria");
       const criteria = parseLatexCriteria(env?.body || raw);
       if (!criteria.length) {
-        throw new Error("LaTeX question " + number + " is an Essay but has no \\\\criterion entries.");
+        throw new Error("LaTeX question " + number + " is an Essay but has no \\criterion entries.");
       }
 
       return {
@@ -359,11 +359,11 @@
 
   function extractLatexPrompt(raw) {
     const tokens = [
-      "\\\\begin{choices}",
-      "\\\\begin{binary}",
-      "\\\\begin{essay}",
-      "\\\\begin{criteria}",
-      "\\\\criterion"
+      "\\begin{choices}",
+      "\\begin{binary}",
+      "\\begin{essay}",
+      "\\begin{criteria}",
+      "\\criterion"
     ];
     let end = raw.length;
 
@@ -381,8 +381,8 @@
   }
 
   function extractEnvironment(raw, name) {
-    const begin = "\\\\begin{" + name + "}";
-    const endToken = "\\\\end{" + name + "}";
+    const begin = "\\begin{" + name + "}";
+    const endToken = "\\end{" + name + "}";
     const start = raw.indexOf(begin);
     if (start < 0) return null;
     const end = raw.indexOf(endToken, start + begin.length);
@@ -397,7 +397,7 @@
     let correct = "";
 
     lines.forEach(function(line) {
-      const match = line.trim().match(/^\\\\(CorrectChoice|choice)\\b\\s*(.*)$/i);
+      const match = line.trim().match(/^\\(CorrectChoice|choice)\\b\\s*(.*)$/i);
       if (!match) return;
 
       const isCorrect = /^CorrectChoice$/i.test(match[1]);
@@ -412,7 +412,7 @@
       choices.push(value);
 
       if (isCorrect) {
-        if (correct) throw new Error("Only one \\\\CorrectChoice is allowed per question.");
+        if (correct) throw new Error("Only one \\CorrectChoice is allowed per question.");
         correct = value;
       }
     });
@@ -423,7 +423,7 @@
   function parseLatexCriteria(body) {
     const source = String(body || "");
     const criteria = [];
-    const token = "\\\\criterion";
+    const token = "\\criterion";
     let cursor = 0;
 
     while (cursor < source.length) {
@@ -436,25 +436,25 @@
       let points = null;
       if (source[pos] === "[") {
         const close = source.indexOf("]", pos + 1);
-        if (close < 0) throw new Error("A \\\\criterion point value is missing its closing ].");
+        if (close < 0) throw new Error("A \\criterion point value is missing its closing ].");
         points = parsePositiveNumber(source.slice(pos + 1, close));
         pos = close + 1;
       }
 
       while (/\\s/.test(source[pos] || "")) pos += 1;
       const name = readBraceGroup(source, pos);
-      if (!name) throw new Error("A \\\\criterion is missing {Criterion Name}.");
+      if (!name) throw new Error("A \\criterion is missing {Criterion Name}.");
       pos = name.end;
 
       while (/\\s/.test(source[pos] || "")) pos += 1;
       const description = readBraceGroup(source, pos);
-      if (!description) throw new Error("A \\\\criterion is missing {Description}.");
+      if (!description) throw new Error("A \\criterion is missing {Description}.");
       pos = description.end;
 
       if (!points) {
         throw new Error(
           'Criterion "' + name.value.trim() +
-          '" needs positive points, e.g. \\\\criterion[5]{...}{...}.'
+          '" needs positive points, e.g. \\criterion[5]{...}{...}.'
         );
       }
 
@@ -475,8 +475,8 @@
     let depth = 0;
 
     for (let i = start; i < source.length; i += 1) {
-      if (source[i] === "{" && source[i - 1] !== "\\\\") depth += 1;
-      if (source[i] === "}" && source[i - 1] !== "\\\\") {
+      if (source[i] === "{" && source[i - 1] !== "\\") depth += 1;
+      if (source[i] === "}" && source[i - 1] !== "\\") {
         depth -= 1;
         if (depth === 0) {
           return { value: source.slice(start + 1, i), end: i + 1 };
@@ -491,7 +491,7 @@
     return source.split(/\\r?\\n/).map(function(line) {
       let out = "";
       for (let i = 0; i < line.length; i += 1) {
-        if (line[i] === "%" && line[i - 1] !== "\\\\") break;
+        if (line[i] === "%" && line[i - 1] !== "\\") break;
         out += line[i];
       }
       return out;
@@ -512,36 +512,36 @@
 
   function downloadLatexTemplate() {
     const template = [
-      "\\\\documentclass{exam}",
-      "\\\\begin{document}",
+      "\\documentclass{exam}",
+      "\\begin{document}",
       "",
       "% Multiple Choice",
-      "\\\\question[1] Simplify \\\\(x=2\\\\left(\\\\frac{1}{y+4}\\\\right)\\\\).",
-      "\\\\begin{choices}",
-      "  \\\\choice \\\\(x=\\\\frac{1}{y+4}\\\\)",
-      "  \\\\CorrectChoice \\\\(x=\\\\frac{2}{y+4}\\\\)",
-      "  \\\\choice \\\\(x=\\\\frac{y+4}{2}\\\\)",
-      "  \\\\choice \\\\(x=2(y+4)\\\\)",
-      "\\\\end{choices}",
+      "\\question[1] Simplify \\(x=2\\left(\\frac{1}{y+4}\\right)\\).",
+      "\\begin{choices}",
+      "  \\choice \\(x=\\frac{1}{y+4}\\)",
+      "  \\CorrectChoice \\(x=\\frac{2}{y+4}\\)",
+      "  \\choice \\(x=\\frac{y+4}{2}\\)",
+      "  \\choice \\(x=2(y+4)\\)",
+      "\\end{choices}",
       "",
       "% Binary Response",
-      "\\\\question[1] The number \\\\(2\\\\) is prime.",
-      "\\\\begin{binary}",
-      "  \\\\CorrectChoice True",
-      "  \\\\choice False",
-      "\\\\end{binary}",
+      "\\question[1] The number \\(2\\) is prime.",
+      "\\begin{binary}",
+      "  \\CorrectChoice True",
+      "  \\choice False",
+      "\\end{binary}",
       "",
       "% Essay",
-      "\\\\question Explain how you would solve a word problem involving fractions.",
-      "\\\\begin{essay}",
-      "\\\\begin{criteria}",
-      "  \\\\criterion[5]{Mathematical Reasoning}{Explains a correct and logical solution process.}",
-      "  \\\\criterion[3]{Accuracy}{Uses correct mathematical operations and conclusions.}",
-      "  \\\\criterion[2]{Communication}{Presents the explanation clearly and coherently.}",
-      "\\\\end{criteria}",
-      "\\\\end{essay}",
+      "\\question Explain how you would solve a word problem involving fractions.",
+      "\\begin{essay}",
+      "\\begin{criteria}",
+      "  \\criterion[5]{Mathematical Reasoning}{Explains a correct and logical solution process.}",
+      "  \\criterion[3]{Accuracy}{Uses correct mathematical operations and conclusions.}",
+      "  \\criterion[2]{Communication}{Presents the explanation clearly and coherently.}",
+      "\\end{criteria}",
+      "\\end{essay}",
       "",
-      "\\\\end{document}",
+      "\\end{document}",
       ""
     ].join("\\n");
 
