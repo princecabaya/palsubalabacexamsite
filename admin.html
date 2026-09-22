@@ -261,6 +261,18 @@
             <p id="excelImportMsg" class="message-inline"></p>
           </section>
 
+          <section class="excel-import-card latex-import-card">
+            <div class="detail-head">
+              <div><h3>Import Questions from LaTeX</h3></div>
+              <button id="downloadLatexTemplateBtn" type="button">Download LaTeX Template</button>
+            </div>
+            <div class="excel-import-controls">
+              <input id="examLatexFile" type="file" accept=".tex,text/x-tex,text/plain">
+              <button id="importExamLatexBtn" class="primary" type="button">Import LaTeX</button>
+            </div>
+            <p id="latexImportMsg" class="message-inline"></p>
+          </section>
+
           <div class="row section-actions">
             <button id="addQuestionBtn" class="primary" type="button">Add Question</button>
             <button id="clearExamFormBtn" type="button">Clear Form</button>
@@ -527,7 +539,7 @@
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260922-2335"></script>
   <script src="admin.js?v=20260922-2335"></script>
-  <script src="admin-import.js?v=20260920-1806"></script>
+  <script src="admin-import.js?v=20260923-0005"></script>
   <script src="admin-results.js?v=20260922-2205"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
 </body>
