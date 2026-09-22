@@ -1849,7 +1849,7 @@ drop function if exists public.get_exam_questions(uuid);
 create function public.get_exam_questions(p_attempt_token uuid)
 returns table(
   question_id uuid,
-  position integer,
+  "position" integer,
   prompt text,
   question_type text,
   choices jsonb,
@@ -1886,7 +1886,7 @@ begin
   return query
   select
     q.id,
-    q.position,
+    q.position as "position",
     q.prompt,
     q.question_type,
     q.choices,
