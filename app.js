@@ -680,6 +680,8 @@
       const min = Math.floor(total / 60);
       const sec = total % 60;
       $("timer").textContent = `${String(min).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+      const fixedTimer = $("fixedRemainingTime");
+      if (fixedTimer) fixedTimer.textContent = $("timer").textContent;
       if (ms <= 0) {
         clearInterval(timerHandle);
         submitExam(true);
@@ -716,6 +718,8 @@
     examView.classList.add("hidden");
     watermark.classList.remove("active");
     doneView.classList.remove("hidden");
+    const fixedTimer = $("fixedRemainingTime");
+    if (fixedTimer) fixedTimer.textContent = "00:00";
 
     const row = data?.[0];
     $("doneText").textContent = row?.score == null
