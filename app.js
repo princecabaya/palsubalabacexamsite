@@ -40,12 +40,62 @@
   let microphoneNoiseFloor = 0.01;
   let examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
   let speechFlagTimer = null;
+  const pendingAnswerSaves = new Map();
 
   const restrictedFlagTypes = new Set([
     "copy_blocked","cut_blocked","paste_blocked","contextmenu_blocked","dragstart_blocked",
     "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
     "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
   ]);
+
+  function clearExamBrowserState({ keepCurrentToken = false } = {}) {
+    const currentToken = keepCurrentToken ? sessionStorage.getItem("exam_guard_token") : null;
+
+    for (const storage of [sessionStorage, localStorage]) {
+      const keys = [];
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (key && key.startsWith("exam_guard_")) keys.push(key);
+      }
+      keys.forEach(key => storage.removeItem(key));
+    }
+
+    if (keepCurrentToken && currentToken) {
+      sessionStorage.setItem("exam_guard_token", currentToken);
+    }
+  }
+
+  function currentAnswerForQuestion(questionId) {
+    const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(String(questionId))}"]`);
+    if (!wrap) return "";
+
+    const checked = wrap.querySelector('input[type="radio"]:checked');
+    if (checked) return checked.value;
+
+    const textarea = wrap.querySelector("textarea");
+    if (textarea) return textarea.value;
+
+    return "";
+  }
+
+  async function forceSaveAllCurrentAnswers() {
+    const jobs = [];
+
+    for (const q of questions) {
+      const answer = currentAnswerForQuestion(q.question_id);
+      const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(String(q.question_id))}"]`);
+      const state = wrap?.querySelector(".save-state");
+
+      // Save even blank values so a deliberately cleared text response is reflected
+      // in the database before scoring.
+      jobs.push(saveAnswer(q.question_id, answer, state, { quiet: true }));
+    }
+
+    await Promise.all(jobs);
+
+    // Also wait for any earlier change-triggered save that may still be in flight.
+    await Promise.all([...pendingAnswerSaves.values()]);
+  }
 
   function flagStorageKey() {
     return attempt?.attempt_token ? `exam_guard_flags_${attempt.attempt_token}` : "";
@@ -446,6 +496,11 @@
       return;
     }
 
+    if (!attempt) {
+      // Remove stale data from older completed/deleted attempts before checking a new login.
+      clearExamBrowserState();
+    }
+
     msg.textContent = "Checking Student ID…";
     $("startBtn").disabled = true;
 
@@ -550,6 +605,10 @@
     attempt = data[0];
     pendingIdentity = null;
     $("identityConfirmModal").classList.add("hidden");
+
+    // A genuinely new/restarted attempt must not inherit stale browser state
+    // from a prior deleted or submitted attempt.
+    clearExamBrowserState();
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     resetExamFlagCounts();
 
@@ -664,18 +723,42 @@
     }
   }
 
-  async function saveAnswer(questionId, answer, stateNode) {
-    const { error } = await db.rpc("save_exam_response", {
-      p_attempt_token: attempt.attempt_token,
-      p_question_id: questionId,
-      p_answer: answer
-    });
-    if (error) {
-      stateNode.textContent = "Save failed — retry by changing the answer.";
-      stateNode.style.color = "#b42318";
-    } else {
-      stateNode.textContent = `Saved ${new Date().toLocaleTimeString()}`;
-      stateNode.style.color = "";
+  async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
+    if (!attempt?.attempt_token || submitted) return;
+
+    if (stateNode && !quiet) {
+      stateNode.textContent = "Saving…";
+    }
+
+    const savePromise = (async () => {
+      const { error } = await db.rpc("save_exam_response", {
+        p_attempt_token: attempt.attempt_token,
+        p_question_id: questionId,
+        p_answer: answer
+      });
+
+      if (error) {
+        if (stateNode) {
+          stateNode.textContent = "Save failed — retry by changing the answer.";
+          stateNode.style.color = "#b42318";
+        }
+        throw error;
+      }
+
+      if (stateNode) {
+        stateNode.textContent = `Saved ${new Date().toLocaleTimeString()}`;
+        stateNode.style.color = "";
+      }
+    })();
+
+    pendingAnswerSaves.set(String(questionId), savePromise);
+
+    try {
+      await savePromise;
+    } finally {
+      if (pendingAnswerSaves.get(String(questionId)) === savePromise) {
+        pendingAnswerSaves.delete(String(questionId));
+      }
     }
   }
 
@@ -703,7 +786,22 @@
     if (!auto && !confirm("Submit your exam now? You will not be able to change your answers afterward.")) return;
 
     $("submitBtn").disabled = true;
+    const originalSubmitText = $("submitBtn").textContent;
+    $("submitBtn").textContent = "Saving answers…";
+
+    try {
+      warn("Saving your latest answers before submission…");
+      await forceSaveAllCurrentAnswers();
+    } catch (saveError) {
+      $("submitBtn").disabled = false;
+      $("submitBtn").textContent = originalSubmitText;
+      warn(`Could not save all answers. Please check your connection and submit again. ${saveError?.message || ""}`);
+      return;
+    }
+
     await logEvent(auto ? "auto_submit_time_expired" : "student_submit_clicked");
+
+    $("submitBtn").textContent = "Submitting…";
 
     const { data, error } = await db.rpc("submit_exam", {
       p_attempt_token: attempt.attempt_token
@@ -711,6 +809,7 @@
 
     if (error) {
       $("submitBtn").disabled = false;
+      $("submitBtn").textContent = originalSubmitText;
       warn(`Submission failed: ${error.message}`);
       return;
     }
@@ -719,9 +818,7 @@
     submitted = true;
     clearInterval(timerHandle);
     stopCameraMonitoring();
-    const flagKey = flagStorageKey();
-    sessionStorage.removeItem("exam_guard_token");
-    if (flagKey) sessionStorage.removeItem(flagKey);
+    clearExamBrowserState();
     examView.classList.add("hidden");
     watermark.classList.remove("active");
     doneView.classList.remove("hidden");
@@ -758,7 +855,7 @@
     });
 
     if (resumeError || !resumeData?.length) {
-      sessionStorage.removeItem("exam_guard_token");
+      clearExamBrowserState();
       $("startBtn").disabled = false;
       msg.textContent = "";
       return;
