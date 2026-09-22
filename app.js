@@ -28,6 +28,16 @@
   let cameraInterval = null;
   let cameraInitialTimeout = null;
   let cameraCaptureBusy = false;
+  let microphoneStream = null;
+  let microphoneAudioContext = null;
+  let microphoneAnalyser = null;
+  let microphoneMonitorFrame = null;
+  let microphoneData = null;
+  let speechCandidateStartedAt = 0;
+  let speechActiveStartedAt = 0;
+  let speechLastLoudAt = 0;
+  let speechPeakRms = 0;
+  let microphoneNoiseFloor = 0.01;
 
   const safeDetails = (extra = {}) => ({
     visibility: document.visibilityState,
@@ -174,6 +184,161 @@
     }
   }
 
+  async function requestMicrophone() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("This browser does not support microphone access.");
+    }
+
+    if (microphoneStream?.active) return microphoneStream;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
+      video: false
+    });
+
+    microphoneStream = stream;
+    updateMicrophoneStatus("Microphone active");
+    return stream;
+  }
+
+  function updateMicrophoneStatus(text) {
+    const node = $("microphoneStatus");
+    if (node) node.textContent = text;
+  }
+
+  async function startSpeechMonitoring() {
+    if (!attempt?.attempt_token || submitted || !microphoneStream?.active) return;
+
+    stopSpeechAnalysisOnly();
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      updateMicrophoneStatus("Analysis unsupported");
+      await logEvent("microphone_analysis_unavailable");
+      return;
+    }
+
+    microphoneAudioContext = new AudioContextCtor();
+    try {
+      if (microphoneAudioContext.state === "suspended") {
+        await microphoneAudioContext.resume();
+      }
+    } catch (_) {}
+
+    const source = microphoneAudioContext.createMediaStreamSource(microphoneStream);
+    microphoneAnalyser = microphoneAudioContext.createAnalyser();
+    microphoneAnalyser.fftSize = 1024;
+    microphoneAnalyser.smoothingTimeConstant = 0.35;
+    source.connect(microphoneAnalyser);
+    microphoneData = new Float32Array(microphoneAnalyser.fftSize);
+
+    speechCandidateStartedAt = 0;
+    speechActiveStartedAt = 0;
+    speechLastLoudAt = 0;
+    speechPeakRms = 0;
+    microphoneNoiseFloor = 0.01;
+    updateMicrophoneStatus("Listening locally");
+
+    const monitor = () => {
+      if (!microphoneAnalyser || !microphoneStream?.active || submitted) return;
+
+      microphoneAnalyser.getFloatTimeDomainData(microphoneData);
+      let sum = 0;
+      for (let i = 0; i < microphoneData.length; i += 1) {
+        const sample = microphoneData[i];
+        sum += sample * sample;
+      }
+      const rms = Math.sqrt(sum / microphoneData.length);
+      const now = performance.now();
+
+      // Adapt slowly to ordinary room/background sound when no speech event is active.
+      if (!speechActiveStartedAt && rms < 0.05) {
+        microphoneNoiseFloor = microphoneNoiseFloor * 0.985 + rms * 0.015;
+      }
+
+      const threshold = Math.max(0.025, microphoneNoiseFloor * 2.8);
+      const loud = rms >= threshold;
+
+      if (loud) {
+        speechPeakRms = Math.max(speechPeakRms, rms);
+        speechLastLoudAt = now;
+
+        if (!speechCandidateStartedAt) speechCandidateStartedAt = now;
+
+        // Require sustained sound before treating it as a possible speech segment.
+        if (!speechActiveStartedAt && now - speechCandidateStartedAt >= 1200) {
+          speechActiveStartedAt = speechCandidateStartedAt;
+          updateMicrophoneStatus("Possible speech detected");
+        }
+      } else {
+        if (!speechActiveStartedAt && speechCandidateStartedAt && now - speechCandidateStartedAt > 450) {
+          speechCandidateStartedAt = 0;
+          speechPeakRms = 0;
+        }
+
+        // End a speech segment after a short quiet period.
+        if (speechActiveStartedAt && now - speechLastLoudAt >= 900) {
+          finishSpeechSegment(now);
+        }
+      }
+
+      microphoneMonitorFrame = requestAnimationFrame(monitor);
+    };
+
+    microphoneMonitorFrame = requestAnimationFrame(monitor);
+  }
+
+  function finishSpeechSegment(now = performance.now()) {
+    if (!speechActiveStartedAt) return;
+
+    const endedAt = Math.max(speechLastLoudAt || now, speechActiveStartedAt);
+    const durationMs = Math.max(0, endedAt - speechActiveStartedAt);
+
+    if (durationMs >= 1200) {
+      logEvent("possible_speech_detected", {
+        duration_seconds: Number((durationMs / 1000).toFixed(1)),
+        peak_level: Number(speechPeakRms.toFixed(4)),
+        detection: "local_audio_level_only"
+      });
+    }
+
+    speechCandidateStartedAt = 0;
+    speechActiveStartedAt = 0;
+    speechLastLoudAt = 0;
+    speechPeakRms = 0;
+
+    if (microphoneStream?.active && !submitted) {
+      updateMicrophoneStatus("Listening locally");
+    }
+  }
+
+  function stopSpeechAnalysisOnly() {
+    if (microphoneMonitorFrame) cancelAnimationFrame(microphoneMonitorFrame);
+    microphoneMonitorFrame = null;
+    microphoneAnalyser = null;
+    microphoneData = null;
+
+    if (microphoneAudioContext) {
+      try { microphoneAudioContext.close(); } catch (_) {}
+    }
+    microphoneAudioContext = null;
+  }
+
+  async function stopMicrophoneMonitoring() {
+    finishSpeechSegment();
+    stopSpeechAnalysisOnly();
+
+    for (const track of microphoneStream?.getTracks?.() || []) {
+      try { track.stop(); } catch (_) {}
+    }
+    microphoneStream = null;
+    updateMicrophoneStatus("Stopped");
+  }
+
   async function enterFullscreen() {
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       suppressBlurUntil = Date.now() + 1200;
@@ -264,6 +429,17 @@
       return;
     }
 
+    try {
+      confirmMsg.textContent = "Requesting microphone permission…";
+      await requestMicrophone();
+    } catch (microphoneError) {
+      stopCameraMonitoring();
+      confirmMsg.textContent = `Microphone access is required for speech-event detection during this examination. ${microphoneError?.message || "Please allow microphone access and try again."}`;
+      yesBtn.disabled = false;
+      noBtn.disabled = false;
+      return;
+    }
+
     confirmMsg.textContent = "";
 
     // This click is also the user gesture used for fullscreen.
@@ -281,6 +457,7 @@
     if (error || !data?.length) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       stopCameraMonitoring();
+      await stopMicrophoneMonitoring();
       confirmMsg.textContent = error?.message || "Could not start the exam.";
       return;
     }
@@ -291,6 +468,7 @@
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     await loadExam({ restored: false, savedResponses: [] });
     startCameraCaptureSchedule();
+    await startSpeechMonitoring();
   });
 
   async function loadExam({ restored = false, savedResponses = [] } = {}) {
@@ -442,6 +620,7 @@
       return;
     }
 
+    await stopMicrophoneMonitoring();
     submitted = true;
     clearInterval(timerHandle);
     stopCameraMonitoring();
@@ -508,10 +687,13 @@
     try {
       await requestFrontCamera();
       startCameraCaptureSchedule();
+      await requestMicrophone();
+      await startSpeechMonitoring();
     } catch (cameraError) {
       updateCameraStatus("Camera unavailable");
-      warn("Your exam session was restored, but the front camera could not be restarted. Please allow camera access if prompted.");
-      await logEvent("camera_unavailable_after_restore", {
+      updateMicrophoneStatus("Microphone unavailable");
+      warn("Your exam session was restored, but camera or microphone monitoring could not be restarted. Please allow access if prompted.");
+      await logEvent("monitoring_device_unavailable_after_restore", {
         message: String(cameraError?.message || cameraError).slice(0, 300)
       });
     }
