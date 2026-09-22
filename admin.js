@@ -657,6 +657,9 @@
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
+    const reopenBtn = $("reopenAttemptBtn");
+    if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted");
+
     await Promise.all([
       loadSavedResponses(a),
       loadProctorPhotos(a)
@@ -1769,6 +1772,87 @@
     await Promise.all([loadExams(), refreshAttempts()]);
   }
 
+  async function reopenCurrentAttempt() {
+    const a = currentDetailAttempt;
+    if (!a || a.status !== "submitted") return;
+
+    const studentName = a.students?.full_name || "this student";
+    const ok = confirm(
+      `Reopen the submitted attempt for ${studentName}?\n\nThe submitted score and submission time will be cleared, but the student's saved answers will be kept. The student can enter the same Exam Code and Student ID again and continue with the original remaining time.`
+    );
+    if (!ok) return;
+
+    const btn = $("reopenAttemptBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Reopening…";
+    }
+
+    const { data, error } = await db.rpc("admin_reopen_attempt", {
+      p_attempt_id: a.id
+    });
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Reopen & Continue";
+    }
+
+    if (error) {
+      alert(`Could not reopen attempt: ${error.message}\n\nRun supabase-upgrade-attempt-recovery.sql in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    if (data !== true) {
+      alert("The attempt was not reopened. It may no longer be submitted.");
+      return;
+    }
+
+    alert(`${studentName}'s attempt is open again. Their saved answers were kept.`);
+    closeAttemptDrawer();
+    await refreshAttempts();
+  }
+
+  async function resetCurrentAttempt() {
+    const a = currentDetailAttempt;
+    if (!a) return;
+
+    const studentName = a.students?.full_name || "this student";
+    const studentNo = a.students?.student_no || "";
+    const ok = confirm(
+      `RESET the exam attempt for ${studentName}${studentNo ? ` (${studentNo})` : ""}?\n\nThis permanently removes the score, saved responses, AI feedback, proctoring events, and attempt record. The student will start a completely new attempt. This cannot be undone.`
+    );
+    if (!ok) return;
+
+    const btn = $("resetAttemptBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Resetting…";
+    }
+
+    const { data, error } = await db.rpc("admin_reset_attempt", {
+      p_attempt_id: a.id
+    });
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Reset for Retake";
+    }
+
+    if (error) {
+      alert(`Could not reset attempt: ${error.message}\n\nRun supabase-upgrade-attempt-recovery.sql in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    if (data !== true) {
+      alert("No attempt was reset. It may already have been removed.");
+      return;
+    }
+
+    alert(`${studentName}'s attempt was reset. They can now take the examination again from the beginning.`);
+    closeAttemptDrawer();
+    await refreshAttempts();
+  }
+
   function closeAttemptDrawer() {
     const panel = $("detailPanel");
     if (!panel || panel.classList.contains("hidden")) return;
@@ -1781,6 +1865,8 @@
 
   $("searchBox").addEventListener("input", renderAttempts);
   $("refreshBtn").addEventListener("click", refreshAttempts);
+  $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
+  $("resetAttemptBtn")?.addEventListener("click", resetCurrentAttempt);
   $("closeDetail").addEventListener("click", closeAttemptDrawer);
   $("signOutBtn").addEventListener("click", async () => {
     clearInterval(pollHandle);
