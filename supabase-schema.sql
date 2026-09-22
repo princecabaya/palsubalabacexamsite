@@ -1329,3 +1329,44 @@ grant select on public.exam_admins to authenticated;
 -- select user_id, email, display_name, role, is_admin from public.exam_admins;
 -- select id, code, title, owner_id from public.exams order by created_at desc;
 
+
+-- ---------- Preserved proctor-photo evidence ----------
+alter table public.proctor_photos
+  add column if not exists evidence_saved boolean not null default false,
+  add column if not exists evidence_saved_at timestamptz,
+  add column if not exists evidence_saved_by uuid references auth.users(id) on delete set null;
+
+create index if not exists proctor_photos_evidence_idx
+  on public.proctor_photos(evidence_saved, captured_at);
+
+create or replace function public.set_proctor_photo_evidence(
+  p_photo_ids uuid[],
+  p_saved boolean
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $evidence$
+declare
+  v_count integer := 0;
+begin
+  if auth.uid() is null or not public.exam_guard_current_user_is_admin() then
+    raise exception 'Teacher access required.';
+  end if;
+
+  update public.proctor_photos p
+  set evidence_saved = coalesce(p_saved, false),
+      evidence_saved_at = case when coalesce(p_saved, false) then now() else null end,
+      evidence_saved_by = case when coalesce(p_saved, false) then auth.uid() else null end
+  where p.id = any(p_photo_ids)
+    and public.exam_guard_can_access_attempt(p.attempt_id);
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$evidence$;
+
+revoke all on function public.set_proctor_photo_evidence(uuid[],boolean) from public;
+grant execute on function public.set_proctor_photo_evidence(uuid[],boolean) to authenticated;
+
