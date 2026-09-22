@@ -572,13 +572,13 @@
         const signals = signalCount(a.id);
         const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
         tr.innerHTML = `
-          <td><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
-          <td><span class="muted">Student attempt</span></td>
-          <td><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
-          <td>${fmt(a.started_at)}</td>
-          <td>${fmt(a.submitted_at)}</td>
-          <td>${escapeHtml(score)}</td>
-          <td><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>
+          <td data-label="Student"><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
+          <td data-label="Exam"><span class="muted">Student attempt</span></td>
+          <td data-label="Status"><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
+          <td data-label="Started">${fmt(a.started_at)}</td>
+          <td data-label="Submitted">${fmt(a.submitted_at)}</td>
+          <td data-label="Score">${escapeHtml(score)}</td>
+          <td data-label="Signals"><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>
         `;
         tr.addEventListener("click", () => openDetail(a));
         rows.appendChild(tr);
@@ -2074,18 +2074,18 @@
       const archived = Boolean(exam.archived);
       tr.classList.toggle("archived-row", archived);
       tr.innerHTML = `
-        <td>
+        <td data-label="Title">
           <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
           ${archived ? '<br><span class="badge archived">Archived</span>' : ''}
           ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? '<br><span class="badge proctor">Proctor</span>' : ''}
         </td>
-        <td>${escapeHtml(exam.code)}</td>
-        <td><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
-        <td>${escapeHtml(String(exam.duration_minutes))} min</td>
-        <td>${qCount}</td>
-        <td>${fmt(exam.start_at)}</td>
-        <td>${fmt(exam.end_at)}</td>
-        <td class="action-cell">
+        <td data-label="Code">${escapeHtml(exam.code)}</td>
+        <td data-label="Status"><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
+        <td data-label="Duration">${escapeHtml(String(exam.duration_minutes))} min</td>
+        <td data-label="Questions">${qCount}</td>
+        <td data-label="Start">${fmt(exam.start_at)}</td>
+        <td data-label="End">${fmt(exam.end_at)}</td>
+        <td data-label="Actions" class="action-cell">
           ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
             <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
             <span class="badge proctor">Proctor access</span>
