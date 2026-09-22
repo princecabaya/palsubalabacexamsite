@@ -305,7 +305,7 @@
     "tab_or_window_hidden","window_blur","fullscreen_exit","copy_blocked","cut_blocked",
     "paste_blocked","contextmenu_blocked","print_attempt","printscreen_key_detected",
     "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
-    "leave_or_reload_attempt","in_exam_link_navigation_blocked"
+    "leave_or_reload_attempt","in_exam_link_navigation_blocked","possible_speech_detected"
   ]);
 
   function signalCount(attemptId) {
@@ -978,14 +978,16 @@
       "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
       "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
     ]);
+    const speechSignals = count("possible_speech_detected");
 
     $("summaryTabHidden").textContent = String(tabHidden);
     $("summaryBlur").textContent = String(blur);
     $("summaryFullscreen").textContent = String(fullscreenExit);
     $("summaryRestricted").textContent = String(restricted);
+    $("summarySpeech").textContent = String(speechSignals);
 
     const badge = $("summaryReviewBadge");
-    const attentionSignals = tabHidden + blur + fullscreenExit + restricted;
+    const attentionSignals = tabHidden + blur + fullscreenExit + restricted + speechSignals;
     badge.className = "badge " + (attentionSignals > 0 ? "warn" : "ok");
     badge.textContent = attentionSignals > 0 ? "Review signals present" : "No review signals recorded";
 
@@ -1000,6 +1002,14 @@
 
     if (percent !== null) {
       narrative.push(`The auto-scored result is ${trimNumber(score)} out of ${trimNumber(maxScore)} (${formatPercent(percent)}%).`);
+    }
+
+    if (speechSignals > 0) {
+      narrative.push(
+        `The microphone detected ${speechSignals} possible speech event${speechSignals === 1 ? "" : "s"}. The browser analyzes sound levels locally; it does not record audio and cannot determine who was speaking or what was said.`
+      );
+    } else {
+      narrative.push("No possible speech event was recorded.");
     }
 
     if (tabHidden > 0) {
