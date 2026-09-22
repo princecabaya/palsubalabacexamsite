@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260922-1145">
+  <link rel="stylesheet" href="style.css?v=20260922-2205">
 </head>
 <body>
   <main class="shell wide">
@@ -62,6 +62,7 @@
         <button id="tabAttemptsBtn" class="tab-btn active" type="button">Attempts</button>
         <button id="tabCreateBtn" class="tab-btn" type="button">Create Exam</button>
         <button id="tabManageBtn" class="tab-btn" type="button">Manage Exams</button>
+        <button id="tabProctorsBtn" class="tab-btn" type="button">Proctors</button>
         <button id="tabStudentsBtn" class="tab-btn" type="button">Students</button>
         <button id="tabTeachersBtn" class="tab-btn hidden" type="button">Teachers</button>
       </div>
@@ -180,7 +181,7 @@
                 <span id="proctorPhotosCount" class="badge">0 photos</span>
               </summary>
               <div class="attempt-drawer-body">
-                <div class="proctor-photo-actions">
+                <div id="proctorPhotoEvidenceActions" class="proctor-photo-actions">
                   <span id="proctorPhotoSelection" class="muted">0 selected</span>
                   <div class="row">
                     <button id="saveSelectedEvidenceBtn" type="button" class="primary" disabled>Save Selected as Evidence</button>
@@ -349,6 +350,47 @@
         </section>
       </section>
 
+      <section id="proctorsSection" class="tab-section hidden">
+        <section class="card">
+          <div class="detail-head">
+            <div>
+              <h2>Exam Proctors</h2>
+              <p class="muted">Assign an authorized teacher to monitor a published examination. Proctors receive read-only exam access plus Reset for Retake.</p>
+            </div>
+            <button id="reloadProctorsBtn" type="button">Reload</button>
+          </div>
+
+          <div class="proctor-assign-grid">
+            <label>Published examination
+              <select id="proctorExamSelect"></select>
+            </label>
+            <label>Authorized teacher
+              <select id="proctorTeacherSelect"></select>
+            </label>
+            <div class="proctor-assign-button">
+              <button id="assignProctorBtn" type="button" class="primary">Assign Proctor</button>
+            </div>
+          </div>
+          <p id="proctorManageMsg" class="message-inline"></p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Examination</th>
+                  <th>Exam Code</th>
+                  <th>Proctor</th>
+                  <th>Email</th>
+                  <th>Assigned</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="proctorAssignmentRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section id="studentsSection" class="tab-section hidden">
         <section class="card">
           <div class="detail-head">
@@ -481,9 +523,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="admin.js?v=20260922-1335"></script>
+  <script src="admin.js?v=20260922-2205"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
-  <script src="admin-results.js?v=20260920-2035"></script>
+  <script src="admin-results.js?v=20260922-2205"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
 </body>
 </html>
