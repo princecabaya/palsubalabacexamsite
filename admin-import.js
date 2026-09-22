@@ -3,6 +3,10 @@
   const importBtn = document.getElementById("importExamExcelBtn");
   const templateBtn = document.getElementById("downloadExamTemplateBtn");
   const msg = document.getElementById("excelImportMsg");
+  const latexFileInput = document.getElementById("examLatexFile");
+  const latexImportBtn = document.getElementById("importExamLatexBtn");
+  const latexTemplateBtn = document.getElementById("downloadLatexTemplateBtn");
+  const latexMsg = document.getElementById("latexImportMsg");
 
   if (!fileInput || !importBtn || !templateBtn) return;
 
@@ -18,6 +22,8 @@
 
   templateBtn.addEventListener("click", downloadTemplate);
   importBtn.addEventListener("click", importWorkbook);
+  latexTemplateBtn?.addEventListener("click", downloadLatexTemplate);
+  latexImportBtn?.addEventListener("click", importLatexFile);
 
   async function importWorkbook() {
     setMessage("");
@@ -194,6 +200,360 @@
     } finally {
       importBtn.disabled = false;
     }
+  }
+
+
+  async function importLatexFile() {
+    setLatexMessage("");
+
+    const file = latexFileInput?.files?.[0];
+    if (!file) {
+      setLatexMessage("Choose a LaTeX .tex file first.", true);
+      return;
+    }
+
+    latexImportBtn.disabled = true;
+
+    try {
+      const source = await file.text();
+      const parsed = parseLatexExam(source);
+
+      if (!parsed.length) {
+        throw new Error("No supported \\\\question entries were found in the LaTeX file.");
+      }
+
+      const builder = window.ExamBuilder;
+      if (!builder?.replaceQuestions) {
+        throw new Error("The question builder is not ready. Refresh the dashboard and try again.");
+      }
+
+      const currentCards = document.querySelectorAll("#questionBuilder .question-card");
+      const hasExistingContent = [...currentCards].some(function(card) {
+        return Boolean(card.querySelector(".q-prompt")?.value?.trim());
+      });
+
+      if (hasExistingContent) {
+        const proceed = confirm(
+          "Import " + parsed.length + " LaTeX question" +
+          (parsed.length === 1 ? "" : "s") +
+          " and replace the questions currently in the builder?"
+        );
+        if (!proceed) {
+          setLatexMessage("Import cancelled. Existing questions were kept.");
+          return;
+        }
+      }
+
+      builder.replaceQuestions(parsed);
+      setLatexMessage(
+        "Imported " + parsed.length + " LaTeX question" +
+        (parsed.length === 1 ? "" : "s") +
+        " successfully. Review them, then click Save Exam."
+      );
+      builder.setMessage(
+        parsed.length + " LaTeX question" +
+        (parsed.length === 1 ? "" : "s") +
+        " imported. Review the questions before saving."
+      );
+
+      document.getElementById("questionBuilder")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    } catch (error) {
+      console.error(error);
+      setLatexMessage(error?.message || "Could not import the LaTeX file.", true);
+    } finally {
+      latexImportBtn.disabled = false;
+    }
+  }
+
+  function parseLatexExam(source) {
+    const text = stripLatexComments(String(source || "")).replace(/\\r\\n?/g, "\\n");
+    const lines = text.split("\\n");
+    const blocks = [];
+    let current = null;
+
+    for (const originalLine of lines) {
+      const line = originalLine.trim();
+      const match = line.match(/^\\\\question(?:\\[([^\\]]+)\\])?\\s*(.*)$/);
+
+      if (match) {
+        if (current) blocks.push(current);
+        current = {
+          points: parsePositiveNumber(match[1]) || 1,
+          firstPrompt: match[2] || "",
+          lines: []
+        };
+        continue;
+      }
+
+      if (current) current.lines.push(originalLine);
+    }
+
+    if (current) blocks.push(current);
+
+    return blocks.map(function(block, index) {
+      return parseLatexQuestionBlock(block, index + 1);
+    });
+  }
+
+  function parseLatexQuestionBlock(block, number) {
+    const raw = [block.firstPrompt].concat(block.lines).join("\\n").trim();
+    const hasBinary = /\\\\begin\\{binary\\}/i.test(raw);
+    const hasChoices = /\\\\begin\\{choices\\}/i.test(raw);
+    const hasCriteria = /\\\\begin\\{essay\\}/i.test(raw) ||
+      /\\\\begin\\{criteria\\}/i.test(raw) ||
+      /\\\\criterion(?:\\[|\\{)/i.test(raw);
+
+    const prompt = extractLatexPrompt(raw).trim();
+    if (!prompt) throw new Error("LaTeX question " + number + " has no question text.");
+
+    if (hasBinary || hasChoices) {
+      const type = hasBinary ? "binary" : "mcq";
+      const env = extractEnvironment(raw, hasBinary ? "binary" : "choices");
+      const parsed = parseLatexChoices(env?.body || raw);
+
+      if (parsed.choices.length < 2) {
+        throw new Error("LaTeX question " + number + " needs at least two choices.");
+      }
+      if (type === "binary" && parsed.choices.length !== 2) {
+        throw new Error("LaTeX question " + number + " Binary Response must contain exactly two choices.");
+      }
+      if (!parsed.correct) {
+        throw new Error("LaTeX question " + number + " needs one \\\\CorrectChoice.");
+      }
+
+      return {
+        prompt: prompt,
+        question_type: type,
+        choices: parsed.choices,
+        correct_answer: parsed.correct,
+        points: block.points,
+        rubric_criteria: []
+      };
+    }
+
+    if (hasCriteria) {
+      const env = extractEnvironment(raw, "criteria");
+      const criteria = parseLatexCriteria(env?.body || raw);
+      if (!criteria.length) {
+        throw new Error("LaTeX question " + number + " is an Essay but has no \\\\criterion entries.");
+      }
+
+      return {
+        prompt: prompt,
+        question_type: "essay",
+        choices: null,
+        correct_answer: null,
+        points: criteria.reduce(function(sum, item) { return sum + item.max_points; }, 0),
+        rubric_criteria: criteria
+      };
+    }
+
+    throw new Error(
+      "LaTeX question " + number +
+      " has no supported answer block. Use choices, binary, or essay criteria."
+    );
+  }
+
+  function extractLatexPrompt(raw) {
+    const tokens = [
+      "\\\\begin{choices}",
+      "\\\\begin{binary}",
+      "\\\\begin{essay}",
+      "\\\\begin{criteria}",
+      "\\\\criterion"
+    ];
+    let end = raw.length;
+
+    tokens.forEach(function(token) {
+      const pos = raw.indexOf(token);
+      if (pos >= 0 && pos < end) end = pos;
+    });
+
+    let prompt = raw.slice(0, end).trim();
+    if (prompt.startsWith("{") && prompt.endsWith("}")) {
+      const group = readBraceGroup(prompt, 0);
+      if (group && group.end === prompt.length) prompt = group.value.trim();
+    }
+    return prompt;
+  }
+
+  function extractEnvironment(raw, name) {
+    const begin = "\\\\begin{" + name + "}";
+    const endToken = "\\\\end{" + name + "}";
+    const start = raw.indexOf(begin);
+    if (start < 0) return null;
+    const end = raw.indexOf(endToken, start + begin.length);
+    return {
+      body: raw.slice(start + begin.length, end >= 0 ? end : raw.length)
+    };
+  }
+
+  function parseLatexChoices(body) {
+    const lines = String(body || "").split("\\n");
+    const choices = [];
+    let correct = "";
+
+    lines.forEach(function(line) {
+      const match = line.trim().match(/^\\\\(CorrectChoice|choice)\\b\\s*(.*)$/i);
+      if (!match) return;
+
+      const isCorrect = /^CorrectChoice$/i.test(match[1]);
+      let value = match[2].trim();
+
+      if (value.startsWith("{")) {
+        const group = readBraceGroup(value, 0);
+        if (group) value = group.value.trim();
+      }
+
+      if (!value) throw new Error("A LaTeX choice is blank.");
+      choices.push(value);
+
+      if (isCorrect) {
+        if (correct) throw new Error("Only one \\\\CorrectChoice is allowed per question.");
+        correct = value;
+      }
+    });
+
+    return { choices: choices, correct: correct };
+  }
+
+  function parseLatexCriteria(body) {
+    const source = String(body || "");
+    const criteria = [];
+    const token = "\\\\criterion";
+    let cursor = 0;
+
+    while (cursor < source.length) {
+      const start = source.indexOf(token, cursor);
+      if (start < 0) break;
+
+      let pos = start + token.length;
+      while (/\\s/.test(source[pos] || "")) pos += 1;
+
+      let points = null;
+      if (source[pos] === "[") {
+        const close = source.indexOf("]", pos + 1);
+        if (close < 0) throw new Error("A \\\\criterion point value is missing its closing ].");
+        points = parsePositiveNumber(source.slice(pos + 1, close));
+        pos = close + 1;
+      }
+
+      while (/\\s/.test(source[pos] || "")) pos += 1;
+      const name = readBraceGroup(source, pos);
+      if (!name) throw new Error("A \\\\criterion is missing {Criterion Name}.");
+      pos = name.end;
+
+      while (/\\s/.test(source[pos] || "")) pos += 1;
+      const description = readBraceGroup(source, pos);
+      if (!description) throw new Error("A \\\\criterion is missing {Description}.");
+      pos = description.end;
+
+      if (!points) {
+        throw new Error(
+          'Criterion "' + name.value.trim() +
+          '" needs positive points, e.g. \\\\criterion[5]{...}{...}.'
+        );
+      }
+
+      criteria.push({
+        criterion: name.value.trim(),
+        description: description.value.trim(),
+        max_points: points
+      });
+
+      cursor = Math.max(pos, start + token.length);
+    }
+
+    return criteria;
+  }
+
+  function readBraceGroup(source, start) {
+    if (source[start] !== "{") return null;
+    let depth = 0;
+
+    for (let i = start; i < source.length; i += 1) {
+      if (source[i] === "{" && source[i - 1] !== "\\\\") depth += 1;
+      if (source[i] === "}" && source[i - 1] !== "\\\\") {
+        depth -= 1;
+        if (depth === 0) {
+          return { value: source.slice(start + 1, i), end: i + 1 };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function stripLatexComments(source) {
+    return source.split(/\\r?\\n/).map(function(line) {
+      let out = "";
+      for (let i = 0; i < line.length; i += 1) {
+        if (line[i] === "%" && line[i - 1] !== "\\\\") break;
+        out += line[i];
+      }
+      return out;
+    }).join("\\n");
+  }
+
+  function parsePositiveNumber(value) {
+    const number = Number(String(value ?? "").trim());
+    return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
+  function setLatexMessage(text, isError = false) {
+    if (!latexMsg) return;
+    latexMsg.textContent = text || "";
+    latexMsg.classList.toggle("error", Boolean(isError));
+    latexMsg.classList.toggle("success", Boolean(text) && !isError);
+  }
+
+  function downloadLatexTemplate() {
+    const template = [
+      "\\\\documentclass{exam}",
+      "\\\\begin{document}",
+      "",
+      "% Multiple Choice",
+      "\\\\question[1] Simplify \\\\(x=2\\\\left(\\\\frac{1}{y+4}\\\\right)\\\\).",
+      "\\\\begin{choices}",
+      "  \\\\choice \\\\(x=\\\\frac{1}{y+4}\\\\)",
+      "  \\\\CorrectChoice \\\\(x=\\\\frac{2}{y+4}\\\\)",
+      "  \\\\choice \\\\(x=\\\\frac{y+4}{2}\\\\)",
+      "  \\\\choice \\\\(x=2(y+4)\\\\)",
+      "\\\\end{choices}",
+      "",
+      "% Binary Response",
+      "\\\\question[1] The number \\\\(2\\\\) is prime.",
+      "\\\\begin{binary}",
+      "  \\\\CorrectChoice True",
+      "  \\\\choice False",
+      "\\\\end{binary}",
+      "",
+      "% Essay",
+      "\\\\question Explain how you would solve a word problem involving fractions.",
+      "\\\\begin{essay}",
+      "\\\\begin{criteria}",
+      "  \\\\criterion[5]{Mathematical Reasoning}{Explains a correct and logical solution process.}",
+      "  \\\\criterion[3]{Accuracy}{Uses correct mathematical operations and conclusions.}",
+      "  \\\\criterion[2]{Communication}{Presents the explanation clearly and coherently.}",
+      "\\\\end{criteria}",
+      "\\\\end{essay}",
+      "",
+      "\\\\end{document}",
+      ""
+    ].join("\\n");
+
+    const blob = new Blob([template], { type: "text/x-tex;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "Exam_Question_Import_Template.tex";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
   }
 
   function buildHeaderMap(headers) {
