@@ -36,7 +36,18 @@ Deno.serve(async (req) => {
       .limit(1000);
 
     if (objectError) throw objectError;
-    const paths = (expiredObjects || []).map((r) => String(r.name || "")).filter(Boolean);
+    const candidatePaths = (expiredObjects || []).map((r) => String(r.name || "")).filter(Boolean);
+    if (!candidatePaths.length) return json({ ok: true, deleted: 0 });
+
+    const { data: protectedRows, error: protectedError } = await admin
+      .from("proctor_photos")
+      .select("object_path")
+      .in("object_path", candidatePaths)
+      .eq("evidence_saved", true);
+
+    if (protectedError) throw protectedError;
+    const protectedPaths = new Set((protectedRows || []).map((r) => String(r.object_path)));
+    const paths = candidatePaths.filter((p) => !protectedPaths.has(p));
     if (!paths.length) return json({ ok: true, deleted: 0 });
 
     const { error: removeError } = await admin.storage.from(BUCKET).remove(paths);
