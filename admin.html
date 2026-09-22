@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260922-1155">
+  <link rel="stylesheet" href="style.css?v=20260922-1145">
 </head>
 <body>
   <main class="shell wide">
@@ -118,6 +118,7 @@
                   <div class="summary-card"><span>Window Blur</span><strong id="summaryBlur">0</strong></div>
                   <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
                   <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
+                  <div class="summary-card"><span>Speech Signals</span><strong id="summarySpeech">0</strong></div>
                 </div>
 
                 <div id="summaryNarrative" class="summary-narrative"></div>
@@ -134,6 +135,7 @@
                     <p><strong>copy/cut/paste/contextmenu blocked</strong> — A restricted editing or right-click action was attempted and blocked.</p>
                     <p><strong>keyboard/developer-tools/reload blocked</strong> — A monitored keyboard shortcut was attempted and blocked.</p>
                     <p><strong>print_attempt / printscreen_key_detected</strong> — A detectable print or screenshot-key action occurred. Screenshot-key detection is best-effort only.</p>
+                    <p><strong>possible_speech_detected</strong> — Sustained sound consistent with possible speech was detected locally by the microphone. No audio is stored, and this event cannot identify the speaker or what was said.</p>
                     <p><strong>student_submit_clicked</strong> — The student pressed the Submit Exam button.</p>
                     <p><strong>exam_submitted</strong> — Supabase finalized the attempt and stored the auto-scored result.</p>
                   </div>
@@ -475,7 +477,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="admin.js?v=20260922-1155"></script>
+  <script src="admin.js?v=20260922-1145"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-2035"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
