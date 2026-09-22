@@ -658,6 +658,16 @@
     }
   }
 
+  function renderMathContent(element, text) {
+    if (!element) return;
+    element.textContent = text || "";
+    element.classList.add("math-rendered");
+    if (window.MathJax?.typesetPromise) {
+      window.MathJax.typesetClear?.([element]);
+      window.MathJax.typesetPromise([element]).catch(() => {});
+    }
+  }
+
   function renderQuestions(savedResponses = []) {
     examForm.innerHTML = "";
     const savedByQuestion = new Map(
@@ -671,12 +681,15 @@
 
       const head = document.createElement("div");
       head.className = "q-head";
-      head.innerHTML = `<span class="q-no">Question ${q.position}</span><span class="points">${q.points} point${q.points == 1 ? "" : "s"}</span>`;
+      const pointLabel = q.question_type === "essay"
+        ? `${q.points} rubric point${q.points == 1 ? "" : "s"}`
+        : `${q.points} point${q.points == 1 ? "" : "s"}`;
+      head.innerHTML = `<span class="q-no">Question ${q.position}</span><span class="points">${pointLabel}</span>`;
       wrap.appendChild(head);
 
       const prompt = document.createElement("div");
       prompt.className = "prompt";
-      prompt.textContent = q.prompt;
+      renderMathContent(prompt, q.prompt);
       wrap.appendChild(prompt);
 
       const state = document.createElement("div");
@@ -686,8 +699,11 @@
         ? `Saved ${saved.saved_at ? new Date(saved.saved_at).toLocaleTimeString() : ""}`.trim()
         : "Not answered";
 
-      if (q.question_type === "mcq") {
-        const choices = Array.isArray(q.choices) ? q.choices : [];
+      if (q.question_type === "mcq" || q.question_type === "binary") {
+        const choices = Array.isArray(q.choices) && q.choices.length
+          ? q.choices
+          : (q.question_type === "binary" ? ["True", "False"] : []);
+
         choices.forEach((choice, i) => {
           const label = document.createElement("label");
           label.className = "choice";
@@ -699,15 +715,20 @@
             radio.checked = true;
           }
           radio.addEventListener("change", () => saveAnswer(q.question_id, radio.value, state));
+
           const span = document.createElement("span");
-          span.textContent = `${String.fromCharCode(65+i)}. ${choice}`;
+          const prefix = q.question_type === "mcq" ? `${String.fromCharCode(65+i)}. ` : "";
+          renderMathContent(span, `${prefix}${choice}`);
+
           label.append(radio, span);
           wrap.appendChild(label);
         });
       } else {
         const ta = document.createElement("textarea");
-        ta.rows = 5;
-        ta.placeholder = "Type your answer here";
+        ta.rows = q.question_type === "essay" ? 9 : 5;
+        ta.placeholder = q.question_type === "essay"
+          ? "Write your essay response here"
+          : "Type your answer here";
         if (saved) ta.value = String(saved.answer ?? "");
         let debounce;
         ta.addEventListener("input", () => {
@@ -716,6 +737,32 @@
           debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 600);
         });
         wrap.appendChild(ta);
+
+        if (q.question_type === "essay" && Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) {
+          const rubric = document.createElement("details");
+          rubric.className = "student-rubric";
+          const summary = document.createElement("summary");
+          summary.textContent = "View essay scoring criteria";
+          rubric.appendChild(summary);
+
+          const table = document.createElement("table");
+          table.innerHTML = "<thead><tr><th>Criterion</th><th>Description</th><th>Max Points</th></tr></thead>";
+          const tbody = document.createElement("tbody");
+          q.rubric_criteria.forEach(item => {
+            const tr = document.createElement("tr");
+            const criterion = document.createElement("td");
+            criterion.textContent = String(item?.criterion || "");
+            const description = document.createElement("td");
+            description.textContent = String(item?.description || "");
+            const max = document.createElement("td");
+            max.textContent = String(item?.max_points ?? "");
+            tr.append(criterion, description, max);
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          rubric.appendChild(table);
+          wrap.appendChild(rubric);
+        }
       }
 
       wrap.appendChild(state);
