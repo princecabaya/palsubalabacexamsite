@@ -124,7 +124,7 @@
       editingExamId = null;
       clearExamForm();
       $("examResultsPanel")?.classList.add("hidden");
-      $("detailPanel")?.classList.add("hidden");
+      closeAttemptDrawer();
       updateWorkspaceNote();
       await Promise.all([
         refreshAttempts(),
@@ -388,6 +388,7 @@
       for (const a of group.attempts) {
         const tr = document.createElement("tr");
         tr.className = "clickable attempt-student-row";
+        tr.dataset.attemptId = a.id;
         const signals = signalCount(a.id);
         const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
         tr.innerHTML = `
@@ -633,11 +634,22 @@
   }
 
   async function openDetail(a) {
-    $("detailPanel").classList.remove("hidden");
+    document.querySelectorAll(".attempt-student-row.is-selected").forEach(row => row.classList.remove("is-selected"));
+    const selectedRow = [...document.querySelectorAll(".attempt-student-row")].find(row => row.dataset.attemptId === a.id);
+    selectedRow?.classList.add("is-selected");
+
+    const panel = $("detailPanel");
+    panel.classList.remove("hidden");
+    requestAnimationFrame(() => panel.classList.add("open"));
+
+    const summaryDetails = $("attemptSummary");
+    if (summaryDetails && "open" in summaryDetails) summaryDetails.open = true;
     const savedDetails = $("savedResponsesSection");
     if (savedDetails && "open" in savedDetails) savedDetails.open = false;
     const photoDetails = $("proctorPhotosSection");
     if (photoDetails && "open" in photoDetails) photoDetails.open = false;
+    const eventDetails = $("eventDetailsSection");
+    if (eventDetails && "open" in eventDetails) eventDetails.open = false;
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
@@ -661,6 +673,8 @@
     }
 
     const events = data || [];
+    const eventCount = $("eventDetailsCount");
+    if (eventCount) eventCount.textContent = `${events.length} event${events.length === 1 ? "" : "s"}`;
     renderAttemptSummary(a, events);
 
     for (const e of events) {
@@ -1640,9 +1654,16 @@
     await Promise.all([loadExams(), refreshAttempts()]);
   }
 
+  function closeAttemptDrawer() {
+    const panel = $("detailPanel");
+    if (!panel || panel.classList.contains("hidden")) return;
+    panel.classList.remove("open");
+    setTimeout(() => panel.classList.add("hidden"), 180);
+  }
+
   $("searchBox").addEventListener("input", renderAttempts);
   $("refreshBtn").addEventListener("click", refreshAttempts);
-  $("closeDetail").addEventListener("click", () => $("detailPanel").classList.add("hidden"));
+  $("closeDetail").addEventListener("click", closeAttemptDrawer);
   $("signOutBtn").addEventListener("click", async () => {
     clearInterval(pollHandle);
     await db.auth.signOut();
