@@ -452,7 +452,7 @@
 
     const { data: questions, error: questionError } = await db
       .from("questions")
-      .select("position,prompt,question_type,choices,points")
+      .select("position,prompt,question_type,choices,points,rubric_criteria")
       .eq("exam_id", examId)
       .order("position", { ascending: true });
 
@@ -539,7 +539,7 @@
 
       y += promptLines.length * 5 + 3;
 
-      if (q.question_type === "mcq" && Array.isArray(q.choices)) {
+      if ((q.question_type === "mcq" || q.question_type === "binary") && Array.isArray(q.choices)) {
         const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         q.choices.forEach((choice, index) => {
           const choiceLines = split(`${letters[index] || index + 1}. ${choice}`, 160);
