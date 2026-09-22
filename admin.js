@@ -15,6 +15,8 @@
   let activeWorkspaceOwnerId = null;
   let teacherManagementBound = false;
   const expandedAttemptExams = new Set();
+  let currentDetailAttempt = null;
+  let currentProctorPhotos = [];
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -634,6 +636,8 @@
   }
 
   async function openDetail(a) {
+    currentDetailAttempt = a;
+    currentProctorPhotos = [];
     document.querySelectorAll(".attempt-student-row.is-selected").forEach(row => row.classList.remove("is-selected"));
     const selectedRow = [...document.querySelectorAll(".attempt-student-row")].find(row => row.dataset.attemptId === a.id);
     selectedRow?.classList.add("is-selected");
@@ -695,6 +699,8 @@
 
     grid.innerHTML = '<p class="muted">Loading proctoring photos…</p>';
     count.textContent = "Loading…";
+    currentProctorPhotos = [];
+    updateProctorPhotoSelection();
 
     try {
       const { data, error } = await db.functions.invoke("list-proctor-photos", {
@@ -705,42 +711,141 @@
       if (data?.error) throw new Error(data.error);
 
       const photos = data?.photos || [];
+      currentProctorPhotos = photos;
       count.textContent = `${photos.length} photo${photos.length === 1 ? "" : "s"}`;
 
       if (!photos.length) {
-        note.textContent = "No unexpired front-camera photos are currently available for this attempt.";
+        note.textContent = "No unexpired or preserved front-camera photos are currently available for this attempt.";
         grid.innerHTML = '<p class="muted">No photos available.</p>';
+        updateProctorPhotoSelection();
         return;
       }
 
-      note.textContent = "Front-camera photos are private and automatically expire after 24 hours.";
+      const evidenceCount = photos.filter(p => p.evidence_saved).length;
+      note.textContent = evidenceCount
+        ? `${evidenceCount} preserved as evidence. Other photos follow the normal 24-hour retention.`
+        : "Front-camera photos are private and normally expire after 24 hours.";
+
       grid.innerHTML = "";
 
       for (const photo of photos) {
         const figure = document.createElement("figure");
         figure.className = "proctor-photo-card";
+        figure.dataset.photoId = photo.id;
+        figure.dataset.evidenceSaved = photo.evidence_saved ? "true" : "false";
+
+        const selectLabel = document.createElement("label");
+        selectLabel.className = "proctor-photo-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "proctor-photo-checkbox";
+        checkbox.value = photo.id;
+        checkbox.addEventListener("change", updateProctorPhotoSelection);
+        const selectText = document.createElement("span");
+        selectText.textContent = "Select";
+        selectLabel.append(checkbox, selectText);
+
+        const imgWrap = document.createElement("div");
+        imgWrap.className = "proctor-photo-image-wrap";
 
         const img = document.createElement("img");
         img.src = photo.url;
         img.alt = `Proctoring photo captured ${fmt(photo.captured_at)}`;
         img.loading = "lazy";
+        imgWrap.appendChild(img);
+
+        if (photo.evidence_saved) {
+          const badge = document.createElement("span");
+          badge.className = "proctor-evidence-badge";
+          badge.textContent = "Evidence";
+          imgWrap.appendChild(badge);
+        }
 
         const caption = document.createElement("figcaption");
+        const retentionText = photo.evidence_saved
+          ? `Preserved ${photo.evidence_saved_at ? fmt(photo.evidence_saved_at) : ""}`
+          : `Expires ${fmt(photo.expires_at)}`;
         caption.innerHTML = `
           <strong>${escapeHtml(fmt(photo.captured_at))}</strong>
-          <span>Expires ${escapeHtml(fmt(photo.expires_at))}</span>
+          <span>${escapeHtml(retentionText)}</span>
         `;
 
-        figure.append(img, caption);
+        figure.append(selectLabel, imgWrap, caption);
         grid.appendChild(figure);
       }
+
+      updateProctorPhotoSelection();
     } catch (error) {
       console.warn("Could not load proctor photos:", error);
       count.textContent = "Unavailable";
       note.textContent = "Proctoring photos could not be loaded.";
       grid.innerHTML = `<p class="muted">${escapeHtml(error?.message || String(error))}</p>`;
+      updateProctorPhotoSelection();
     }
   }
+
+  function getSelectedProctorPhotoIds() {
+    return [...document.querySelectorAll(".proctor-photo-checkbox:checked")]
+      .map(input => input.value)
+      .filter(Boolean);
+  }
+
+  function updateProctorPhotoSelection() {
+    const selectedIds = getSelectedProctorPhotoIds();
+    const selection = $("proctorPhotoSelection");
+    const saveBtn = $("saveSelectedEvidenceBtn");
+    const releaseBtn = $("releaseSelectedEvidenceBtn");
+
+    if (selection) selection.textContent = `${selectedIds.length} selected`;
+
+    const selectedPhotos = currentProctorPhotos.filter(p => selectedIds.includes(p.id));
+    const hasUnsaved = selectedPhotos.some(p => !p.evidence_saved);
+    const hasSaved = selectedPhotos.some(p => p.evidence_saved);
+
+    if (saveBtn) saveBtn.disabled = !hasUnsaved;
+    if (releaseBtn) releaseBtn.disabled = !hasSaved;
+  }
+
+  async function setSelectedPhotoEvidence(saved) {
+    const ids = getSelectedProctorPhotoIds();
+    if (!ids.length || !currentDetailAttempt) return;
+
+    const targetIds = currentProctorPhotos
+      .filter(p => ids.includes(p.id) && Boolean(p.evidence_saved) !== saved)
+      .map(p => p.id);
+
+    if (!targetIds.length) return;
+
+    const action = saved ? "preserve" : "release";
+    const message = saved
+      ? `Preserve ${targetIds.length} selected photo${targetIds.length === 1 ? "" : "s"} as examination evidence? These photos will no longer be deleted by the normal 24-hour cleanup until you release them.`
+      : `Release ${targetIds.length} preserved photo${targetIds.length === 1 ? "" : "s"}? They will return to the normal retention policy and may be deleted by the next cleanup if already older than 24 hours.`;
+
+    if (!confirm(message)) return;
+
+    const saveBtn = $("saveSelectedEvidenceBtn");
+    const releaseBtn = $("releaseSelectedEvidenceBtn");
+    if (saveBtn) saveBtn.disabled = true;
+    if (releaseBtn) releaseBtn.disabled = true;
+
+    const { data, error } = await db.rpc("set_proctor_photo_evidence", {
+      p_photo_ids: targetIds,
+      p_saved: saved
+    });
+
+    if (error) {
+      alert(`Could not ${action} selected photo evidence: ${error.message}`);
+      updateProctorPhotoSelection();
+      return;
+    }
+
+    if (!data) {
+      alert("No photos were updated. They may no longer be available.");
+    }
+
+    await loadProctorPhotos(currentDetailAttempt);
+  }
+
 
   async function loadSavedResponses(attempt) {
     const rows = $("savedResponseRows");
@@ -1660,6 +1765,9 @@
     panel.classList.remove("open");
     setTimeout(() => panel.classList.add("hidden"), 180);
   }
+
+  $("saveSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(true));
+  $("releaseSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(false));
 
   $("searchBox").addEventListener("input", renderAttempts);
   $("refreshBtn").addEventListener("click", refreshAttempts);
