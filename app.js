@@ -552,7 +552,14 @@
     $("identityConfirmModal").classList.add("hidden");
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     resetExamFlagCounts();
-    await loadExam({ restored: false, savedResponses: [] });
+
+    let existingResponses = [];
+    const { data: savedOnStart, error: savedOnStartError } = await db.rpc("get_saved_exam_responses", {
+      p_attempt_token: attempt.attempt_token
+    });
+    if (!savedOnStartError) existingResponses = savedOnStart || [];
+
+    await loadExam({ restored: existingResponses.length > 0, savedResponses: existingResponses });
     startCameraCaptureSchedule();
     await startSpeechMonitoring();
   });
