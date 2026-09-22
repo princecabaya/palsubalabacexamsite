@@ -1370,9 +1370,8 @@
       </div>
 
       <label>Question prompt
-        <textarea class="q-prompt" rows="4" placeholder="Enter the full question here. For formatted mathematics, use LaTeX such as \\(x=2\\left(\\frac{1}{y+4}\\right)\\) .">${escapeAttr(q.prompt)}</textarea>
+        <textarea class="q-prompt" rows="4" placeholder="Enter the question here">${escapeAttr(q.prompt)}</textarea>
       </label>
-      <p class="muted math-help">Mathematics formatting: use LaTeX inside <code>\\(...\\)</code> for inline math or <code>\\[...\\]</code> for display math.</p>
       <div class="math-preview" aria-label="Question math preview"></div>
 
       <div class="form-grid compact">
