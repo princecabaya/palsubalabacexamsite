@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260921-1655">
+  <link rel="stylesheet" href="style.css?v=20260922-0935">
 </head>
 <body>
   <main class="shell wide">
@@ -89,106 +89,116 @@
           </table>
         </div>
 
-        <section id="detailPanel" class="card hidden">
-          <div class="detail-head">
+        <aside id="detailPanel" class="attempt-detail-drawer hidden" aria-label="Student attempt details">
+          <div class="attempt-drawer-header">
             <div>
               <h2 id="detailTitle">Attempt details</h2>
               <p id="detailMeta" class="muted"></p>
             </div>
-            <button id="closeDetail">Close</button>
+            <button id="closeDetail" type="button" aria-label="Close attempt details">Close</button>
           </div>
 
-          <section id="attemptSummary" class="attempt-summary">
-            <div class="summary-head">
-              <div>
-                <h3>Attempt Summary</h3>
-                <p class="muted">Plain-language interpretation of this student's exam activity.</p>
-              </div>
-              <span id="summaryReviewBadge" class="badge">Summary</span>
-            </div>
+          <div class="attempt-drawer-scroll">
+            <details id="attemptSummary" class="attempt-drawer-section" open>
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Attempt Summary</strong>
+                  <span class="muted">Score, duration, device, and review signals</span>
+                </span>
+                <span id="summaryReviewBadge" class="badge">Summary</span>
+              </summary>
 
-            <div class="attempt-summary-grid">
-              <div class="summary-card"><span>Score</span><strong id="summaryScore">—</strong></div>
-              <div class="summary-card"><span>Percentage</span><strong id="summaryPercent">—</strong></div>
-              <div class="summary-card"><span>Exam Time</span><strong id="summaryDuration">—</strong></div>
-              <div class="summary-card"><span>Device</span><strong id="summaryDevice">—</strong></div>
-              <div class="summary-card"><span>Tab Hidden</span><strong id="summaryTabHidden">0</strong></div>
-              <div class="summary-card"><span>Window Blur</span><strong id="summaryBlur">0</strong></div>
-              <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
-              <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
-            </div>
+              <div class="attempt-drawer-body">
+                <div class="attempt-summary-grid">
+                  <div class="summary-card"><span>Score</span><strong id="summaryScore">—</strong></div>
+                  <div class="summary-card"><span>Percentage</span><strong id="summaryPercent">—</strong></div>
+                  <div class="summary-card"><span>Exam Time</span><strong id="summaryDuration">—</strong></div>
+                  <div class="summary-card"><span>Device</span><strong id="summaryDevice">—</strong></div>
+                  <div class="summary-card"><span>Tab Hidden</span><strong id="summaryTabHidden">0</strong></div>
+                  <div class="summary-card"><span>Window Blur</span><strong id="summaryBlur">0</strong></div>
+                  <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
+                  <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
+                </div>
 
-            <div id="summaryNarrative" class="summary-narrative"></div>
+                <div id="summaryNarrative" class="summary-narrative"></div>
 
-            <details class="event-guide">
-              <summary>What do these event names mean?</summary>
-              <div class="event-guide-grid">
-                <p><strong>exam_started</strong> — The exam session began. Device, screen size, visibility, and fullscreen state may be recorded.</p>
-                <p><strong>tab_or_window_hidden</strong> — The exam page became hidden, such as switching tabs/apps or minimizing the browser. It does not identify where the student went.</p>
-                <p><strong>tab_or_window_visible</strong> — The exam page became visible again.</p>
-                <p><strong>window_blur</strong> — The browser window lost focus. This can happen when another app/window is tapped or when browser controls are used.</p>
-                <p><strong>window_focus</strong> — Focus returned to the exam browser window.</p>
-                <p><strong>fullscreen_exit</strong> — The exam left fullscreen after fullscreen had been active.</p>
-                <p><strong>copy/cut/paste/contextmenu blocked</strong> — A restricted editing or right-click action was attempted and blocked.</p>
-                <p><strong>keyboard/developer-tools/reload blocked</strong> — A monitored keyboard shortcut was attempted and blocked.</p>
-                <p><strong>print_attempt / printscreen_key_detected</strong> — A detectable print or screenshot-key action occurred. Screenshot-key detection is best-effort only.</p>
-                <p><strong>student_submit_clicked</strong> — The student pressed the Submit Exam button.</p>
-                <p><strong>exam_submitted</strong> — Supabase finalized the attempt and stored the auto-scored result.</p>
+                <details class="event-guide">
+                  <summary>What do these event names mean?</summary>
+                  <div class="event-guide-grid">
+                    <p><strong>exam_started</strong> — The exam session began. Device, screen size, visibility, and fullscreen state may be recorded.</p>
+                    <p><strong>tab_or_window_hidden</strong> — The exam page became hidden, such as switching tabs/apps or minimizing the browser. It does not identify where the student went.</p>
+                    <p><strong>tab_or_window_visible</strong> — The exam page became visible again.</p>
+                    <p><strong>window_blur</strong> — The browser window lost focus. This can happen when another app/window is tapped or when browser controls are used.</p>
+                    <p><strong>window_focus</strong> — Focus returned to the exam browser window.</p>
+                    <p><strong>fullscreen_exit</strong> — The exam left fullscreen after fullscreen had been active.</p>
+                    <p><strong>copy/cut/paste/contextmenu blocked</strong> — A restricted editing or right-click action was attempted and blocked.</p>
+                    <p><strong>keyboard/developer-tools/reload blocked</strong> — A monitored keyboard shortcut was attempted and blocked.</p>
+                    <p><strong>print_attempt / printscreen_key_detected</strong> — A detectable print or screenshot-key action occurred. Screenshot-key detection is best-effort only.</p>
+                    <p><strong>student_submit_clicked</strong> — The student pressed the Submit Exam button.</p>
+                    <p><strong>exam_submitted</strong> — Supabase finalized the attempt and stored the auto-scored result.</p>
+                  </div>
+                </details>
+
+                <div class="interpretation-note">
+                  <strong>How to interpret:</strong> Focus and visibility changes are behavioral signals only. They cannot identify the exact app, website, or reason for the change and should not be treated alone as proof of misconduct.
+                </div>
               </div>
             </details>
 
-            <div class="interpretation-note">
-              <strong>How to interpret:</strong> Focus and visibility changes are behavioral signals only. They cannot identify the exact app, website, or reason for the change and should not be treated alone as proof of misconduct.
-            </div>
-          </section>
-
-          <details id="savedResponsesSection" class="saved-responses-section">
-            <summary class="saved-responses-summary">
-              <span>
-                <strong>Saved Responses</strong>
-                <span id="savedResponsesNote" class="muted">Loading autosaved responses…</span>
-              </span>
-              <span id="savedResponsesCount" class="badge">0 answered</span>
-            </summary>
-
-            <div class="saved-responses-body">
-              <div class="table-wrap">
-                <table class="saved-responses-table">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Saved Answer</th>
-                      <th>Last Saved</th>
-                    </tr>
-                  </thead>
-                  <tbody id="savedResponseRows"></tbody>
-                </table>
+            <details id="savedResponsesSection" class="attempt-drawer-section">
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Saved Responses</strong>
+                  <span id="savedResponsesNote" class="muted">Loading autosaved responses…</span>
+                </span>
+                <span id="savedResponsesCount" class="badge">0 answered</span>
+              </summary>
+              <div class="attempt-drawer-body">
+                <div class="table-wrap">
+                  <table class="saved-responses-table">
+                    <thead>
+                      <tr><th>Item</th><th>Saved Answer</th><th>Last Saved</th></tr>
+                    </thead>
+                    <tbody id="savedResponseRows"></tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          </details>
+            </details>
 
-          <details id="proctorPhotosSection" class="proctor-photos-section">
-            <summary class="saved-responses-summary">
-              <span>
-                <strong>Proctoring Photos</strong>
-                <span id="proctorPhotosNote" class="muted">Front-camera images are retained for up to 24 hours.</span>
-              </span>
-              <span id="proctorPhotosCount" class="badge">0 photos</span>
-            </summary>
-            <div class="proctor-photos-body">
-              <div id="proctorPhotoGrid" class="proctor-photo-grid"></div>
-            </div>
-          </details>
+            <details id="proctorPhotosSection" class="attempt-drawer-section">
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Proctoring Photos</strong>
+                  <span id="proctorPhotosNote" class="muted">Front-camera images are retained for up to 24 hours.</span>
+                </span>
+                <span id="proctorPhotosCount" class="badge">0 photos</span>
+              </summary>
+              <div class="attempt-drawer-body">
+                <div id="proctorPhotoGrid" class="proctor-photo-grid"></div>
+              </div>
+            </details>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Time</th><th>Event</th><th>Details</th></tr>
-              </thead>
-              <tbody id="eventRows"></tbody>
-            </table>
+            <details id="eventDetailsSection" class="attempt-drawer-section">
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Event Details</strong>
+                  <span class="muted">Detailed proctoring event timeline</span>
+                </span>
+                <span id="eventDetailsCount" class="badge">0 events</span>
+              </summary>
+              <div class="attempt-drawer-body">
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Time</th><th>Event</th><th>Details</th></tr>
+                    </thead>
+                    <tbody id="eventRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
           </div>
-        </section>
+        </aside>
       </section>
 
       <section id="createSection" class="tab-section hidden">
@@ -457,7 +467,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260921-1305"></script>
-  <script src="admin.js?v=20260921-1655"></script>
+  <script src="admin.js?v=20260922-0935"></script>
   <script src="admin-import.js?v=20260920-1806"></script>
   <script src="admin-results.js?v=20260920-2035"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
