@@ -207,7 +207,12 @@
     $("startBtn").disabled = false;
 
     if (error || !data?.length) {
-      msg.textContent = error?.message || "Could not verify the student identity.";
+      const detail = String(error?.message || error?.details || error?.hint || "");
+      if (/preview_exam_identity|function.*does not exist|schema cache|PGRST202/i.test(detail)) {
+        msg.textContent = "Student identity confirmation is not installed in Supabase yet. Run supabase-upgrade-student-identity-confirmation.sql once in Supabase SQL Editor.";
+      } else {
+        msg.textContent = error?.message || "Could not verify the Exam Code and Student ID.";
+      }
       return;
     }
 
