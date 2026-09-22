@@ -540,3 +540,247 @@ button.danger-outline:hover{background:#fff0ee}
 .student-rubric table{width:100%;border-collapse:collapse}
 .student-rubric th,.student-rubric td{padding:8px 10px;border-top:1px solid var(--line);text-align:left;vertical-align:top;font-size:.86rem}
 .student-rubric th:last-child,.student-rubric td:last-child{text-align:center;white-space:nowrap}
+
+
+/* =========================================================
+   Admin dashboard responsive overhaul
+   ========================================================= */
+.admin-header{min-width:0}
+.admin-header>div:first-child{min-width:0}
+.admin-header h1{line-height:1.08;overflow-wrap:anywhere}
+.admin-header>.row{flex:0 0 auto;flex-wrap:wrap}
+.tabbar{-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.tab-btn{white-space:nowrap}
+.card,.question-card,.student-enroll-card,.teacher-add-card{min-width:0}
+textarea{resize:vertical}
+.action-cell button{white-space:nowrap}
+
+@media(max-width:820px){
+  body{padding:10px}
+  .shell.wide{width:100%;max-width:none}
+  .card{padding:16px;border-radius:14px}
+  .admin-header{gap:10px;margin-bottom:8px}
+  .admin-header>.row{width:100%;display:grid;grid-template-columns:1fr 1fr}
+  .admin-header>.row button{width:100%;min-height:44px}
+
+  .teacher-workspace-bar{padding:12px;margin:10px 0 12px;gap:10px}
+  .teacher-workspace-bar label{width:100%}
+  .teacher-workspace-bar select{min-height:44px}
+
+  .notice{font-size:.9rem;margin:10px 0;padding:11px 12px}
+
+  .tabbar{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    gap:7px;
+    margin:10px -10px 14px;
+    padding:2px 10px 8px;
+    scroll-snap-type:x proximity;
+  }
+  .tab-btn{
+    flex:0 0 auto;
+    min-height:42px;
+    padding:9px 14px;
+    scroll-snap-align:start;
+  }
+
+  .toolbar{margin:12px 0;gap:8px}
+  .toolbar input,.toolbar select{min-height:44px}
+  .toolbar .muted{font-size:.8rem}
+
+  .form-grid,.form-grid.compact{gap:10px}
+  label{margin-top:12px}
+  input,textarea,select{font-size:16px;padding:11px}
+  button{min-height:42px}
+
+  .section-actions{flex-wrap:wrap}
+  .section-actions button{flex:1 1 145px}
+
+  .excel-import-card{padding:14px;margin-top:14px}
+  .excel-import-card .detail-head{gap:8px}
+  .excel-import-card .detail-head button{width:100%}
+  .excel-import-controls{margin-top:10px}
+  .excel-import-controls button{width:100%}
+
+  .question-card{padding:14px;border-radius:13px}
+  .question-card>.detail-head{display:grid;grid-template-columns:1fr auto;align-items:start}
+  .question-card>.detail-head .remove-question-btn{width:auto}
+  .math-preview{max-width:100%;overflow:auto}
+  .choice-row{gap:7px}
+  .choice-row .choice-input{min-width:0}
+  .choice-move-controls{flex-wrap:wrap}
+  .choice-move-controls button,.choice-row .remove-choice-btn{min-height:38px;padding:7px 9px}
+
+  .rubric-import-controls{align-items:stretch}
+  .rubric-import-controls>*{width:100%;max-width:none!important}
+
+  .attempt-group-toggle{padding:12px}
+  .attempt-group-title strong{overflow-wrap:anywhere}
+  .attempt-group-summary{font-size:.78rem}
+  .exam-excel-btn{width:calc(100% - 24px);margin:0 12px 10px}
+
+  .attempt-drawer-header{gap:10px}
+  .attempt-recovery-actions{width:100%;display:grid;grid-template-columns:1fr}
+  .attempt-recovery-actions button{width:100%}
+  .attempt-drawer-summary{padding:12px}
+}
+
+@media(max-width:640px){
+  body{padding:8px}
+  .card{padding:13px;border-radius:12px}
+  .brand{gap:10px;margin-bottom:16px}
+  .brand h1{font-size:1.35rem}
+  .logo{width:42px;height:42px;border-radius:11px}
+
+  .admin-header h1{font-size:1.55rem}
+  .admin-header p{font-size:.88rem}
+
+  .teacher-workspace-bar strong{font-size:.95rem}
+  .teacher-workspace-bar p{font-size:.82rem}
+
+  /* Turn attempt rows into tap-friendly cards. */
+  .attempts-table-wrap{
+    border:0;
+    background:transparent;
+    overflow:visible;
+  }
+  .attempts-table{display:block}
+  .attempts-table thead{display:none}
+  .attempts-table tbody{display:grid;gap:10px}
+  .attempts-table tr{display:block}
+
+  .attempts-table .attempt-exam-group{
+    border:1px solid var(--line);
+    border-radius:13px;
+    overflow:hidden;
+    background:#f7f9fd;
+  }
+  .attempts-table .attempt-exam-group td{
+    display:block;
+    width:100%;
+    border:0;
+  }
+
+  .attempts-table .attempt-student-row{
+    border:1px solid var(--line);
+    border-radius:13px;
+    padding:11px 12px;
+    background:#fff;
+    box-shadow:0 3px 12px rgba(20,35,70,.04);
+  }
+  .attempts-table .attempt-student-row td{
+    display:grid;
+    grid-template-columns:92px minmax(0,1fr);
+    gap:10px;
+    width:100%;
+    padding:7px 0!important;
+    border:0;
+    align-items:start;
+    overflow-wrap:anywhere;
+  }
+  .attempts-table .attempt-student-row td::before{
+    content:attr(data-label);
+    color:var(--muted);
+    font-size:.76rem;
+    font-weight:750;
+    text-transform:uppercase;
+    letter-spacing:.02em;
+  }
+  .attempts-table .attempt-student-row td:first-child{
+    display:block;
+    padding-bottom:9px!important;
+    margin-bottom:3px;
+    border-bottom:1px solid var(--line);
+  }
+  .attempts-table .attempt-student-row td:first-child::before{display:none}
+  .attempts-table .attempt-student-row td:nth-child(2){display:none}
+
+  /* Manage Exams becomes one card per exam instead of a compressed table. */
+  .manage-table-wrap{
+    border:0;
+    background:transparent;
+    overflow:visible;
+  }
+  .manage-exams-table{display:block}
+  .manage-exams-table thead{display:none}
+  .manage-exams-table tbody{display:grid;gap:12px}
+  .manage-exams-table tr{
+    display:block;
+    padding:13px;
+    border:1px solid var(--line);
+    border-radius:13px;
+    background:#fff;
+    box-shadow:0 3px 12px rgba(20,35,70,.04);
+  }
+  .manage-exams-table td{
+    display:grid;
+    grid-template-columns:86px minmax(0,1fr);
+    gap:10px;
+    align-items:start;
+    width:100%;
+    padding:6px 0;
+    border:0;
+    overflow-wrap:anywhere;
+  }
+  .manage-exams-table td::before{
+    content:attr(data-label);
+    color:var(--muted);
+    font-size:.76rem;
+    font-weight:750;
+    text-transform:uppercase;
+    letter-spacing:.02em;
+  }
+  .manage-exams-table td[data-label="Title"]{
+    display:block;
+    padding-bottom:10px;
+    margin-bottom:4px;
+    border-bottom:1px solid var(--line);
+  }
+  .manage-exams-table td[data-label="Title"]::before{display:none}
+  .manage-exams-table td[data-label="Actions"]{
+    display:block;
+    border-top:1px solid var(--line);
+    margin-top:5px;
+    padding-top:11px;
+  }
+  .manage-exams-table td[data-label="Actions"]::before{
+    display:block;
+    margin-bottom:7px;
+  }
+  .manage-exams-table .action-cell{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .manage-exams-table .action-cell button{width:100%;white-space:normal;padding:8px}
+  .manage-exams-table .action-cell .badge{align-self:center}
+
+  /* Generic admin tables that are not converted to cards remain scrollable
+     rather than being crushed into unreadable narrow columns. */
+  .table-wrap:not(.attempts-table-wrap):not(.manage-table-wrap){
+    max-width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .table-wrap:not(.attempts-table-wrap):not(.manage-table-wrap)>table{
+    min-width:680px;
+  }
+
+  .attempt-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .summary-card{padding:10px}
+  .event-guide-grid{grid-template-columns:1fr}
+
+  .attempt-detail-drawer{width:100vw;max-width:100vw}
+  .attempt-drawer-scroll{padding:8px}
+  .attempt-drawer-section{border-radius:11px}
+
+  .student-enroll-card{padding:14px}
+  .student-toolbar input{min-width:0}
+}
+
+@media(max-width:420px){
+  .admin-header>.row{grid-template-columns:1fr}
+  .tab-btn{padding:8px 12px;font-size:.88rem}
+  .question-card>.detail-head{grid-template-columns:1fr}
+  .question-card>.detail-head .remove-question-btn{width:100%}
+  .attempts-table .attempt-student-row td{grid-template-columns:76px minmax(0,1fr)}
+  .manage-exams-table td{grid-template-columns:74px minmax(0,1fr)}
+  .manage-exams-table .action-cell{grid-template-columns:1fr}
+  .attempt-summary-grid{grid-template-columns:1fr}
+}
