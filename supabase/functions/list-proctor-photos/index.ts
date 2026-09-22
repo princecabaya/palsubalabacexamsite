@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
 
     const { data: attempt, error: attemptError } = await admin
       .from("attempts")
-      .select("id,exam_id,exams(owner_id)")
+      .select("id,exam_id,exams(owner_id,status,archived)")
       .eq("id", attemptId)
       .maybeSingle();
 
@@ -50,7 +50,25 @@ Deno.serve(async (req) => {
     if (!attempt) return json({ error: "Attempt not found." }, 404);
 
     const exam = Array.isArray(attempt.exams) ? attempt.exams[0] : attempt.exams;
-    const canAccess = profile.role === "main_admin" || exam?.owner_id === userId;
+
+    let isAssignedProctor = false;
+    if (exam?.status === "published" && !exam?.archived) {
+      const { data: assignment, error: assignmentError } = await admin
+        .from("exam_proctors")
+        .select("exam_id")
+        .eq("exam_id", attempt.exam_id)
+        .eq("teacher_user_id", userId)
+        .maybeSingle();
+
+      if (assignmentError) throw assignmentError;
+      isAssignedProctor = Boolean(assignment);
+    }
+
+    const canAccess =
+      profile.role === "main_admin" ||
+      exam?.owner_id === userId ||
+      isAssignedProctor;
+
     if (!canAccess) return json({ error: "You do not have access to this attempt." }, 403);
 
     const { data: photos, error: photoError } = await admin
