@@ -489,3 +489,14 @@ button.danger-outline:hover{background:#fff0ee}
     font-size:.7rem;
   }
 }
+
+
+/* Remaining time in fixed monitoring bar */
+.flag-chip-time{
+  background:#e0f2fe;
+  color:#075985;
+}
+.flag-chip-time strong{
+  min-width:54px;
+  font-variant-numeric:tabular-nums;
+}
