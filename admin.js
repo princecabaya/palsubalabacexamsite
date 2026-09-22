@@ -1321,6 +1321,30 @@
     setCreateMessage("");
   }
 
+  function typesetMathElement(element) {
+    if (!element || !window.MathJax?.typesetPromise) return;
+    window.MathJax.typesetClear?.([element]);
+    window.MathJax.typesetPromise([element]).catch(() => {});
+  }
+
+  function renderMathPreview(card) {
+    const textarea = card.querySelector(".q-prompt");
+    const preview = card.querySelector(".math-preview");
+    if (!textarea || !preview) return;
+
+    preview.textContent = textarea.value || "";
+    typesetMathElement(preview);
+  }
+
+  function normalizeRubricCriteria(criteria) {
+    if (!Array.isArray(criteria)) return [];
+    return criteria.map((item, index) => ({
+      criterion: String(item?.criterion ?? item?.name ?? `Criterion ${index + 1}`).trim(),
+      description: String(item?.description ?? "").trim(),
+      max_points: Number(item?.max_points ?? item?.points ?? 0)
+    })).filter(item => item.criterion || item.description || item.max_points > 0);
+  }
+
   function addQuestionCard(prefill = null) {
     questionCounter += 1;
     const idx = questionCounter;
@@ -1329,7 +1353,8 @@
       question_type: "mcq",
       points: 1,
       choices: ["", "", "", ""],
-      correct_answer: ""
+      correct_answer: "",
+      rubric_criteria: []
     };
 
     const card = document.createElement("section");
@@ -1345,14 +1370,17 @@
       </div>
 
       <label>Question prompt
-        <textarea class="q-prompt" rows="4" placeholder="Enter the full question here">${escapeAttr(q.prompt)}</textarea>
+        <textarea class="q-prompt" rows="4" placeholder="Enter the full question here. For formatted mathematics, use LaTeX such as \\(x=2\\left(\\frac{1}{y+4}\\right)\\) .">${escapeAttr(q.prompt)}</textarea>
       </label>
+      <p class="muted math-help">Mathematics formatting: use LaTeX inside <code>\\(...\\)</code> for inline math or <code>\\[...\\]</code> for display math.</p>
+      <div class="math-preview" aria-label="Question math preview"></div>
 
       <div class="form-grid compact">
         <label>Question type
           <select class="q-type">
             <option value="mcq" ${q.question_type === "mcq" ? "selected" : ""}>Multiple Choice</option>
-            <option value="text" ${q.question_type === "text" ? "selected" : ""}>Text / Essay</option>
+            <option value="binary" ${q.question_type === "binary" ? "selected" : ""}>Binary Response</option>
+            <option value="essay" ${(q.question_type === "essay" || q.question_type === "text") ? "selected" : ""}>Essay</option>
           </select>
         </label>
 
@@ -1365,7 +1393,7 @@
         <div class="detail-head">
           <div>
             <h4>Choices</h4>
-            <p class="muted">For multiple choice, add the answer options below.</p>
+            <p class="muted">For multiple choice, add the answer options below. LaTeX is supported in option text.</p>
           </div>
           <button type="button" class="add-choice-btn">Add Choice</button>
         </div>
@@ -1374,9 +1402,50 @@
           <select class="q-correct"></select>
         </label>
       </div>
+
+      <div class="binary-area hidden">
+        <h4>Binary Response</h4>
+        <p class="muted">Students will choose one of two responses.</p>
+        <div class="form-grid compact">
+          <label>First response
+            <input class="binary-choice-a" value="${escapeAttr(Array.isArray(q.choices) && q.choices[0] ? q.choices[0] : "True")}">
+          </label>
+          <label>Second response
+            <input class="binary-choice-b" value="${escapeAttr(Array.isArray(q.choices) && q.choices[1] ? q.choices[1] : "False")}">
+          </label>
+        </div>
+        <label>Correct response
+          <select class="binary-correct"></select>
+        </label>
+      </div>
+
+      <div class="essay-rubric-area hidden">
+        <div class="rubric-head">
+          <div>
+            <h4>Essay Criteria</h4>
+            <p class="muted">Essay points are calculated automatically from the maximum points of the criteria below.</p>
+          </div>
+          <span class="rubric-total">Total: <strong class="rubric-total-value">0</strong> points</span>
+        </div>
+        <div class="rubric-list"></div>
+        <div class="rubric-import-controls">
+          <button type="button" class="add-rubric-btn">Add Criterion</button>
+          <button type="button" class="download-rubric-template-btn">Download Criteria Template</button>
+          <input class="rubric-excel-file" type="file" accept=".xlsx,.xls">
+          <button type="button" class="import-rubric-btn">Import Criteria Excel</button>
+        </div>
+        <p class="muted">Excel columns: Criterion, Description, Max Points.</p>
+      </div>
     `;
 
     $("questionBuilder").appendChild(card);
+
+    const promptInput = card.querySelector(".q-prompt");
+    let mathPreviewTimer = null;
+    promptInput.addEventListener("input", () => {
+      clearTimeout(mathPreviewTimer);
+      mathPreviewTimer = setTimeout(() => renderMathPreview(card), 180);
+    });
 
     const removeBtn = card.querySelector(".remove-question-btn");
     removeBtn.addEventListener("click", () => {
@@ -1397,9 +1466,21 @@
     });
     typeSelect.addEventListener("change", () => toggleQuestionMode(card));
 
+    card.querySelector(".binary-choice-a").addEventListener("input", () => refreshBinaryAnswerOptions(card));
+    card.querySelector(".binary-choice-b").addEventListener("input", () => refreshBinaryAnswerOptions(card));
+    card.querySelector(".add-rubric-btn").addEventListener("click", () => addRubricRow(card));
+    card.querySelector(".download-rubric-template-btn").addEventListener("click", downloadRubricTemplate);
+    card.querySelector(".import-rubric-btn").addEventListener("click", () => importRubricExcel(card));
+
     (Array.isArray(q.choices) && q.choices.length ? q.choices : ["", "", "", ""]).forEach(choice => addChoiceInput(card, choice));
+    const rubric = normalizeRubricCriteria(q.rubric_criteria);
+    if (rubric.length) rubric.forEach(item => addRubricRow(card, item));
+    else addRubricRow(card);
+
     toggleQuestionMode(card);
     refreshCorrectAnswerOptions(card, q.correct_answer);
+    refreshBinaryAnswerOptions(card, q.correct_answer);
+    renderMathPreview(card);
     renumberQuestionCards();
   }
 
@@ -1490,11 +1571,162 @@
     if (!values.includes(current)) select.value = "";
   }
 
+  function refreshBinaryAnswerOptions(card, desired = null) {
+    const select = card.querySelector(".binary-correct");
+    if (!select) return;
+    const a = card.querySelector(".binary-choice-a").value.trim() || "True";
+    const b = card.querySelector(".binary-choice-b").value.trim() || "False";
+    const current = desired ?? select.value;
+
+    select.innerHTML = "";
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Select the correct response";
+    select.appendChild(empty);
+
+    [a, b].forEach(value => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      if (value === current) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    if (![a,b].includes(current)) select.value = "";
+  }
+
+  function addRubricRow(card, item = null) {
+    const list = card.querySelector(".rubric-list");
+    const row = document.createElement("div");
+    row.className = "rubric-row";
+    const criterion = item?.criterion || "";
+    const description = item?.description || "";
+    const maxPoints = Number(item?.max_points || 0);
+
+    row.innerHTML = `
+      <input class="rubric-criterion" placeholder="Criterion (e.g. Mathematical reasoning)" value="${escapeAttr(criterion)}">
+      <input class="rubric-description" placeholder="Description / performance expectation" value="${escapeAttr(description)}">
+      <input class="rubric-max-points" type="number" min="0.25" step="0.25" placeholder="Max points" value="${maxPoints > 0 ? maxPoints : ""}">
+      <button type="button" class="remove-rubric-btn">Remove</button>
+    `;
+
+    list.appendChild(row);
+    row.querySelector(".rubric-max-points").addEventListener("input", () => updateRubricTotal(card));
+    row.querySelector(".remove-rubric-btn").addEventListener("click", () => {
+      if (list.children.length <= 1) {
+        setCreateMessage("An essay needs at least one criterion.", true);
+        return;
+      }
+      row.remove();
+      updateRubricTotal(card);
+    });
+    updateRubricTotal(card);
+  }
+
+  function updateRubricTotal(card) {
+    const values = [...card.querySelectorAll(".rubric-max-points")]
+      .map(input => Number(input.value))
+      .filter(value => Number.isFinite(value) && value > 0);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const totalNode = card.querySelector(".rubric-total-value");
+    const pointInput = card.querySelector(".q-points");
+    if (totalNode) totalNode.textContent = trimNumber(total);
+    if (pointInput && card.querySelector(".q-type").value === "essay") {
+      pointInput.value = total > 0 ? String(total) : "0";
+    }
+  }
+
+  function collectRubricCriteria(card) {
+    return [...card.querySelectorAll(".rubric-row")].map(row => ({
+      criterion: row.querySelector(".rubric-criterion").value.trim(),
+      description: row.querySelector(".rubric-description").value.trim(),
+      max_points: Number(row.querySelector(".rubric-max-points").value)
+    }));
+  }
+
+  function downloadRubricTemplate() {
+    if (!window.XLSX) {
+      alert("Excel library is unavailable. Refresh the dashboard and try again.");
+      return;
+    }
+    const rows = [
+      ["Criterion", "Description", "Max Points"],
+      ["Content Accuracy", "Information is accurate, relevant, and complete.", 5],
+      ["Reasoning / Explanation", "Ideas are logically explained and supported.", 5],
+      ["Organization", "Response is clear and well organized.", 3]
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{wch:24},{wch:55},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, ws, "Essay Criteria");
+    XLSX.writeFile(wb, "Essay_Criteria_Template.xlsx");
+  }
+
+  async function importRubricExcel(card) {
+    const input = card.querySelector(".rubric-excel-file");
+    const file = input?.files?.[0];
+    if (!file) {
+      setCreateMessage("Choose a criteria Excel file first.", true);
+      return;
+    }
+    if (!window.XLSX) {
+      setCreateMessage("Excel reader is unavailable. Refresh the dashboard and try again.", true);
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const firstSheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+      const parsed = rows.map(row => {
+        const criterion = String(row["Criterion"] ?? row["Criteria"] ?? row["criterion"] ?? "").trim();
+        const description = String(row["Description"] ?? row["Descriptor"] ?? row["description"] ?? "").trim();
+        const maxPoints = Number(row["Max Points"] ?? row["Maximum Points"] ?? row["Points"] ?? row["max_points"] ?? 0);
+        return { criterion, description, max_points: maxPoints };
+      }).filter(item => item.criterion || item.description || item.max_points > 0);
+
+      if (!parsed.length) {
+        setCreateMessage("No criteria rows were found. Use columns: Criterion, Description, Max Points.", true);
+        return;
+      }
+
+      const invalid = parsed.find(item => !item.criterion || !Number.isFinite(item.max_points) || item.max_points <= 0);
+      if (invalid) {
+        setCreateMessage("Every imported criterion needs a Criterion name and a positive Max Points value.", true);
+        return;
+      }
+
+      const list = card.querySelector(".rubric-list");
+      list.innerHTML = "";
+      parsed.forEach(item => addRubricRow(card, item));
+      updateRubricTotal(card);
+      setCreateMessage(`${parsed.length} essay criteria imported successfully.`);
+    } catch (error) {
+      setCreateMessage(`Could not import essay criteria: ${error?.message || error}`, true);
+    }
+  }
+
   function toggleQuestionMode(card) {
     const type = card.querySelector(".q-type").value;
     const mcqArea = card.querySelector(".mcq-area");
-    if (type === "text") mcqArea.classList.add("hidden");
-    else mcqArea.classList.remove("hidden");
+    const binaryArea = card.querySelector(".binary-area");
+    const essayArea = card.querySelector(".essay-rubric-area");
+    const pointInput = card.querySelector(".q-points");
+
+    mcqArea.classList.toggle("hidden", type !== "mcq");
+    binaryArea.classList.toggle("hidden", type !== "binary");
+    essayArea.classList.toggle("hidden", type !== "essay");
+
+    if (type === "essay") {
+      pointInput.readOnly = true;
+      updateRubricTotal(card);
+    } else {
+      pointInput.readOnly = false;
+      if (!Number(pointInput.value) || Number(pointInput.value) <= 0) pointInput.value = "1";
+    }
+
+    if (type === "binary") refreshBinaryAnswerOptions(card);
   }
 
   function renumberQuestionCards() {
@@ -1557,7 +1789,8 @@
         question_type: q.question_type,
         choices: q.choices,
         correct_answer: q.correct_answer,
-        points: q.points
+        points: q.points,
+        rubric_criteria: q.rubric_criteria
       }));
 
       const { error: questionUpdateError } = await db
@@ -1629,7 +1862,7 @@
 
     const { data: questions, error } = await db
       .from("questions")
-      .select("id,position,prompt,question_type,choices,correct_answer,points")
+      .select("id,position,prompt,question_type,choices,correct_answer,points,rubric_criteria")
       .eq("exam_id", exam.id)
       .order("position", { ascending: true });
 
@@ -1696,13 +1929,13 @@
       const card = cards[i];
       const prompt = card.querySelector(".q-prompt").value.trim();
       const question_type = card.querySelector(".q-type").value;
-      const points = Number(card.querySelector(".q-points").value);
+      let points = Number(card.querySelector(".q-points").value);
 
       if (!prompt) return fail(`Question ${i + 1} has no prompt.`);
-      if (!points || points <= 0) return fail(`Question ${i + 1} must have a positive point value.`);
 
       let choices = null;
       let correct_answer = null;
+      let rubric_criteria = [];
 
       if (question_type === "mcq") {
         choices = [...card.querySelectorAll(".choice-input")]
@@ -1716,14 +1949,35 @@
 
         correct_answer = card.querySelector(".q-correct").value.trim();
         if (!correct_answer) return fail(`Question ${i + 1} needs a correct answer.`);
+      } else if (question_type === "binary") {
+        const first = card.querySelector(".binary-choice-a").value.trim();
+        const second = card.querySelector(".binary-choice-b").value.trim();
+        if (!first || !second) return fail(`Question ${i + 1} needs two binary responses.`);
+        if (first.toLowerCase() === second.toLowerCase()) return fail(`Question ${i + 1} has duplicate binary responses.`);
+        choices = [first, second];
+        correct_answer = card.querySelector(".binary-correct").value.trim();
+        if (!correct_answer) return fail(`Question ${i + 1} needs a correct binary response.`);
+      } else if (question_type === "essay") {
+        rubric_criteria = collectRubricCriteria(card);
+        if (!rubric_criteria.length) return fail(`Question ${i + 1} needs at least one essay criterion.`);
+        for (const criterion of rubric_criteria) {
+          if (!criterion.criterion) return fail(`Question ${i + 1} has a criterion without a name.`);
+          if (!Number.isFinite(criterion.max_points) || criterion.max_points <= 0) {
+            return fail(`Question ${i + 1} has a criterion without a positive Max Points value.`);
+          }
+        }
+        points = rubric_criteria.reduce((sum, criterion) => sum + criterion.max_points, 0);
       }
+
+      if (!points || points <= 0) return fail(`Question ${i + 1} must have a positive point value.`);
 
       questions.push({
         prompt,
         question_type,
         points,
         choices,
-        correct_answer
+        correct_answer,
+        rubric_criteria
       });
     }
 
