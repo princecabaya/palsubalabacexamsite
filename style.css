@@ -424,3 +424,68 @@ button.danger-outline:hover{background:#fff0ee}
 @media(max-width:720px){
   .microphone-monitor-box{min-width:0}
 }
+
+
+/* Fixed live exam flag bar */
+.exam-flag-bar{
+  position:fixed;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:950;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:7px;
+  border:1px solid rgba(148,163,184,.45);
+  border-radius:999px;
+  background:rgba(255,255,255,.94);
+  backdrop-filter:blur(10px);
+  box-shadow:0 8px 24px rgba(15,23,42,.14);
+}
+.flag-chip{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:30px;
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:700;
+  white-space:nowrap;
+}
+.flag-chip strong{
+  min-width:22px;
+  text-align:center;
+  padding:2px 6px;
+  border-radius:999px;
+  background:rgba(255,255,255,.72);
+}
+.flag-chip-red{background:#fee2e2;color:#991b1b}
+.flag-chip-yellow{background:#fef3c7;color:#854d0e}
+.flag-chip-orange{background:#ffedd5;color:#9a3412}
+.flag-icon{font-size:.82rem}
+.flag-chip-orange.speech-alert{
+  animation:speechFlagPulse .8s ease-in-out infinite alternate;
+  box-shadow:0 0 0 3px rgba(249,115,22,.18);
+}
+@keyframes speechFlagPulse{
+  from{transform:scale(1)}
+  to{transform:scale(1.035)}
+}
+#examView.hidden .exam-flag-bar{display:none}
+@media(max-width:620px){
+  .exam-flag-bar{
+    top:6px;
+    gap:5px;
+    padding:5px;
+    width:calc(100% - 12px);
+    justify-content:center;
+  }
+  .flag-chip{
+    flex:1;
+    justify-content:center;
+    padding:5px 6px;
+    font-size:.7rem;
+  }
+}
