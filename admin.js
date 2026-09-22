@@ -17,6 +17,9 @@
   const expandedAttemptExams = new Set();
   let currentDetailAttempt = null;
   let currentProctorPhotos = [];
+  let proctorAssignments = [];
+  let proctorCandidates = [];
+  const myProctoredExamIds = new Set();
 
   async function checkSession() {
     const { data } = await db.auth.getSession();
@@ -49,6 +52,7 @@
     if (!$("questionBuilder").children.length) addQuestionCard();
 
     await initializeTeacherWorkspace();
+    await loadProctorAssignments();
     await Promise.all([refreshAttempts(), loadExams()]);
     clearInterval(pollHandle);
     pollHandle = setInterval(refreshAttempts, 5000);
@@ -58,6 +62,7 @@
     $("tabAttemptsBtn").onclick = () => activateTab("attempts");
     $("tabCreateBtn").onclick = () => activateTab("create");
     $("tabManageBtn").onclick = () => activateTab("manage");
+    $("tabProctorsBtn").onclick = () => activateTab("proctors");
     $("tabStudentsBtn").onclick = () => activateTab("students");
     $("tabTeachersBtn").onclick = () => activateTab("teachers");
   }
@@ -67,6 +72,7 @@
       attempts: { btn: $("tabAttemptsBtn"), section: $("attemptsSection") },
       create: { btn: $("tabCreateBtn"), section: $("createSection") },
       manage: { btn: $("tabManageBtn"), section: $("manageSection") },
+      proctors: { btn: $("tabProctorsBtn"), section: $("proctorsSection") },
       students: { btn: $("tabStudentsBtn"), section: $("studentsSection") },
       teachers: { btn: $("tabTeachersBtn"), section: $("teachersSection") }
     };
@@ -80,6 +86,7 @@
     map[name].section.classList.remove("hidden");
 
     if (name === "manage") loadExams();
+    if (name === "proctors") loadProctorManagement();
     if (name === "students") window.StudentAdmin?.loadStudents?.();
     if (name === "teachers") loadTeacherAccessList();
   }
@@ -263,6 +270,172 @@
     await loadTeacherAccessList();
   }
 
+  function isProctorForExam(examId) {
+    return myProctoredExamIds.has(String(examId));
+  }
+
+  async function loadProctorAssignments() {
+    myProctoredExamIds.clear();
+
+    const { data, error } = await db.rpc("get_exam_proctor_assignments", {
+      p_exam_id: null
+    });
+
+    if (error) {
+      console.warn("Exam proctor assignments unavailable:", error);
+      proctorAssignments = [];
+      return;
+    }
+
+    proctorAssignments = data || [];
+    for (const row of proctorAssignments) {
+      if (row.teacher_user_id === currentUserId) {
+        myProctoredExamIds.add(String(row.exam_id));
+      }
+    }
+  }
+
+  async function loadProctorManagement() {
+    const msg = $("proctorManageMsg");
+    if (msg) msg.textContent = "";
+
+    await loadProctorAssignments();
+
+    const [candidateResult, examResult] = await Promise.all([
+      db.rpc("get_proctor_candidates"),
+      db
+        .from("exams")
+        .select("id,title,code,status,archived,owner_id")
+        .eq("status", "published")
+        .eq("archived", false)
+        .order("created_at", { ascending: false })
+    ]);
+
+    if (candidateResult.error) {
+      if (msg) msg.textContent = candidateResult.error.message;
+      return;
+    }
+    if (examResult.error) {
+      if (msg) msg.textContent = examResult.error.message;
+      return;
+    }
+
+    proctorCandidates = candidateResult.data || [];
+    const isMain = currentTeacherProfile?.role === "main_admin";
+    const ownerId = getActiveWorkspaceOwnerId() || currentUserId;
+    const manageableExams = (examResult.data || []).filter(exam =>
+      isMain ? exam.owner_id === ownerId : exam.owner_id === currentUserId
+    );
+
+    const examSelect = $("proctorExamSelect");
+    examSelect.innerHTML = "";
+    for (const exam of manageableExams) {
+      const opt = document.createElement("option");
+      opt.value = exam.id;
+      opt.textContent = `${exam.title} (${exam.code})`;
+      opt.dataset.ownerId = exam.owner_id || "";
+      examSelect.appendChild(opt);
+    }
+
+    const teacherSelect = $("proctorTeacherSelect");
+    teacherSelect.innerHTML = "";
+    for (const teacher of proctorCandidates) {
+      const opt = document.createElement("option");
+      opt.value = teacher.user_id;
+      opt.textContent = teacher.display_name || teacher.email || "Teacher";
+      teacherSelect.appendChild(opt);
+    }
+
+    $("assignProctorBtn").disabled = !manageableExams.length || !proctorCandidates.length;
+    renderProctorAssignments(manageableExams);
+  }
+
+  function renderProctorAssignments(manageableExams) {
+    const rows = $("proctorAssignmentRows");
+    rows.innerHTML = "";
+
+    const manageableIds = new Set((manageableExams || []).map(e => String(e.id)));
+    const visible = proctorAssignments.filter(a => manageableIds.has(String(a.exam_id)));
+
+    if (!visible.length) {
+      rows.innerHTML = '<tr><td colspan="6">No proctors are assigned to these published examinations.</td></tr>';
+      return;
+    }
+
+    for (const assignment of visible) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(assignment.exam_title || "Exam")}</strong></td>
+        <td>${escapeHtml(assignment.exam_code || "")}</td>
+        <td>${escapeHtml(assignment.teacher_name || assignment.teacher_email || "Teacher")}</td>
+        <td>${escapeHtml(assignment.teacher_email || "")}</td>
+        <td>${fmt(assignment.assigned_at)}</td>
+        <td><button type="button" class="danger-outline remove-proctor-btn">Remove</button></td>
+      `;
+
+      tr.querySelector(".remove-proctor-btn").addEventListener("click", async () => {
+        const name = assignment.teacher_name || assignment.teacher_email || "this teacher";
+        if (!confirm(`Remove ${name} as proctor for "${assignment.exam_title}"?`)) return;
+
+        const { data, error } = await db.rpc("remove_exam_proctor", {
+          p_exam_id: assignment.exam_id,
+          p_teacher_user_id: assignment.teacher_user_id
+        });
+
+        if (error) {
+          alert(`Could not remove proctor: ${error.message}`);
+          return;
+        }
+        if (data !== true) {
+          alert("No proctor assignment was removed.");
+          return;
+        }
+
+        await loadProctorManagement();
+        await loadProctorAssignments();
+      await Promise.all([refreshAttempts(), loadExams()]);
+      if (!$("proctorsSection").classList.contains("hidden")) await loadProctorManagement();
+      });
+
+      rows.appendChild(tr);
+    }
+  }
+
+  async function assignSelectedProctor() {
+    const examId = $("proctorExamSelect")?.value;
+    const teacherId = $("proctorTeacherSelect")?.value;
+    const msg = $("proctorManageMsg");
+
+    if (!examId || !teacherId) {
+      if (msg) msg.textContent = "Choose a published examination and an authorized teacher.";
+      return;
+    }
+
+    const btn = $("assignProctorBtn");
+    btn.disabled = true;
+    btn.textContent = "Assigning…";
+
+    const { data, error } = await db.rpc("assign_exam_proctor", {
+      p_exam_id: examId,
+      p_teacher_user_id: teacherId
+    });
+
+    btn.disabled = false;
+    btn.textContent = "Assign Proctor";
+
+    if (error) {
+      if (msg) msg.textContent = error.message;
+      return;
+    }
+    if (data !== true) {
+      if (msg) msg.textContent = "The proctor assignment was not saved.";
+      return;
+    }
+
+    if (msg) msg.textContent = "Proctor assigned successfully.";
+    await loadProctorManagement();
+  }
+
   async function refreshAttempts() {
     const { data, error } = await db
       .from("attempts")
@@ -279,9 +452,14 @@
       return;
     }
 
-    attemptsCache = (data || []).filter(a =>
-      !getActiveWorkspaceOwnerId() || a.exams?.owner_id === getActiveWorkspaceOwnerId()
-    );
+    const workspaceOwnerId = getActiveWorkspaceOwnerId();
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    attemptsCache = (data || []).filter(a => {
+      if (isMainAdmin) {
+        return !workspaceOwnerId || a.exams?.owner_id === workspaceOwnerId;
+      }
+      return a.exams?.owner_id === currentUserId || isProctorForExam(a.exams?.id);
+    });
 
     const ids = attemptsCache.map(a => a.id);
     eventsByAttempt = new Map();
@@ -657,8 +835,10 @@
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
+    const proctorOnly = isProctorForExam(a.exams?.id) && a.exams?.owner_id !== currentUserId;
     const reopenBtn = $("reopenAttemptBtn");
-    if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted");
+    if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
+    $("proctorPhotoEvidenceActions")?.classList.toggle("hidden", proctorOnly);
 
     await Promise.all([
       loadSavedResponses(a),
@@ -1600,9 +1780,14 @@
       return;
     }
 
-    examsCache = (exams || []).filter(e =>
-      !getActiveWorkspaceOwnerId() || e.owner_id === getActiveWorkspaceOwnerId()
-    );
+    const workspaceOwnerId = getActiveWorkspaceOwnerId();
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    examsCache = (exams || []).filter(e => {
+      if (isMainAdmin) {
+        return !workspaceOwnerId || e.owner_id === workspaceOwnerId;
+      }
+      return e.owner_id === currentUserId || isProctorForExam(e.id);
+    });
     const ids = examsCache.map(e => e.id);
 
     let counts = {};
@@ -1638,6 +1823,7 @@
         <td>
           <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
           ${archived ? '<br><span class="badge archived">Archived</span>' : ''}
+          ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? '<br><span class="badge proctor">Proctor</span>' : ''}
         </td>
         <td>${escapeHtml(exam.code)}</td>
         <td><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
@@ -1646,8 +1832,12 @@
         <td>${fmt(exam.start_at)}</td>
         <td>${fmt(exam.end_at)}</td>
         <td class="action-cell">
-          ${archived ? `
+          ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
+            <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+            <span class="badge proctor">Proctor access</span>
+          ` : archived ? `
             <button type="button" data-exam-action="restore">Restore</button>
+            <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
           ` : `
             <button type="button" data-exam-action="edit" ${exam.status === "published" ? "disabled title=\"Published examinations cannot be edited\"" : ""}>Edit Exam</button>
             ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
@@ -1655,8 +1845,8 @@
             <button type="button" data-action="published">Publish</button>
             <button type="button" data-action="closed">Close</button>
             <button type="button" data-exam-action="archive">Archive</button>
+            <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
           `}
-          <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
         </td>
       `;
 
@@ -1863,6 +2053,9 @@
   $("saveSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(true));
   $("releaseSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(false));
 
+  $("assignProctorBtn")?.addEventListener("click", assignSelectedProctor);
+  $("reloadProctorsBtn")?.addEventListener("click", loadProctorManagement);
+
   $("searchBox").addEventListener("input", renderAttempts);
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
@@ -1896,7 +2089,8 @@
     refreshAttempts,
     loadExams,
     editExam,
-    getWorkspaceOwnerId: getActiveWorkspaceOwnerId
+    getWorkspaceOwnerId: getActiveWorkspaceOwnerId,
+    isProctorForExam
   };
 
   // Public hooks used by the Excel importer. This reuses the same validated
