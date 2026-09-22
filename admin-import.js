@@ -269,14 +269,14 @@
   }
 
   function parseLatexExam(source) {
-    const text = stripLatexComments(String(source || "")).replace(/\\r\\n?/g, "\\n");
-    const lines = text.split("\\n");
+    const text = stripLatexComments(String(source || "")).replace(/\r\n?/g, "\n");
+    const lines = text.split("\n");
     const blocks = [];
     let current = null;
 
     for (const originalLine of lines) {
       const line = originalLine.trim();
-      const match = line.match(/^\\question(?:\\[([^\\]]+)\\])?\\s*(.*)$/);
+      const match = line.match(/^\\question(?:\[([^\]]+)\])?\s*(.*)$/);
 
       if (match) {
         if (current) blocks.push(current);
@@ -299,12 +299,12 @@
   }
 
   function parseLatexQuestionBlock(block, number) {
-    const raw = [block.firstPrompt].concat(block.lines).join("\\n").trim();
-    const hasBinary = /\\begin\\{binary\\}/i.test(raw);
-    const hasChoices = /\\begin\\{choices\\}/i.test(raw);
-    const hasCriteria = /\\begin\\{essay\\}/i.test(raw) ||
-      /\\begin\\{criteria\\}/i.test(raw) ||
-      /\\criterion(?:\\[|\\{)/i.test(raw);
+    const raw = [block.firstPrompt].concat(block.lines).join("\n").trim();
+    const hasBinary = /\\begin\{binary\}/i.test(raw);
+    const hasChoices = /\\begin\{choices\}/i.test(raw);
+    const hasCriteria = /\\begin\{essay\}/i.test(raw) ||
+      /\\begin\{criteria\}/i.test(raw) ||
+      /\\criterion(?:\[|\{)/i.test(raw);
 
     const prompt = extractLatexPrompt(raw).trim();
     if (!prompt) throw new Error("LaTeX question " + number + " has no question text.");
@@ -392,12 +392,12 @@
   }
 
   function parseLatexChoices(body) {
-    const lines = String(body || "").split("\\n");
+    const lines = String(body || "").split("\n");
     const choices = [];
     let correct = "";
 
     lines.forEach(function(line) {
-      const match = line.trim().match(/^\\(CorrectChoice|choice)\\b\\s*(.*)$/i);
+      const match = line.trim().match(/^\\(CorrectChoice|choice)\b\s*(.*)$/i);
       if (!match) return;
 
       const isCorrect = /^CorrectChoice$/i.test(match[1]);
@@ -431,7 +431,7 @@
       if (start < 0) break;
 
       let pos = start + token.length;
-      while (/\\s/.test(source[pos] || "")) pos += 1;
+      while (/\s/.test(source[pos] || "")) pos += 1;
 
       let points = null;
       if (source[pos] === "[") {
@@ -441,12 +441,12 @@
         pos = close + 1;
       }
 
-      while (/\\s/.test(source[pos] || "")) pos += 1;
+      while (/\s/.test(source[pos] || "")) pos += 1;
       const name = readBraceGroup(source, pos);
       if (!name) throw new Error("A \\criterion is missing {Criterion Name}.");
       pos = name.end;
 
-      while (/\\s/.test(source[pos] || "")) pos += 1;
+      while (/\s/.test(source[pos] || "")) pos += 1;
       const description = readBraceGroup(source, pos);
       if (!description) throw new Error("A \\criterion is missing {Description}.");
       pos = description.end;
@@ -488,7 +488,7 @@
   }
 
   function stripLatexComments(source) {
-    return source.split(/\\r?\\n/).map(function(line) {
+    return source.split(/\r?\n/).map(function(line) {
       let out = "";
       for (let i = 0; i < line.length; i += 1) {
         if (line[i] === "%" && line[i - 1] !== "\\") break;
@@ -543,7 +543,7 @@
       "",
       "\\end{document}",
       ""
-    ].join("\\n");
+    ].join("\n");
 
     const blob = new Blob([template], { type: "text/x-tex;charset=utf-8" });
     const url = URL.createObjectURL(blob);
