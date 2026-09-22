@@ -123,6 +123,8 @@
       return;
     }
 
+    const proctorOnly = Boolean(window.ExamAdmin?.isProctorForExam?.(exam.id));
+
     for (const r of rows) {
       const rank = rankMap.get(r.id);
       const score = r.score_num === null
@@ -141,7 +143,7 @@
         <td>${fmt(r.submitted_at)}</td>
         <td class="action-cell">
           ${r.status === "submitted" ? '<button type="button" class="result-pdf-btn">Result PDF</button>' : ""}
-          <button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button>
+          ${proctorOnly ? '<span class="badge proctor">Proctor</span>' : '<button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button>'}
         </td>
       `;
 
@@ -149,7 +151,7 @@
         await window.ExamReport?.generateTeacher(r.id, event.currentTarget);
       });
 
-      tr.querySelector(".delete-attempt-btn").addEventListener("click", async () => {
+      tr.querySelector(".delete-attempt-btn")?.addEventListener("click", async () => {
         await deleteAttempt(r, exam);
       });
 
