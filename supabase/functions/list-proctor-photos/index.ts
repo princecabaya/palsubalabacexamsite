@@ -55,9 +55,9 @@ Deno.serve(async (req) => {
 
     const { data: photos, error: photoError } = await admin
       .from("proctor_photos")
-      .select("id,object_path,captured_at,expires_at")
+      .select("id,object_path,captured_at,expires_at,evidence_saved,evidence_saved_at")
       .eq("attempt_id", attemptId)
-      .gt("expires_at", new Date().toISOString())
+      .or(`evidence_saved.eq.true,expires_at.gt.${new Date().toISOString()}`)
       .order("captured_at", { ascending: true });
 
     if (photoError) throw photoError;
@@ -72,6 +72,8 @@ Deno.serve(async (req) => {
         id: photo.id,
         captured_at: photo.captured_at,
         expires_at: photo.expires_at,
+        evidence_saved: Boolean(photo.evidence_saved),
+        evidence_saved_at: photo.evidence_saved_at,
         url: signed.signedUrl,
       });
     }
