@@ -38,6 +38,90 @@
   let speechLastLoudAt = 0;
   let speechPeakRms = 0;
   let microphoneNoiseFloor = 0.01;
+  let examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
+  let speechFlagTimer = null;
+
+  const restrictedFlagTypes = new Set([
+    "copy_blocked","cut_blocked","paste_blocked","contextmenu_blocked","dragstart_blocked",
+    "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
+    "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
+  ]);
+
+  function flagStorageKey() {
+    return attempt?.attempt_token ? `exam_guard_flags_${attempt.attempt_token}` : "";
+  }
+
+  function saveExamFlagCounts() {
+    const key = flagStorageKey();
+    if (!key) return;
+    sessionStorage.setItem(key, JSON.stringify(examFlagCounts));
+  }
+
+  function loadExamFlagCounts() {
+    const key = flagStorageKey();
+    examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
+    if (key) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(key) || "{}");
+        examFlagCounts.restricted = Number(saved.restricted || 0);
+        examFlagCounts.focus = Number(saved.focus || 0);
+        examFlagCounts.speech = Number(saved.speech || 0);
+      } catch (_) {}
+    }
+    updateExamFlagBar();
+  }
+
+  function resetExamFlagCounts() {
+    examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
+    saveExamFlagCounts();
+    updateExamFlagBar();
+  }
+
+  function updateExamFlagBar() {
+    const restricted = $("restrictedFlagCount");
+    const focus = $("focusFlagCount");
+    const speech = $("speechFlagCount");
+    if (restricted) restricted.textContent = String(examFlagCounts.restricted);
+    if (focus) focus.textContent = String(examFlagCounts.focus);
+    if (speech) speech.textContent = String(examFlagCounts.speech);
+  }
+
+  function flashSpeechWarning() {
+    const chip = $("speechFlagChip");
+    const label = $("speechFlagLabel");
+    if (!chip || !label) return;
+
+    chip.classList.add("speech-alert");
+    label.textContent = "Silent please";
+    warn("Silent please — possible speech was detected.");
+
+    clearTimeout(speechFlagTimer);
+    speechFlagTimer = setTimeout(() => {
+      chip.classList.remove("speech-alert");
+      label.textContent = "Speech";
+    }, 5000);
+  }
+
+  function countFlagForEvent(type) {
+    let changed = false;
+
+    if (restrictedFlagTypes.has(type)) {
+      examFlagCounts.restricted += 1;
+      changed = true;
+    } else if (type === "window_blur" || type === "fullscreen_exit") {
+      examFlagCounts.focus += 1;
+      changed = true;
+    } else if (type === "possible_speech_detected") {
+      examFlagCounts.speech += 1;
+      changed = true;
+      flashSpeechWarning();
+    }
+
+    if (changed) {
+      saveExamFlagCounts();
+      updateExamFlagBar();
+    }
+  }
 
   const safeDetails = (extra = {}) => ({
     visibility: document.visibilityState,
@@ -49,6 +133,7 @@
 
   async function logEvent(type, details = {}) {
     if (!attempt?.attempt_token || submitted) return;
+    countFlagForEvent(type);
     const payload = {
       p_attempt_token: attempt.attempt_token,
       p_event_type: type,
@@ -466,6 +551,7 @@
     pendingIdentity = null;
     $("identityConfirmModal").classList.add("hidden");
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
+    resetExamFlagCounts();
     await loadExam({ restored: false, savedResponses: [] });
     startCameraCaptureSchedule();
     await startSpeechMonitoring();
@@ -624,7 +710,9 @@
     submitted = true;
     clearInterval(timerHandle);
     stopCameraMonitoring();
+    const flagKey = flagStorageKey();
     sessionStorage.removeItem("exam_guard_token");
+    if (flagKey) sessionStorage.removeItem(flagKey);
     examView.classList.add("hidden");
     watermark.classList.remove("active");
     doneView.classList.remove("hidden");
@@ -677,6 +765,7 @@
 
     attempt = resumeData[0];
     submitted = false;
+    loadExamFlagCounts();
     msg.textContent = "";
 
     await loadExam({
