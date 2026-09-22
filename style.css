@@ -511,3 +511,24 @@ button.danger-outline:hover{background:#fff0ee}
   .proctor-assign-grid{grid-template-columns:1fr}
   .proctor-assign-button button{width:100%}
 }
+
+
+/* Math preview and essay rubric builder */
+.math-help{margin-top:6px;font-size:.82rem}
+.math-preview{margin-top:8px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:#fbfdff;min-height:42px;overflow-x:auto}
+.math-preview:empty::before{content:"Math preview appears here";color:var(--muted);font-size:.82rem}
+.binary-area,.essay-rubric-area{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
+.rubric-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.rubric-total{font-weight:800}
+.rubric-list{display:grid;gap:8px}
+.rubric-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(220px,2fr) 110px auto;gap:8px;align-items:start}
+.rubric-row input{padding:9px}
+.rubric-row .rubric-description{min-height:42px}
+.rubric-import-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.rubric-import-controls input[type=file]{max-width:290px}
+.q-points[readonly]{background:#f1f5f9;color:#475569}
+.math-rendered{overflow-x:auto}
+@media(max-width:760px){
+  .rubric-row{grid-template-columns:1fr}
+  .rubric-row button{width:100%}
+}
