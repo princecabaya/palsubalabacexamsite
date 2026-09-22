@@ -1832,7 +1832,8 @@
       question_type: q.question_type,
       choices: q.choices,
       correct_answer: q.correct_answer,
-      points: q.points
+      points: q.points,
+      rubric_criteria: q.rubric_criteria
     }));
 
     const { error: questionError } = await db
