@@ -2,7 +2,7 @@
 
 The student exam site now requests the front camera and captures a compressed still photo approximately every 60 seconds while an exam attempt is active.
 
-Photos are stored in the private `exam-proctor-photos` Supabase Storage bucket and are intended to be deleted after 24 hours.
+Photos are stored in the private `exam-proctor-photos` Supabase Storage bucket. Unselected photos are intended to be deleted after 24 hours. Authorized teachers may preserve selected photos as examination evidence; preserved photos are excluded from automatic cleanup until released.
 
 ## 1. Database / Storage upgrade
 
@@ -78,6 +78,7 @@ Supabase Cron can invoke Edge Functions from the Dashboard or with pg_cron + pg_
 - The monitoring consent explicitly states the approximate one-minute photo interval and 24-hour retention.
 - Photos are stored in a private bucket.
 - Teacher viewing uses short-lived signed URLs.
+- Teachers can select specific photos and preserve them as evidence. Preserved photos remain private and are excluded from automatic 24-hour cleanup until released.
 - Main Admin may view photos while supporting another teacher; regular teachers are restricted to attempts from their own exams.
 - The implementation does not record audio.
 - Screen recording is not enabled.
