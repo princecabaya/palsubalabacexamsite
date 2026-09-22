@@ -500,3 +500,14 @@ button.danger-outline:hover{background:#fff0ee}
   min-width:54px;
   font-variant-numeric:tabular-nums;
 }
+
+
+/* Exam proctor access */
+.badge.proctor{background:#e0e7ff;color:#3730a3}
+.proctor-assign-grid{display:grid;grid-template-columns:minmax(220px,1.2fr) minmax(220px,1fr) auto;gap:14px;align-items:end;margin:18px 0 8px}
+.proctor-assign-grid label{display:grid;gap:6px}
+.proctor-assign-button{padding-bottom:1px}
+@media(max-width:760px){
+  .proctor-assign-grid{grid-template-columns:1fr}
+  .proctor-assign-button button{width:100%}
+}
