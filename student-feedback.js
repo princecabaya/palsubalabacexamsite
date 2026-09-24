@@ -5,6 +5,21 @@
   });
 
   window.ExamAI = {
+    async gradeConstructed(attemptToken) {
+      if (!attemptToken) return null;
+
+      try {
+        const { data, error } = await db.functions.invoke("grade-constructed-responses", {
+          body: { attempt_token: attemptToken }
+        });
+        if (error) throw error;
+        return data || null;
+      } catch (error) {
+        console.warn("Provisional constructed-response grading unavailable:", error);
+        return null;
+      }
+    },
+
     async generateFeedback(attemptToken, result = {}) {
       const panel = document.getElementById("aiFeedbackPanel");
       const status = document.getElementById("aiFeedbackStatus");
