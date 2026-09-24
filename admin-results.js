@@ -36,7 +36,7 @@
     const { data, error } = await db
       .from("attempts")
       .select(`
-        id,status,started_at,submitted_at,score,max_score,grading_status,provisional_score,provisional_max_score,
+        id,attempt_token,status,started_at,submitted_at,score,max_score,grading_status,provisional_score,provisional_max_score,
         students(student_no,full_name)
       `)
       .eq("exam_id", exam.id);
@@ -185,33 +185,120 @@
     $("gradingReviewTitle").textContent = `Review — ${attempt.students?.full_name || "Student"}`;
     $("gradingReviewMeta").textContent = `${attempt.students?.student_no || ""} • ${exam.title || ""}`;
     itemsNode.innerHTML = '<p class="muted">Loading constructed responses…</p>';
+    $("approveGradingBtn").disabled = true;
     if (msg) msg.textContent = "";
 
-    const { data, error } = await db.rpc("admin_get_grading_review", {
+    let items = [];
+    let rpcError = null;
+
+    const rpcResult = await db.rpc("admin_get_grading_review", {
       p_attempt_id: attempt.id
     });
 
-    if (error) {
-      itemsNode.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
-      return;
+    if (rpcResult.error) {
+      rpcError = rpcResult.error;
+    } else if (Array.isArray(rpcResult.data?.items)) {
+      items = rpcResult.data.items;
     }
 
-    const items = Array.isArray(data?.items) ? data.items : [];
+    // Fallback: manual grading must never depend on Gemini or the report RPC.
+    // Read the exam questions/responses directly if the RPC returned no items.
     if (!items.length) {
-      itemsNode.innerHTML = '<p class="muted">This attempt has no Essay, Short Response, or Math Solver items.</p>';
+      const fallback = await loadConstructedItemsDirectly(attempt, exam);
+
+      if (fallback.error) {
+        const reason = rpcError?.message || fallback.error.message || "Could not load constructed responses.";
+        itemsNode.innerHTML = `<p class="message-inline error">${escapeHtml(reason)}</p>`;
+        $("gradingAiStatus").textContent = "Manual review could not be loaded.";
+        return;
+      }
+
+      items = fallback.items;
+    }
+
+    if (!items.length) {
+      itemsNode.innerHTML = '<p class="muted">No Essay, Short Response, or Math Solver items were found in this exam.</p>';
+      $("gradingAiStatus").textContent = rpcError
+        ? `Review RPC warning: ${rpcError.message}`
+        : "No constructed-response grading is required.";
       $("approveGradingBtn").disabled = true;
       return;
     }
 
+    renderGradingItems(items);
     $("approveGradingBtn").disabled = false;
+
+    const hasAi = items.some(item => item.provisional_score !== null && item.provisional_score !== undefined);
+    $("gradingAiStatus").textContent = hasAi
+      ? "Provisional AI scores are available. Review and edit them before approval."
+      : "No provisional AI scores are available. You can score manually or click Retry AI Provisional Scoring.";
+
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function loadConstructedItemsDirectly(attempt, exam) {
+    const { data: questions, error: questionError } = await db
+      .from("questions")
+      .select("id,position,section_title,prompt,question_type,correct_answer,points,rubric_type,rubric_criteria")
+      .eq("exam_id", exam.id)
+      .in("question_type", ["essay","text","short_response","math_solver"])
+      .order("position", { ascending: true });
+
+    if (questionError) return { items: [], error: questionError };
+
+    const questionIds = (questions || []).map(q => q.id);
+    let responses = [];
+
+    if (questionIds.length) {
+      const responseResult = await db
+        .from("responses")
+        .select("question_id,answer,provisional_score,provisional_reason,teacher_score,teacher_comment,review_status")
+        .eq("attempt_id", attempt.id)
+        .in("question_id", questionIds);
+
+      if (responseResult.error) return { items: [], error: responseResult.error };
+      responses = responseResult.data || [];
+    }
+
+    const responseMap = new Map(responses.map(row => [row.question_id, row]));
+
+    const items = (questions || []).map(q => {
+      const response = responseMap.get(q.id) || {};
+      return {
+        question_id: q.id,
+        position: q.position,
+        section_title: q.section_title || "Part 1",
+        prompt: q.prompt,
+        question_type: q.question_type === "text" ? "essay" : q.question_type,
+        points: Number(q.points || 0),
+        reference_answer: q.correct_answer,
+        rubric_type: q.rubric_type,
+        rubric_criteria: q.rubric_criteria,
+        student_answer: response.answer || "",
+        provisional_score: response.provisional_score ?? null,
+        provisional_reason: response.provisional_reason || "",
+        teacher_score: response.teacher_score ?? null,
+        teacher_comment: response.teacher_comment || "",
+        review_status: response.review_status || "pending"
+      };
+    });
+
+    return { items, error: null };
+  }
+
+  function renderGradingItems(items) {
+    const itemsNode = $("gradingReviewItems");
     itemsNode.innerHTML = "";
 
     for (const item of items) {
       const article = document.createElement("article");
       article.className = "grading-review-card";
       article.dataset.questionId = item.question_id;
-      const provisional = item.provisional_score == null ? "" : Number(item.provisional_score);
-      const startingScore = item.teacher_score == null ? provisional : Number(item.teacher_score);
+      const provisional = item.provisional_score == null ? null : Number(item.provisional_score);
+      const teacher = item.teacher_score == null ? null : Number(item.teacher_score);
+      const startingScore = Number.isFinite(teacher)
+        ? teacher
+        : (Number.isFinite(provisional) ? provisional : "");
 
       article.innerHTML = `
         <div class="grading-review-head">
@@ -227,11 +314,11 @@
         <div class="provisional-grade">
           <strong>Provisional AI score:</strong>
           <span>${item.provisional_score == null ? "Not available" : `${escapeHtml(item.provisional_score)} / ${escapeHtml(item.points)}`}</span>
-          <p class="muted">${escapeHtml(item.provisional_reason || "Teacher review required.")}</p>
+          <p class="muted">${escapeHtml(item.provisional_reason || "No AI score is available. Teacher scoring is still fully available.")}</p>
         </div>
         <div class="form-grid compact grading-inputs">
           <label>Teacher score
-            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${Number.isFinite(startingScore) ? startingScore : ""}">
+            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}">
           </label>
           <label>Teacher comment
             <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
@@ -241,9 +328,50 @@
 
       itemsNode.appendChild(article);
     }
-
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  async function retryAiGrading() {
+    if (!activeGradingAttempt?.attempt_token) {
+      $("gradingAiStatus").textContent = "This attempt has no available attempt token for AI retry. Manual grading is still available.";
+      return;
+    }
+
+    const button = $("retryAiGradingBtn");
+    button.disabled = true;
+    button.textContent = "Generating…";
+    $("gradingAiStatus").textContent = "Requesting provisional scores from Gemini…";
+
+    try {
+      const { data, error } = await db.functions.invoke("grade-constructed-responses", {
+        body: { attempt_token: activeGradingAttempt.attempt_token }
+      });
+
+      if (error) throw error;
+
+      $("gradingAiStatus").textContent = data?.message ||
+        "Provisional AI scoring completed. Reloading review…";
+      await openGradingReview(activeGradingAttempt, activeGradingExam);
+    } catch (error) {
+      const detail = await readEdgeFunctionError(error);
+      const statusCode = error?.context?.status || error?.status || "";
+      $("gradingAiStatus").textContent =
+        `AI provisional scoring failed${statusCode ? ` (HTTP ${statusCode})` : ""}: ${detail || error?.message || "Unknown error"}. You can still score every item manually.`;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Retry AI Provisional Scoring";
+    }
+  }
+
+  async function readEdgeFunctionError(error) {
+    try {
+      const response = error?.context;
+      if (response && typeof response.clone === "function") {
+        return await response.clone().text();
+      }
+    } catch (_) {}
+    return String(error?.message || error || "").trim();
+  }
+
 
   function formatQuestionType(type) {
     return ({
@@ -258,6 +386,11 @@
 
     const cards = [...document.querySelectorAll("#gradingReviewItems .grading-review-card")];
     const scores = [];
+
+    if (!cards.length) {
+      $("gradingReviewMsg").textContent = "No constructed-response items are loaded. Final approval is blocked.";
+      return;
+    }
 
     for (const card of cards) {
       const input = card.querySelector(".teacher-score-input");
@@ -302,6 +435,7 @@
   }
 
   $("approveGradingBtn")?.addEventListener("click", approveCurrentGrading);
+  $("retryAiGradingBtn")?.addEventListener("click", retryAiGrading);
   $("closeGradingReviewBtn")?.addEventListener("click", () => {
     $("gradingReviewPanel")?.classList.add("hidden");
   });
