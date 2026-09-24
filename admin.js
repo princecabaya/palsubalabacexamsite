@@ -440,7 +440,7 @@
     const { data, error } = await db
       .from("attempts")
       .select(`
-        id,status,started_at,submitted_at,score,max_score,
+        id,status,started_at,submitted_at,score,max_score,active_session_id,session_locked_at,
         students(student_no,full_name),
         exams(id,code,title,owner_id)
       `)
@@ -838,6 +838,17 @@
     const proctorOnly = isProctorForExam(a.exams?.id) && a.exams?.owner_id !== currentUserId;
     const reopenBtn = $("reopenAttemptBtn");
     if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
+
+    const unlockBtn = $("unlockSessionBtn");
+    if (unlockBtn) {
+      unlockBtn.classList.toggle("hidden", a.status !== "active");
+      unlockBtn.disabled = a.status !== "active" || !a.active_session_id;
+      unlockBtn.textContent = a.active_session_id ? "Unlock Active Session" : "Session Already Unlocked";
+      unlockBtn.title = a.active_session_id
+        ? "Release this browser/device lock so the next browser session using this Student ID can resume the active attempt."
+        : "This active attempt currently has no browser/device lock.";
+    }
+
     $("proctorPhotoEvidenceActions")?.classList.toggle("hidden", proctorOnly);
 
     await Promise.all([
@@ -3135,6 +3146,53 @@
     await refreshAttempts();
   }
 
+  async function unlockCurrentAttemptSession() {
+    const attempt = currentDetailAttempt;
+    if (!attempt || attempt.status !== "active") return;
+
+    const studentName = attempt.students?.full_name || "this student";
+    const studentNo = attempt.students?.student_no || "";
+
+    const ok = confirm(
+      `Unlock the active browser session for ${studentName}${studentNo ? ` (${studentNo})` : ""}?\n\nThis does not delete answers, score, timer, or the attempt. It only releases the browser/device lock. The next browser session that enters this same Exam Code and Student ID will claim the active attempt.`
+    );
+    if (!ok) return;
+
+    const button = $("unlockSessionBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Unlocking…";
+    }
+
+    const { data, error } = await db.rpc("admin_unlock_attempt_session", {
+      p_attempt_id: attempt.id
+    });
+
+    if (error) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Unlock Active Session";
+      }
+      alert(`Could not unlock the active session: ${error.message}\n\nRun supabase-upgrade-active-session-lock.sql in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    if (data !== true) {
+      alert("No active session lock was released. The attempt may no longer be active or may already be unlocked.");
+    } else {
+      attempt.active_session_id = null;
+      attempt.session_locked_at = null;
+      alert("Active session unlocked. The student's saved answers and remaining exam time were preserved.");
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Session Already Unlocked";
+    }
+
+    await refreshAttempts();
+  }
+
   async function resetCurrentAttempt() {
     const a = currentDetailAttempt;
     if (!a) return;
@@ -3192,6 +3250,7 @@
   $("searchBox").addEventListener("input", renderAttempts);
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
+  $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
   $("resetAttemptBtn")?.addEventListener("click", resetCurrentAttempt);
   $("closeDetail").addEventListener("click", closeAttemptDrawer);
   $("signOutBtn").addEventListener("click", async () => {
