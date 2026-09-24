@@ -1214,3 +1214,109 @@ textarea{resize:vertical}
   .student-login-actions{flex-direction:column}
   .student-site-tools{align-items:flex-start;flex-direction:column;gap:10px}
 }
+
+
+/* Interactive analytic rubric grading */
+.analytic-grading-mount{
+  margin:14px 0;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+}
+.analytic-grading-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  padding:14px 16px;
+  background:#f8fafc;
+  border-bottom:1px solid var(--line);
+}
+.analytic-grading-header p{margin:.25rem 0 0}
+.analytic-grading-total{
+  min-width:110px;
+  text-align:right;
+}
+.analytic-grading-total span{
+  display:block;
+  font-size:.76rem;
+  color:var(--muted);
+}
+.analytic-grading-total strong{font-size:1.05rem}
+.analytic-grade-criterion{
+  border-bottom:1px solid var(--line);
+  padding:14px 16px;
+}
+.analytic-grade-criterion:last-child{border-bottom:0}
+.analytic-grade-criterion-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:14px;
+  margin-bottom:10px;
+}
+.analytic-grade-criterion-head>div{
+  display:grid;
+  gap:3px;
+}
+.analytic-grade-levels{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding-bottom:8px;
+  scroll-snap-type:x proximity;
+}
+.analytic-level-choice{
+  flex:0 0 240px;
+  min-height:150px;
+  padding:14px;
+  text-align:left;
+  border:1px solid #d7dde8;
+  border-radius:10px;
+  background:#fff;
+  color:inherit;
+  scroll-snap-align:start;
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+.analytic-level-choice:hover{
+  border-color:#9db5ee;
+  background:#f8faff;
+}
+.analytic-level-choice.selected{
+  border:2px solid var(--primary);
+  background:#eef4ff;
+  box-shadow:0 0 0 2px rgba(37,99,235,.08);
+}
+.analytic-level-choice-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+.analytic-level-choice-head span{
+  font-style:italic;
+  white-space:nowrap;
+}
+.analytic-level-choice p{
+  margin:0;
+  line-height:1.45;
+  font-weight:400;
+}
+.analytic-grading-mount.rubric-incomplete .analytic-running-score{
+  color:#b45309;
+}
+.grading-review-card .teacher-score-input[readonly]{
+  background:#eef4ff;
+  font-weight:800;
+}
+
+@media(max-width:720px){
+  .analytic-grading-header,
+  .analytic-grade-criterion-head{
+    flex-direction:column;
+  }
+  .analytic-grading-total{text-align:left}
+  .analytic-level-choice{flex-basis:82vw}
+}
