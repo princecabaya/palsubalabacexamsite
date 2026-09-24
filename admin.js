@@ -1277,6 +1277,7 @@
 
   function bindExamBuilder() {
     $("addQuestionBtn").addEventListener("click", () => addQuestionCard());
+    $("addSectionBtn")?.addEventListener("click", () => addExamSection());
     $("clearExamFormBtn").addEventListener("click", clearExamForm);
     $("cancelEditExamBtn")?.addEventListener("click", clearExamForm);
     $("saveExamBtn").addEventListener("click", saveExam);
@@ -1521,7 +1522,7 @@
 
     const removeBtn = card.querySelector(".remove-question-btn");
     removeBtn.addEventListener("click", () => {
-      if ($("questionBuilder").children.length <= 1) {
+      if ($("questionBuilder").querySelectorAll(".question-card").length <= 1) {
         setCreateMessage("At least one question is required.", true);
         return;
       }
@@ -2392,7 +2393,19 @@
 
     $("questionBuilder").innerHTML = "";
     questionCounter = 0;
-    (questions || []).forEach(q => addQuestionCard(q));
+    let previousSection = null;
+    (questions || []).forEach((q, index) => {
+      const section = q.section_title || "Part 1";
+      if (index > 0 && section !== previousSection) {
+        const divider = document.createElement("section");
+        divider.className = "exam-part-divider";
+        divider.innerHTML = `<div><span class="muted">Exam Section</span><input class="exam-part-title" value="${escapeAttr(section)}"></div><button type="button" class="remove-part-btn">Remove Section</button>`;
+        $("questionBuilder").appendChild(divider);
+        divider.querySelector(".remove-part-btn").addEventListener("click", () => divider.remove());
+      }
+      addQuestionCard(q);
+      previousSection = section;
+    });
     if (!questions?.length) addQuestionCard();
     renumberQuestionCards();
 
