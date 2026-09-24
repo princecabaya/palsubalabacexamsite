@@ -93,8 +93,9 @@ Deno.serve(async (req) => {
       })
       .filter((r): r is NonNullable<typeof r> => {
         if (!r) return false;
+        if (!["mcq", "binary"].includes(String(r.question.question_type || ""))) return false;
         const correct = r.question.correct_answer;
-        if (correct === null || correct === undefined) return false; // text/manual items are not auto-judged
+        if (correct === null || correct === undefined) return false;
         return normalize(r.answer) !== normalize(correct);
       });
 
