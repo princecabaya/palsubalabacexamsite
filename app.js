@@ -1139,9 +1139,18 @@
 
     function updatePreview() {
       const value = textarea.value.trim();
-      preview.textContent = value
-        ? `\\[${value.replace(/\n/g, "\\\\")}\\]`
-        : "Math preview";
+      if (!value) {
+        preview.textContent = "Math preview";
+      } else {
+        const lines = value
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .filter(Boolean);
+
+        preview.textContent = lines.length > 1
+          ? `\\[\\begin{gathered}${lines.join(" \\\\ ")}\\end{gathered}\\]`
+          : `\\[${lines[0] || ""}\\]`;
+      }
 
       if (window.MathJax?.typesetPromise) {
         window.MathJax.typesetClear?.([preview]);
@@ -1277,8 +1286,13 @@
     // becomes the final grade until the teacher reviews and approves it.
     const provisional = await window.ExamAI?.gradeConstructed?.(attempt.attempt_token);
     if (provisional?.grading_status === "pending_review") {
-      $("doneText").textContent =
-        `Your responses have been recorded. Provisional overall score: ${provisional.provisional_score}/${provisional.provisional_max_score}. Essay, Short Response, and Math Solver items are still subject to teacher review and approval.`;
+      if (provisional.provisional_score !== null && provisional.provisional_score !== undefined) {
+        $("doneText").textContent =
+          `Your responses have been recorded. Provisional overall score: ${provisional.provisional_score}/${provisional.provisional_max_score}. Essay, Short Response, and Math Solver items are still subject to teacher review and approval.`;
+      } else {
+        $("doneText").textContent =
+          "Your responses have been recorded. AI provisional scoring is unavailable or incomplete, so your teacher will score the constructed-response items manually before the final result is approved.";
+      }
     }
 
     // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
