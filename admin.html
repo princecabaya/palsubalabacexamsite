@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260924-2018">
+  <link rel="stylesheet" href="style.css?v=20260924-2135">
 </head>
 <body>
   <main class="shell wide">
@@ -311,25 +311,65 @@
             </div>
             <button id="reloadExamsBtn" type="button">Reload Exams</button>
           </div>
-          <div class="table-wrap manage-table-wrap">
-            <table class="responsive-admin-table manage-exams-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Code</th>
-                  <th>Status</th>
-                  <th>Duration</th>
-                  <th>Questions</th>
-                  <th>Start</th>
-                  <th>End</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="examRows"></tbody>
-            </table>
-          </div>
+          <div id="manageWorkspace" class="manage-workspace">
+            <div id="manageLeftPane" class="manage-left-pane">
+              <div class="table-wrap manage-table-wrap">
+                <table class="responsive-admin-table manage-exams-table">
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>Code</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                      <th>Questions</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="examRows"></tbody>
+                </table>
+              </div>
 
-          <section id="examPreviewPanel" class="exam-preview-panel hidden">
+              <section id="examResultsPanel" class="card exam-results-panel hidden">
+                <div class="detail-head">
+                  <div>
+                    <h2 id="examResultsTitle">Exam Results</h2>
+                    <p id="examResultsMeta" class="muted"></p>
+                  </div>
+                  <button id="closeExamResultsBtn" type="button">Close</button>
+                </div>
+
+                <div class="result-summary">
+                  <div class="metric-card"><span>Students Took Exam</span><strong id="resultTakers">0</strong></div>
+                  <div class="metric-card"><span>Submitted</span><strong id="resultSubmitted">0</strong></div>
+                  <div class="metric-card"><span>Class Average</span><strong id="resultAverage">—</strong></div>
+                  <div class="metric-card"><span>Highest</span><strong id="resultHighest">—</strong></div>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Student</th>
+                        <th>Student No.</th>
+                        <th>Score</th>
+                        <th>Percentage</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="examStudentRows"></tbody>
+                  </table>
+                </div>
+                <p class="muted result-note">Ranking is based only on approved final percentages. Attempts awaiting teacher review are not ranked yet.</p>
+              </section>
+            </div>
+
+            <div id="manageRightPane" class="manage-right-pane hidden">
+              <section id="examPreviewPanel" class="exam-preview-panel hidden">
             <div class="exam-preview-toolbar">
               <div>
                 <span class="eyebrow">Student View Preview</span>
@@ -358,42 +398,6 @@
             </div>
           </section>
 
-          <section id="examResultsPanel" class="card exam-results-panel hidden">
-            <div class="detail-head">
-              <div>
-                <h2 id="examResultsTitle">Exam Results</h2>
-                <p id="examResultsMeta" class="muted"></p>
-              </div>
-              <button id="closeExamResultsBtn" type="button">Close</button>
-            </div>
-
-            <div class="result-summary">
-              <div class="metric-card"><span>Students Took Exam</span><strong id="resultTakers">0</strong></div>
-              <div class="metric-card"><span>Submitted</span><strong id="resultSubmitted">0</strong></div>
-              <div class="metric-card"><span>Class Average</span><strong id="resultAverage">—</strong></div>
-              <div class="metric-card"><span>Highest</span><strong id="resultHighest">—</strong></div>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Student</th>
-                    <th>Student No.</th>
-                    <th>Score</th>
-                    <th>Percentage</th>
-                    <th>Status</th>
-                    <th>Submitted</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="examStudentRows"></tbody>
-              </table>
-            </div>
-            <p class="muted result-note">Ranking is based only on approved final percentages. Attempts awaiting teacher review are not ranked yet.</p>
-          </section>
-
           <section id="gradingReviewPanel" class="grading-review-panel hidden">
             <div class="detail-head">
               <div>
@@ -414,6 +418,8 @@
             </div>
           </section>
         </section>
+            </div>
+          </div>
       </section>
 
       <section id="proctorsSection" class="tab-section hidden">
@@ -601,9 +607,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260924-1615"></script>
-  <script src="admin.js?v=20260924-2005"></script>
+  <script src="admin.js?v=20260924-2135"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
-  <script src="admin-results.js?v=20260924-2018"></script>
+  <script src="admin-results.js?v=20260924-2135"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
 </body>
 </html>
