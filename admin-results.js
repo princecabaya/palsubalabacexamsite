@@ -66,6 +66,7 @@
 
     const submitted = rows.filter(r =>
       r.status === "submitted" &&
+      (r.grading_status === "approved" || r.grading_status === "not_required") &&
       r.percentage !== null
     );
 
