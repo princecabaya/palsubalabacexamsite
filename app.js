@@ -65,6 +65,28 @@
     }
   }
 
+  function getExamDeviceSessionId() {
+    const key = "exam_device_session_id";
+    let value = sessionStorage.getItem(key);
+    if (value && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+      return value;
+    }
+
+    if (crypto?.randomUUID) {
+      value = crypto.randomUUID();
+    } else {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
+      value = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+
+    sessionStorage.setItem(key, value);
+    return value;
+  }
+
   function currentAnswerForQuestion(questionId) {
     const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(String(questionId))}"]`);
     if (!wrap) return "";
@@ -679,7 +701,8 @@
     const { data, error } = await db.rpc("start_exam", {
       p_exam_code: identity.examCode,
       p_student_no: identity.studentNo,
-      p_user_agent: navigator.userAgent
+      p_user_agent: navigator.userAgent,
+      p_device_session: getExamDeviceSessionId()
     });
 
     yesBtn.disabled = false;
@@ -1452,13 +1475,16 @@
     $("startBtn").disabled = true;
 
     const { data: resumeData, error: resumeError } = await db.rpc("resume_exam", {
-      p_attempt_token: token
+      p_attempt_token: token,
+      p_device_session: getExamDeviceSessionId()
     });
 
     if (resumeError || !resumeData?.length) {
-      clearExamBrowserState();
+      sessionStorage.removeItem("exam_guard_token");
       $("startBtn").disabled = false;
-      msg.textContent = "";
+      msg.textContent = resumeError?.message?.includes("locked to another browser or device")
+        ? resumeError.message
+        : "";
       return;
     }
 
