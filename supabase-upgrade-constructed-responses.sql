@@ -377,3 +377,190 @@ $report$;
 
 revoke all on function public.exam_guard_build_attempt_report(uuid) from public;
 
+-- Harden constructed-response approval: never allow an empty or incomplete manual review.
+create or replace function public.admin_approve_constructed_scores(
+  p_attempt_id uuid,
+  p_scores jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $approve$
+declare
+  v_item jsonb;
+  v_question_id uuid;
+  v_score numeric;
+  v_comment text;
+  v_expected_count integer := 0;
+  v_received_count integer := 0;
+  v_auto_score numeric := 0;
+  v_auto_max numeric := 0;
+  v_constructed_score numeric := 0;
+  v_constructed_max numeric := 0;
+  v_total_score numeric := 0;
+  v_total_max numeric := 0;
+begin
+  if auth.uid() is null or not public.exam_guard_can_access_attempt(p_attempt_id) then
+    raise exception 'Only the exam owner or Main Admin can approve constructed-response scores.';
+  end if;
+
+  if jsonb_typeof(p_scores) <> 'array' then
+    raise exception 'Scores must be supplied as an array.';
+  end if;
+
+  select count(*)
+  into v_expected_count
+  from public.questions q
+  join public.attempts a on a.exam_id = q.exam_id
+  where a.id = p_attempt_id
+    and q.question_type in ('essay','text','short_response','math_solver');
+
+  v_received_count := jsonb_array_length(p_scores);
+
+  if v_expected_count = 0 then
+    raise exception 'This attempt has no constructed-response items to approve.';
+  end if;
+
+  if v_received_count <> v_expected_count then
+    raise exception 'All constructed-response items must be reviewed before approval. Expected %, received %.',
+      v_expected_count, v_received_count;
+  end if;
+
+  for v_item in select * from jsonb_array_elements(p_scores)
+  loop
+    v_question_id := (v_item->>'question_id')::uuid;
+    v_score := (v_item->>'score')::numeric;
+    v_comment := nullif(trim(coalesce(v_item->>'comment','')),'');
+
+    if not exists(
+      select 1
+      from public.questions q
+      join public.attempts a on a.exam_id=q.exam_id
+      where a.id=p_attempt_id
+        and q.id=v_question_id
+        and q.question_type in ('essay','text','short_response','math_solver')
+        and v_score between 0 and q.points
+    ) then
+      raise exception 'Invalid score for question %.', v_question_id;
+    end if;
+
+    insert into public.responses(
+      attempt_id, question_id, answer,
+      teacher_score, teacher_comment, review_status,
+      reviewed_at, reviewed_by, saved_at
+    )
+    values(
+      p_attempt_id,
+      v_question_id,
+      coalesce((
+        select r.answer from public.responses r
+        where r.attempt_id=p_attempt_id and r.question_id=v_question_id
+      ), ''),
+      v_score,
+      v_comment,
+      'approved',
+      now(),
+      auth.uid(),
+      now()
+    )
+    on conflict(attempt_id,question_id)
+    do update set
+      teacher_score=excluded.teacher_score,
+      teacher_comment=excluded.teacher_comment,
+      review_status='approved',
+      reviewed_at=excluded.reviewed_at,
+      reviewed_by=excluded.reviewed_by;
+  end loop;
+
+  select
+    coalesce(sum(case when q.question_type in ('mcq','binary')
+      and q.correct_answer is not null
+      and lower(trim(coalesce(r.answer,'')))=lower(trim(q.correct_answer))
+      then q.points else 0 end),0),
+    coalesce(sum(case when q.question_type in ('mcq','binary') then q.points else 0 end),0),
+    coalesce(sum(case when q.question_type in ('essay','text','short_response','math_solver') then coalesce(r.teacher_score,0) else 0 end),0),
+    coalesce(sum(case when q.question_type in ('essay','text','short_response','math_solver') then q.points else 0 end),0)
+  into v_auto_score,v_auto_max,v_constructed_score,v_constructed_max
+  from public.questions q
+  left join public.responses r on r.question_id=q.id and r.attempt_id=p_attempt_id
+  join public.attempts a on a.exam_id=q.exam_id
+  where a.id=p_attempt_id;
+
+  v_total_score := v_auto_score + v_constructed_score;
+  v_total_max := v_auto_max + v_constructed_max;
+
+  update public.attempts
+  set score=v_total_score,
+      max_score=v_total_max,
+      grading_status='approved',
+      grading_approved_at=now(),
+      grading_approved_by=auth.uid()
+  where id=p_attempt_id;
+
+  return jsonb_build_object(
+    'score',v_total_score,
+    'max_score',v_total_max,
+    'grading_status','approved'
+  );
+end;
+$approve$;
+
+revoke all on function public.admin_approve_constructed_scores(uuid,jsonb) from public;
+grant execute on function public.admin_approve_constructed_scores(uuid,jsonb) to authenticated;
+
+-- Treat legacy text questions as constructed responses in manual review.
+create or replace function public.admin_get_grading_review(p_attempt_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $review$
+  select jsonb_build_object(
+    'attempt_id', a.id,
+    'student_name', s.full_name,
+    'student_no', s.student_no,
+    'exam_title', e.title,
+    'grading_status', a.grading_status,
+    'current_score', a.score,
+    'current_max_score', a.max_score,
+    'provisional_score', a.provisional_score,
+    'provisional_max_score', a.provisional_max_score,
+    'items', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'question_id', q.id,
+          'position', q.position,
+          'section_title', q.section_title,
+          'prompt', q.prompt,
+          'question_type', case when q.question_type='text' then 'essay' else q.question_type end,
+          'points', q.points,
+          'reference_answer', q.correct_answer,
+          'rubric_type', q.rubric_type,
+          'rubric_criteria', q.rubric_criteria,
+          'student_answer', coalesce(r.answer,''),
+          'provisional_score', r.provisional_score,
+          'provisional_reason', r.provisional_reason,
+          'teacher_score', r.teacher_score,
+          'teacher_comment', r.teacher_comment,
+          'review_status', r.review_status
+        ) order by q.position
+      )
+      from public.questions q
+      left join public.responses r on r.question_id=q.id and r.attempt_id=a.id
+      where q.exam_id=a.exam_id
+        and q.question_type in ('essay','text','short_response','math_solver')
+    ), '[]'::jsonb)
+  )
+  from public.attempts a
+  join public.students s on s.id=a.student_id
+  join public.exams e on e.id=a.exam_id
+  where a.id=p_attempt_id
+    and a.status='submitted'
+    and public.exam_guard_can_access_attempt(a.id);
+$review$;
+
+revoke all on function public.admin_get_grading_review(uuid) from public;
+grant execute on function public.admin_get_grading_review(uuid) to authenticated;
+
