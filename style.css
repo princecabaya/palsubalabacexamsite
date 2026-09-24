@@ -1169,3 +1169,23 @@ textarea{resize:vertical}
     grid-template-columns:repeat(2,minmax(100px,1fr));
   }
 }
+
+
+/* Grading AI retry tools */
+.grading-ai-tools{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:12px 0 4px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#f8fafc;
+}
+.grading-ai-tools button{flex:0 0 auto}
+.grading-ai-tools .muted{flex:1 1 280px}
+@media(max-width:640px){
+  .grading-ai-tools{align-items:stretch;flex-direction:column}
+  .grading-ai-tools button{width:100%}
+}
