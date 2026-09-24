@@ -1139,3 +1139,33 @@ textarea{resize:vertical}
 }
 .preview-choice-list{align-items:stretch}
 .student-rubric .flat-criteria-table td:first-child{font-weight:700}
+
+
+/* Math keyboard organization pass */
+.math-keyboard-keys{
+  grid-template-columns:repeat(4,minmax(54px,1fr));
+}
+.math-keyboard-utility{
+  grid-template-columns:repeat(7,minmax(60px,1fr));
+}
+.math-utility-key.enter-key{
+  background:#eef6ff;
+  color:#1d4ed8;
+  border-color:#bfdbfe;
+}
+.math-keyboard-tabs button:nth-child(2){
+  min-width:66px;
+}
+@media(max-width:720px){
+  .math-keyboard-keys{
+    grid-template-columns:repeat(4,minmax(48px,1fr));
+  }
+  .math-keyboard-utility{
+    grid-template-columns:repeat(4,minmax(70px,1fr));
+  }
+}
+@media(max-width:430px){
+  .math-keyboard-utility{
+    grid-template-columns:repeat(2,minmax(100px,1fr));
+  }
+}
