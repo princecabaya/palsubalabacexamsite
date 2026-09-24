@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const attemptToken = String(body?.attempt_token || "").trim();
+    const useAi = body?.use_ai === true;
     if (!/^[0-9a-f-]{36}$/i.test(attemptToken)) {
       return json({ error: "Invalid attempt token." }, 400);
     }
@@ -86,13 +87,28 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (q.question_type === "short_response" && q.correct_answer && normalize(answer) === normalize(q.correct_answer)) {
-        deterministic.push({
-          question_id: q.id,
-          score: points,
-          reason: "The response matches the reference answer after basic normalization."
-        });
-        continue;
+      if (q.question_type === "short_response" && q.correct_answer) {
+        const shortCheck = compareShortResponse(answer, q.correct_answer);
+        if (shortCheck.match) {
+          deterministic.push({
+            question_id: q.id,
+            score: points,
+            reason: shortCheck.reason
+          });
+          continue;
+        }
+      }
+
+      if (q.question_type === "math_solver" && q.correct_answer) {
+        const mathCheck = compareMathFinalAnswer(answer, q.correct_answer);
+        if (mathCheck.match) {
+          deterministic.push({
+            question_id: q.id,
+            score: points,
+            reason: mathCheck.reason
+          });
+          continue;
+        }
       }
 
       aiItems.push({
@@ -113,7 +129,7 @@ Deno.serve(async (req) => {
     let aiProvider: "gemini" | "openai" | null = null;
     const aiErrors: string[] = [];
 
-    if (aiItems.length) {
+    if (aiItems.length && useAi) {
       const gradingPrompt = [
         "You are a provisional assessment scorer. Your scores are recommendations only and will be reviewed by a teacher.",
         "Evaluate each supplied constructed-response item independently.",
@@ -286,6 +302,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (aiItems.length && !useAi) {
+      aiErrors.push("AI was not requested. Teacher manual scoring is available for unresolved responses.");
+    }
+
     const allGrades = [...deterministic, ...generated];
     const gradeMap = new Map(allGrades.map(g => [g.question_id, g]));
 
@@ -341,13 +361,86 @@ Deno.serve(async (req) => {
       ai_errors: aiErrors,
       message: aiProvider
         ? `Provisional constructed-response scoring is ready for teacher review (${aiProvider === "openai" ? "OpenAI fallback" : "Gemini"}).`
-        : "AI provisional scoring was unavailable. Teacher manual scoring is required."
+        : (useAi
+            ? "AI provisional scoring was unavailable. Teacher manual scoring is required."
+            : "Free local checks completed. Remaining constructed responses require teacher review unless the teacher chooses to try AI.")
     });
   } catch (error) {
     console.error("grade-constructed-responses error", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
+
+function compareShortResponse(student: string, reference: string) {
+  const a = normalize(student);
+  const b = normalize(reference);
+  if (!a || !b) return { match: false, reason: "" };
+
+  if (a === b) {
+    return { match: true, reason: "[Local] Exact match after normalization." };
+  }
+
+  const aTokens = a.split(" ").filter(Boolean).sort();
+  const bTokens = b.split(" ").filter(Boolean).sort();
+
+  if (aTokens.join("|") === bTokens.join("|")) {
+    return {
+      match: true,
+      reason: "[Local] Equivalent words/name components in a different order."
+    };
+  }
+
+  const compactA = a.replace(/\s+/g, "");
+  const compactB = b.replace(/\s+/g, "");
+  if (compactA === compactB) {
+    return {
+      match: true,
+      reason: "[Local] Equivalent response after spacing and punctuation normalization."
+    };
+  }
+
+  return { match: false, reason: "" };
+}
+
+function compareMathFinalAnswer(student: string, reference: string) {
+  const studentLines = String(student || "")
+    .split(/\r?\n/)
+    .map(line => normalizeMath(line))
+    .filter(Boolean);
+
+  const ref = normalizeMath(reference);
+  if (!ref || !studentLines.length) return { match: false, reason: "" };
+
+  const last = studentLines[studentLines.length - 1];
+  if (last === ref) {
+    return {
+      match: true,
+      reason: "[Local] The final solution line matches the expected answer."
+    };
+  }
+
+  const studentLastNoSpaces = last.replace(/\s+/g, "");
+  const refNoSpaces = ref.replace(/\s+/g, "");
+  if (studentLastNoSpaces === refNoSpaces) {
+    return {
+      match: true,
+      reason: "[Local] The final answer matches after spacing normalization."
+    };
+  }
+
+  return { match: false, reason: "" };
+}
+
+function normalizeMath(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\\left|\\right/g, "")
+    .replace(/\\times/g, "*")
+    .replace(/\\div/g, "/")
+    .replace(/[−–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function normalize(value: unknown) {
   return String(value ?? "")
