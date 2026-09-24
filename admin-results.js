@@ -231,7 +231,7 @@
       });
 
       tr.querySelector(".inline-delete-btn")?.addEventListener("click", async () => {
-        await deleteAttempt(result, exam);
+        await deleteAttempt(result, exam, { refreshResultsPanel: false });
         if (!row.classList.contains("hidden")) {
           await loadInlineExamTakers(exam, row);
         }
@@ -828,7 +828,7 @@
     }
   });
 
-  async function deleteAttempt(attempt, exam) {
+  async function deleteAttempt(attempt, exam, { refreshResultsPanel = true } = {}) {
     const studentName = attempt.students?.full_name || "this student";
     const studentNo = attempt.students?.student_no || "";
 
@@ -876,7 +876,9 @@
     }
 
     alert(`The exam record for ${studentName} was deleted successfully.`);
-    await openExamResults(exam);
+    if (refreshResultsPanel) {
+      await openExamResults(exam);
+    }
     window.ExamAdmin?.refreshAttempts?.();
   }
 
