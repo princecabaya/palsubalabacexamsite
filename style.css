@@ -1189,3 +1189,28 @@ textarea{resize:vertical}
   .grading-ai-tools{align-items:stretch;flex-direction:column}
   .grading-ai-tools button{width:100%}
 }
+
+
+/* Student result lookup and split math answer */
+.student-login-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.student-login-actions button{flex:1 1 220px}
+.student-site-tools{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px}
+.student-site-tools .teacher-link{margin-top:0}
+.link-button{border:0;background:transparent;color:var(--primary);padding:0;min-height:auto;text-decoration:underline;cursor:pointer}
+
+.math-answer-label{display:block;padding:10px 14px 6px;font-weight:800;background:#fff}
+.math-final-label{border-top:1px solid var(--line)}
+.math-final-answer-input{
+  width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:1rem;background:#fff
+}
+.math-preview-working{min-height:44px;padding-bottom:8px}
+.math-preview-final{padding-top:9px;border-top:1px dashed #cad2de}
+.math-utility-key.close-key{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+.preview-math-solver .math-answer-label{background:#f8fafc}
+
+@media(max-width:640px){
+  .student-login-actions{flex-direction:column}
+  .student-site-tools{align-items:flex-start;flex-direction:column;gap:10px}
+}
