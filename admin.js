@@ -1388,6 +1388,7 @@
     const card = document.createElement("section");
     card.className = "question-card";
     card.dataset.qid = String(idx);
+    card.dataset.sectionTitle = q.section_title || "";
     card.innerHTML = `
       <div class="detail-head">
         <div>
@@ -1407,6 +1408,8 @@
           <select class="q-type">
             <option value="mcq" ${q.question_type === "mcq" ? "selected" : ""}>Multiple Choice</option>
             <option value="binary" ${q.question_type === "binary" ? "selected" : ""}>Binary Response</option>
+            <option value="short_response" ${q.question_type === "short_response" ? "selected" : ""}>Short Response</option>
+            <option value="math_solver" ${q.question_type === "math_solver" ? "selected" : ""}>Math Solver</option>
             <option value="essay" ${(q.question_type === "essay" || q.question_type === "text") ? "selected" : ""}>Essay</option>
           </select>
         </label>
@@ -1443,6 +1446,22 @@
         </div>
         <label>Correct response
           <select class="binary-correct"></select>
+        </label>
+      </div>
+
+      <div class="short-response-area hidden">
+        <h4>Short Response</h4>
+        <p class="muted">For one word, one phrase, or one sentence. The reference answer is used for provisional AI equivalence checking.</p>
+        <label>Reference / correct answer
+          <input class="short-reference-answer" placeholder="e.g. Jose P. Rizal" value="${escapeAttr(q.question_type === "short_response" ? (q.correct_answer || "") : "")}">
+        </label>
+      </div>
+
+      <div class="math-solver-area hidden">
+        <h4>Math Solver</h4>
+        <p class="muted">Students will use the built-in mathematics keyboard and solution board. Enter the expected final answer or solution guide for provisional AI scoring.</p>
+        <label>Expected final answer / solution guide
+          <textarea class="math-reference-answer" rows="3" placeholder="e.g. x = 4, or describe the expected solution">${escapeAttr(q.question_type === "math_solver" ? (q.correct_answer || "") : "")}</textarea>
         </label>
       </div>
 
@@ -2150,11 +2169,15 @@
     const type = card.querySelector(".q-type").value;
     const mcqArea = card.querySelector(".mcq-area");
     const binaryArea = card.querySelector(".binary-area");
+    const shortArea = card.querySelector(".short-response-area");
+    const mathArea = card.querySelector(".math-solver-area");
     const essayArea = card.querySelector(".essay-rubric-area");
     const pointInput = card.querySelector(".q-points");
 
     mcqArea.classList.toggle("hidden", type !== "mcq");
     binaryArea.classList.toggle("hidden", type !== "binary");
+    shortArea.classList.toggle("hidden", type !== "short_response");
+    mathArea.classList.toggle("hidden", type !== "math_solver");
     essayArea.classList.toggle("hidden", type !== "essay");
 
     if (type === "essay") {
@@ -2166,6 +2189,41 @@
     }
 
     if (type === "binary") refreshBinaryAnswerOptions(card);
+  }
+
+  function addExamSection(title = null) {
+    const builder = $("questionBuilder");
+    const existing = builder.querySelectorAll(".exam-part-divider").length;
+    const sectionTitle = title || `Part ${existing + 2}`;
+
+    const divider = document.createElement("section");
+    divider.className = "exam-part-divider";
+    divider.innerHTML = `
+      <div>
+        <span class="muted">Exam Section</span>
+        <input class="exam-part-title" value="${escapeAttr(sectionTitle)}" aria-label="Section title">
+      </div>
+      <button type="button" class="remove-part-btn">Remove Section</button>
+    `;
+    builder.appendChild(divider);
+    divider.querySelector(".remove-part-btn").addEventListener("click", () => {
+      divider.remove();
+      renumberQuestionCards();
+    });
+
+    addQuestionCard({ prompt:"", question_type:"mcq", points:1, choices:["","","",""], correct_answer:"", rubric_type:"analytic", rubric_criteria:[], section_title:sectionTitle });
+    renumberQuestionCards();
+  }
+
+  function sectionTitleForCard(card) {
+    let node = card.previousElementSibling;
+    while (node) {
+      if (node.classList?.contains("exam-part-divider")) {
+        return node.querySelector(".exam-part-title")?.value?.trim() || "Part 2";
+      }
+      node = node.previousElementSibling;
+    }
+    return card.dataset.sectionTitle || "Part 1";
   }
 
   function renumberQuestionCards() {
@@ -2224,6 +2282,7 @@
       const questions = payload.questions.map((q, i) => ({
         exam_id: editingExamId,
         position: i + 1,
+        section_title: q.section_title || "Part 1",
         prompt: q.prompt,
         question_type: q.question_type,
         choices: q.choices,
@@ -2304,7 +2363,7 @@
 
     const { data: questions, error } = await db
       .from("questions")
-      .select("id,position,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
+      .select("id,position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
       .eq("exam_id", exam.id)
       .order("position", { ascending: true });
 
@@ -2363,7 +2422,7 @@
     if (!duration || duration < 1 || duration > 600) return fail("Enter a valid duration between 1 and 600 minutes.");
     if (startAt && endAt && new Date(endAt) <= new Date(startAt)) return fail("End date/time must be later than start date/time.");
 
-    const cards = [...$("questionBuilder").children];
+    const cards = [...$("questionBuilder").querySelectorAll(".question-card")];
     if (!cards.length) return fail("Add at least one question.");
 
     const questions = [];
@@ -2400,6 +2459,12 @@
         choices = [first, second];
         correct_answer = card.querySelector(".binary-correct").value.trim();
         if (!correct_answer) return fail(`Question ${i + 1} needs a correct binary response.`);
+      } else if (question_type === "short_response") {
+        correct_answer = card.querySelector(".short-reference-answer").value.trim();
+        if (!correct_answer) return fail(`Question ${i + 1} needs a reference answer for provisional verification.`);
+      } else if (question_type === "math_solver") {
+        correct_answer = card.querySelector(".math-reference-answer").value.trim();
+        if (!correct_answer) return fail(`Question ${i + 1} needs an expected final answer or solution guide.`);
       } else if (question_type === "essay") {
         rubric_type = rubricMode(card);
         rubric_criteria = collectRubricCriteria(card);
@@ -2436,6 +2501,7 @@
       if (!points || points <= 0) return fail(`Question ${i + 1} must have a positive point value.`);
 
       questions.push({
+        section_title: sectionTitleForCard(card),
         prompt,
         question_type,
         points,
@@ -2818,7 +2884,19 @@
     replaceQuestions(questionList) {
       $("questionBuilder").innerHTML = "";
       questionCounter = 0;
-      (questionList || []).forEach(q => addQuestionCard(q));
+      let lastSection = "Part 1";
+      (questionList || []).forEach((q, index) => {
+        const section = q.section_title || "Part 1";
+        if (index > 0 && section !== lastSection) {
+          const divider = document.createElement("section");
+          divider.className = "exam-part-divider";
+          divider.innerHTML = `<div><span class="muted">Exam Section</span><input class="exam-part-title" value="${escapeAttr(section)}"></div><button type="button" class="remove-part-btn">Remove Section</button>`;
+          $("questionBuilder").appendChild(divider);
+          divider.querySelector(".remove-part-btn").addEventListener("click", () => divider.remove());
+        }
+        addQuestionCard({ ...q, section_title: section });
+        lastSection = section;
+      });
       if (!questionList?.length) addQuestionCard();
       renumberQuestionCards();
     },
