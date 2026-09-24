@@ -75,6 +75,9 @@
     const textarea = wrap.querySelector("textarea");
     if (textarea) return textarea.value;
 
+    const textInput = wrap.querySelector('input[type="text"], input.short-response-input');
+    if (textInput) return textInput.value;
+
     return "";
   }
 
