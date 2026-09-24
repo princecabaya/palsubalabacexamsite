@@ -2751,7 +2751,7 @@
     if (error && /archived|draft_payload|draft_updated_at/i.test(error.message || "")) {
       const fallback = await db
         .from("exams")
-        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id, draft_payload, draft_updated_at")
+        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id")
         .order("created_at", { ascending: false });
       exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null, draft_payload: null, draft_updated_at: null }));
       error = fallback.error;
