@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260924-1415">
+  <link rel="stylesheet" href="style.css?v=20260924-1535">
 </head>
 <body>
   <main class="shell wide">
@@ -291,6 +291,10 @@
           <div id="questionBuilder" class="builder-list"></div>
 
           <div class="row section-actions">
+            <button id="addSectionBtn" type="button">Add Section / Part</button>
+          </div>
+
+          <div class="row section-actions">
             <button id="saveExamBtn" class="primary" type="button">Save Exam</button>
             <button id="cancelEditExamBtn" class="hidden" type="button">Cancel Editing</button>
             <span id="createExamMsg" class="message-inline"></span>
@@ -359,6 +363,22 @@
               </table>
             </div>
             <p class="muted result-note">Ranking is based on the auto-scored percentage. Tied percentages receive the same rank.</p>
+          </section>
+
+          <section id="gradingReviewPanel" class="grading-review-panel hidden">
+            <div class="detail-head">
+              <div>
+                <h2 id="gradingReviewTitle">Constructed Response Review</h2>
+                <p id="gradingReviewMeta" class="muted"></p>
+              </div>
+              <button id="closeGradingReviewBtn" type="button">Close</button>
+            </div>
+            <p class="review-warning">AI scores are provisional. Review Essay, Short Response, and Math Solver responses before approving the final score.</p>
+            <div id="gradingReviewItems" class="grading-review-items"></div>
+            <div class="row section-actions">
+              <button id="approveGradingBtn" class="primary" type="button">Approve Final Scores</button>
+              <span id="gradingReviewMsg" class="message-inline"></span>
+            </div>
           </section>
         </section>
       </section>
@@ -548,9 +568,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260924-1428"></script>
-  <script src="admin.js?v=20260924-1428"></script>
+  <script src="admin.js?v=20260924-1535"></script>
   <script src="admin-import.js?v=20260924-1325"></script>
-  <script src="admin-results.js?v=20260922-2205"></script>
+  <script src="admin-results.js?v=20260924-1535"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
 </body>
 </html>
