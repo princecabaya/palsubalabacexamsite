@@ -370,6 +370,48 @@
     }
   }
 
+  function showStudentReport(report) {
+    studentToken = null;
+    studentReport = report || null;
+
+    const panel = document.getElementById("resultReportPanel");
+    const button = document.getElementById("resultPdfBtn");
+    const message = document.getElementById("resultPdfMsg");
+    if (!panel || !button || !message || !studentReport) return;
+
+    panel.classList.remove("hidden");
+    renderStudentReview(studentReport);
+    button.disabled = false;
+    message.textContent = studentReport.grading_status === "approved"
+      ? "This is the latest teacher-approved result."
+      : "This result is still awaiting teacher review. Refresh later to see any score updates.";
+    message.classList.remove("error");
+    message.classList.add("success");
+
+    if (!studentBound) {
+      studentBound = true;
+      button.addEventListener("click", async () => {
+        if (!studentReport) return;
+        button.disabled = true;
+        button.textContent = "Generating PDF…";
+        message.textContent = "";
+        try {
+          const filename = await saveReport(studentReport);
+          message.textContent = `Result PDF generated: ${filename}`;
+          message.classList.remove("error");
+          message.classList.add("success");
+        } catch (error) {
+          message.textContent = error?.message || "Could not generate the result PDF.";
+          message.classList.remove("success");
+          message.classList.add("error");
+        } finally {
+          button.disabled = !studentReport;
+          button.textContent = "Download Result PDF";
+        }
+      });
+    }
+  }
+
   function enableStudent(attemptToken) {
     studentToken = attemptToken || null;
     studentReport = null;
@@ -670,6 +712,7 @@
 
   window.ExamReport = {
     enableStudent,
+    showStudentReport,
     generateTeacher,
     generateExamPdf
   };
