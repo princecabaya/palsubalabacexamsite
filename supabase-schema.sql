@@ -2597,6 +2597,28 @@ alter table public.attempts
   add column if not exists active_session_id uuid,
   add column if not exists session_locked_at timestamptz;
 
+
+-- Automatically release the browser lock whenever an attempt stops being active.
+create or replace function public.exam_guard_release_session_lock_when_inactive()
+returns trigger
+language plpgsql
+set search_path = public
+as $lock_trigger$
+begin
+  if new.status <> 'active' then
+    new.active_session_id := null;
+    new.session_locked_at := null;
+  end if;
+  return new;
+end;
+$lock_trigger$;
+
+drop trigger if exists exam_guard_release_session_lock_when_inactive on public.attempts;
+create trigger exam_guard_release_session_lock_when_inactive
+before insert or update of status on public.attempts
+for each row
+execute function public.exam_guard_release_session_lock_when_inactive();
+
 -- Replace the old 3-argument start API so an anonymous caller cannot bypass the lock.
 drop function if exists public.start_exam(text,text,text);
 
