@@ -1464,6 +1464,7 @@
       .replace(/-+/g, "-")
       .slice(0, 40);
     $("examCodeInput").value = code;
+    scheduleExamDraftAutosave();
   }
 
   function clearExamForm() {
@@ -1477,8 +1478,8 @@
     const saveBtn = $("saveExamBtn");
     const cancelBtn = $("cancelEditExamBtn");
     if (heading) heading.textContent = "Create a New Exam";
-    if (intro) intro.textContent = "This lets you create an exam directly from the teacher dashboard without using SQL.";
-    if (saveBtn) saveBtn.textContent = "Save Exam";
+    if (intro) intro.textContent = "Begin entering the examination paper. Changes are automatically stored as a Draft and remain in Manage Exams until you delete them.";
+    if (saveBtn) saveBtn.textContent = "Save Draft Now";
     if (cancelBtn) cancelBtn.classList.add("hidden");
 
     $("examTitleInput").value = "";
