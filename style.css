@@ -1119,3 +1119,23 @@ textarea{resize:vertical}
   .exam-preview-header{align-items:flex-start;flex-direction:column}
   .exam-preview-time{text-align:left}
 }
+
+
+/* Preview choice alignment fix */
+.preview-choice{
+  justify-content:flex-start!important;
+  text-align:left!important;
+}
+.preview-choice input{
+  flex:0 0 auto!important;
+  width:auto!important;
+  margin:3px 8px 0 0!important;
+}
+.preview-choice span{
+  flex:1 1 auto!important;
+  min-width:0;
+  text-align:left!important;
+  line-height:1.4;
+}
+.preview-choice-list{align-items:stretch}
+.student-rubric .flat-criteria-table td:first-child{font-weight:700}
