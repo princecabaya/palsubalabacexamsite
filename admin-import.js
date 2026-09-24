@@ -25,6 +25,58 @@
   latexTemplateBtn?.addEventListener("click", downloadLatexTemplate);
   latexImportBtn?.addEventListener("click", importLatexFile);
 
+  setupDropZone("excelDropZone", fileInput, "excelSelectedFileName", [".xlsx", ".xls"]);
+  setupDropZone("latexDropZone", latexFileInput, "latexSelectedFileName", [".tex"]);
+
+  function setupDropZone(zoneId, input, fileNameId, extensions) {
+    const zone = document.getElementById(zoneId);
+    const nameNode = document.getElementById(fileNameId);
+    if (!zone || !input) return;
+
+    const updateName = () => {
+      const file = input.files?.[0];
+      if (nameNode) {
+        nameNode.textContent = file ? file.name : (extensions.includes(".tex") ? "LaTeX files (.tex)" : "Excel files (.xlsx, .xls)");
+      }
+      zone.classList.toggle("has-file", Boolean(file));
+    };
+
+    input.addEventListener("change", updateName);
+
+    ["dragenter", "dragover"].forEach(type => {
+      zone.addEventListener(type, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        zone.classList.add("drag-over");
+      });
+    });
+
+    ["dragleave", "drop"].forEach(type => {
+      zone.addEventListener(type, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        zone.classList.remove("drag-over");
+      });
+    });
+
+    zone.addEventListener("drop", event => {
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+
+      const lower = file.name.toLowerCase();
+      if (!extensions.some(ext => lower.endsWith(ext))) {
+        if (nameNode) nameNode.textContent = "Unsupported file type";
+        zone.classList.remove("has-file");
+        return;
+      }
+
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      updateName();
+    });
+  }
+
   async function importWorkbook() {
     setMessage("");
 
