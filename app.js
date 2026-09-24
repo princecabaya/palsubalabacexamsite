@@ -1291,7 +1291,7 @@
           `Your responses have been recorded. Provisional overall score: ${provisional.provisional_score}/${provisional.provisional_max_score}. Essay, Short Response, and Math Solver items are still subject to teacher review and approval.`;
       } else {
         $("doneText").textContent =
-          "Your responses have been recorded. AI provisional scoring is unavailable or incomplete, so your teacher will score the constructed-response items manually before the final result is approved.";
+          "Your responses have been recorded. Free local checks were completed. Any unresolved Essay, Short Response, or Math Solver items will be reviewed by your teacher before the final result is approved.";
       }
     }
 
