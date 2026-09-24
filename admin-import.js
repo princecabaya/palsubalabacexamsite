@@ -472,6 +472,15 @@
     );
   }
 
+  function normalizeImportedLatexText(value) {
+    return String(value || "")
+      .replace(/\\textit\{([^{}]*)\}/g, "$1")
+      .replace(/\\emph\{([^{}]*)\}/g, "$1")
+      .replace(/\\textbf\{([^{}]*)\}/g, "$1")
+      .replace(/\\underline\{([^{}]*)\}/g, "$1")
+      .replace(/\\text\{([^{}]*)\}/g, "$1");
+  }
+
   function extractLatexPrompt(raw) {
     const tokens = [
       "\\begin{choices}",
@@ -494,7 +503,7 @@
       const group = readBraceGroup(prompt, 0);
       if (group && group.end === prompt.length) prompt = group.value.trim();
     }
-    return prompt;
+    return prompt.replace(/\\text\{([^{}]*)\}/g, "$1");
   }
 
   function extractEnvironment(raw, name) {
