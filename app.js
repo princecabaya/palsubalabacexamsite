@@ -1197,7 +1197,7 @@
       activeInput.blur();
       updatePreview();
       saveCombined();
-      stateNode.textContent = "Answer finalized and saved";
+      stateNode.textContent = "Saved";
     }
 
     function makeUtility(label,title,handler,extraClass="") {
@@ -1218,7 +1218,7 @@
     makeUtility("↵ Enter","Start a new solution line",()=>insertToken("newline"),"enter-key");
     makeUtility("⌫","Backspace",backspace,"delete-key");
     makeUtility("Clear","Clear active box",clearActive,"clear-key");
-    makeUtility("ⓧ","Close keyboard and finalize answer",closeKeyboard,"close-key");
+    makeUtility("ⓧ","Close keyboard",closeKeyboard,"close-key");
 
     function renderKeys(index) {
       [...tabBar.children].forEach((button,i)=>button.classList.toggle("active",i===index));
