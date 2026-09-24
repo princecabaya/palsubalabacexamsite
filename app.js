@@ -674,7 +674,18 @@
       (savedResponses || []).map(r => [String(r.question_id), r])
     );
 
+    let currentSectionTitle = null;
+
     for (const q of questions) {
+      const sectionTitle = String(q.section_title || "Part 1").trim() || "Part 1";
+      if (sectionTitle !== currentSectionTitle) {
+        const sectionHeading = document.createElement("section");
+        sectionHeading.className = "student-exam-section-heading";
+        sectionHeading.textContent = sectionTitle;
+        examForm.appendChild(sectionHeading);
+        currentSectionTitle = sectionTitle;
+      }
+
       const wrap = document.createElement("section");
       wrap.className = "question";
       wrap.dataset.questionId = q.question_id;
@@ -724,19 +735,30 @@
           wrap.appendChild(label);
         });
       } else {
-        const ta = document.createElement("textarea");
-        ta.rows = q.question_type === "essay" ? 9 : 5;
-        ta.placeholder = q.question_type === "essay"
-          ? "Write your essay response here"
-          : "Type your answer here";
-        if (saved) ta.value = String(saved.answer ?? "");
-        let debounce;
-        ta.addEventListener("input", () => {
-          state.textContent = "Saving…";
-          clearTimeout(debounce);
-          debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 600);
-        });
-        wrap.appendChild(ta);
+        let ta;
+
+        if (q.question_type === "math_solver") {
+          const solver = createMathSolverBoard(q, saved, state);
+          ta = solver.textarea;
+          wrap.appendChild(solver.container);
+        } else {
+          ta = document.createElement(q.question_type === "short_response" ? "input" : "textarea");
+          if (q.question_type !== "short_response") {
+            ta.rows = q.question_type === "essay" ? 9 : 5;
+          }
+          ta.className = q.question_type === "short_response" ? "short-response-input" : "";
+          ta.placeholder = q.question_type === "essay"
+            ? "Write your essay response here"
+            : "Type your answer here";
+          if (saved) ta.value = String(saved.answer ?? "");
+          let debounce;
+          ta.addEventListener("input", () => {
+            state.textContent = "Saving…";
+            clearTimeout(debounce);
+            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 600);
+          });
+          wrap.appendChild(ta);
+        }
 
         if (q.question_type === "essay" && Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) {
           const rubric = document.createElement("details");
@@ -820,6 +842,127 @@
       wrap.appendChild(state);
       examForm.appendChild(wrap);
     }
+  }
+
+  function createMathSolverBoard(question, saved, stateNode) {
+    const container = document.createElement("div");
+    container.className = "math-solver-board";
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "math-solution-input";
+    textarea.rows = 4;
+    textarea.readOnly = true;
+    textarea.inputMode = "none";
+    textarea.placeholder = "Tap here, then use the mathematics keyboard below.";
+    textarea.value = saved ? String(saved.answer ?? "") : "";
+
+    const preview = document.createElement("div");
+    preview.className = "math-solution-preview";
+    const keyboard = document.createElement("div");
+    keyboard.className = "math-virtual-keyboard hidden";
+
+    const tabs = [
+      { name: "123", keys: ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","<",">","≤","≥","(",")",","] },
+      { name: "ABC", keys: ["x","y","a","b","c","d","m","n","p","q","r","s","t","u","v","w","z"] },
+      { name: "αβγ", keys: ["α","β","γ","θ","λ","μ","σ","Δ","π"] },
+      { name: "ƒ()", keys: ["x²","x^□","√□","|□|","frac","sin","cos","tan","log","ln","e","i","newline","⌫"] }
+    ];
+
+    const tabBar = document.createElement("div");
+    tabBar.className = "math-keyboard-tabs";
+    const keyArea = document.createElement("div");
+    keyArea.className = "math-keyboard-keys";
+
+    function latexForKey(key) {
+      return ({
+        "÷":"\\div ","×":"\\times ","−":"-","≤":"\\le ","≥":"\\ge ",
+        "α":"\\alpha ","β":"\\beta ","γ":"\\gamma ","θ":"\\theta ","λ":"\\lambda ",
+        "μ":"\\mu ","σ":"\\sigma ","Δ":"\\Delta ","π":"\\pi ",
+        "x²":"x^2","x^□":"x^{}","√□":"\\sqrt{}","|□|":"\\left| \\right|",
+        "frac":"\\frac{}{}","sin":"\\sin ","cos":"\\cos ","tan":"\\tan ",
+        "log":"\\log ","ln":"\\ln ","newline":"\n"
+      })[key] ?? key;
+    }
+
+    function insertToken(token) {
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? start;
+
+      if (token === "⌫") {
+        if (start === end && start > 0) {
+          textarea.value = textarea.value.slice(0, start - 1) + textarea.value.slice(end);
+          textarea.setSelectionRange(start - 1, start - 1);
+        } else {
+          textarea.value = textarea.value.slice(0, start) + textarea.value.slice(end);
+          textarea.setSelectionRange(start, start);
+        }
+      } else {
+        const value = latexForKey(token);
+        textarea.value = textarea.value.slice(0, start) + value + textarea.value.slice(end);
+        const next = start + value.length;
+        textarea.setSelectionRange(next, next);
+      }
+
+      autosize();
+      updatePreview();
+      stateNode.textContent = "Saving…";
+      clearTimeout(textarea._saveTimer);
+      textarea._saveTimer = setTimeout(() => saveAnswer(question.question_id, textarea.value, stateNode), 500);
+      textarea.focus({ preventScroll: true });
+    }
+
+    function renderKeys(index) {
+      [...tabBar.children].forEach((button, i) => button.classList.toggle("active", i === index));
+      keyArea.innerHTML = "";
+      tabs[index].keys.forEach(key => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "math-key";
+        button.textContent = key === "newline" ? "↵" : key;
+        button.title = key === "newline" ? "New line" : key;
+        button.addEventListener("mousedown", event => event.preventDefault());
+        button.addEventListener("click", () => insertToken(key));
+        keyArea.appendChild(button);
+      });
+    }
+
+    tabs.forEach((tab, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = tab.name;
+      button.addEventListener("mousedown", event => event.preventDefault());
+      button.addEventListener("click", () => renderKeys(index));
+      tabBar.appendChild(button);
+    });
+
+    function autosize() {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.max(110, textarea.scrollHeight + 6)}px`;
+    }
+
+    function updatePreview() {
+      const value = textarea.value.trim();
+      preview.textContent = value ? `\\[${value.replace(/\n/g, "\\\\")}\\]` : "Math preview";
+      if (window.MathJax?.typesetPromise) {
+        window.MathJax.typesetClear?.([preview]);
+        window.MathJax.typesetPromise([preview]).catch(() => {});
+      }
+    }
+
+    textarea.addEventListener("focus", () => keyboard.classList.remove("hidden"));
+    container.addEventListener("focusout", event => {
+      if (!container.contains(event.relatedTarget)) {
+        setTimeout(() => keyboard.classList.add("hidden"), 120);
+      }
+    });
+
+    keyboard.append(tabBar, keyArea);
+    container.append(textarea, preview, keyboard);
+    renderKeys(0);
+    autosize();
+    updatePreview();
+
+    return { container, textarea };
   }
 
   async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
