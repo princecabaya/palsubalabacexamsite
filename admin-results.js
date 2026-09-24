@@ -53,7 +53,7 @@
     const container = row.querySelector(".exam-takers-dropdown");
     if (!container) return;
 
-    container.innerHTML = '<p class="muted">Loading student takers…</p>';
+    container.innerHTML = '<p class="muted">Loading exam results…</p>';
 
     const { data, error } = await db
       .from("attempts")
@@ -61,74 +61,186 @@
         id,attempt_token,status,started_at,submitted_at,score,max_score,grading_status,provisional_score,provisional_max_score,
         students(student_no,full_name)
       `)
-      .eq("exam_id", exam.id)
-      .order("started_at", { ascending: true });
+      .eq("exam_id", exam.id);
 
     if (error) {
       container.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
       return;
     }
 
-    const attempts = data || [];
-    if (!attempts.length) {
+    const rows = (data || []).map(a => {
+      const score = numberOrNull(a.score);
+      const maxScore = numberOrNull(a.max_score);
+      const percentage = score !== null && maxScore !== null && maxScore > 0
+        ? (score / maxScore) * 100
+        : null;
+
+      return {
+        ...a,
+        score_num: score,
+        max_score_num: maxScore,
+        provisional_score_num: numberOrNull(a.provisional_score),
+        provisional_max_score_num: numberOrNull(a.provisional_max_score),
+        percentage
+      };
+    });
+
+    if (!rows.length) {
       container.innerHTML = '<p class="muted">No student has taken this exam yet.</p>';
       return;
     }
 
-    container.innerHTML = `
-      <div class="exam-takers-dropdown-head">
-        <strong>${attempts.length} student${attempts.length === 1 ? "" : "s"} took this exam</strong>
-        <button type="button" class="open-full-results-btn">Open Results Summary</button>
-      </div>
-      <div class="exam-taker-list"></div>
-    `;
+    const submitted = rows.filter(r =>
+      r.status === "submitted" &&
+      (r.grading_status === "approved" || r.grading_status === "not_required") &&
+      r.percentage !== null
+    );
 
-    container.querySelector(".open-full-results-btn")?.addEventListener("click", async () => {
-      await openExamResults(exam);
+    const ranked = [...submitted].sort((a, b) => {
+      if (b.percentage !== a.percentage) return b.percentage - a.percentage;
+      return (a.students?.full_name || "").localeCompare(b.students?.full_name || "");
     });
 
-    const list = container.querySelector(".exam-taker-list");
+    let previousPct = null;
+    let previousRank = 0;
+    const rankMap = new Map();
+
+    ranked.forEach((result, index) => {
+      let rank;
+      if (previousPct !== null && nearlyEqual(result.percentage, previousPct)) {
+        rank = previousRank;
+      } else {
+        rank = index + 1;
+      }
+
+      rankMap.set(result.id, rank);
+      previousPct = result.percentage;
+      previousRank = rank;
+    });
+
+    rows.sort((a, b) => {
+      const ar = rankMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const br = rankMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      if (ar !== br) return ar - br;
+      return (a.students?.full_name || "").localeCompare(b.students?.full_name || "");
+    });
+
+    const average = submitted.length
+      ? submitted.reduce((sum, result) => sum + result.percentage, 0) / submitted.length
+      : null;
+
+    const highest = submitted.length
+      ? Math.max(...submitted.map(result => result.percentage))
+      : null;
+
+    container.innerHTML = `
+      <div class="inline-results-head">
+        <div>
+          <strong>${escapeHtml(exam.title || "Exam Results")}</strong>
+          <p class="muted">${escapeHtml(exam.code || "")} • ${rows.length} student${rows.length === 1 ? "" : "s"} took this exam</p>
+        </div>
+      </div>
+
+      <div class="inline-result-summary">
+        <div class="metric-card">
+          <span>Students Took Exam</span>
+          <strong>${rows.length}</strong>
+        </div>
+        <div class="metric-card">
+          <span>Submitted</span>
+          <strong>${rows.filter(result => result.status === "submitted").length}</strong>
+        </div>
+        <div class="metric-card">
+          <span>Class Average</span>
+          <strong>${average === null ? "—" : `${formatPct(average)}%`}</strong>
+        </div>
+        <div class="metric-card">
+          <span>Highest</span>
+          <strong>${highest === null ? "—" : `${formatPct(highest)}%`}</strong>
+        </div>
+      </div>
+
+      <div class="table-wrap inline-results-table-wrap">
+        <table class="inline-results-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Student</th>
+              <th>Student No.</th>
+              <th>Score</th>
+              <th>Percentage</th>
+              <th>Status</th>
+              <th>Submitted</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody class="inline-results-body"></tbody>
+        </table>
+      </div>
+
+      <p class="muted result-note">Ranking uses approved final percentages only. Attempts awaiting teacher review are not ranked yet.</p>
+    `;
+
+    const tbody = container.querySelector(".inline-results-body");
     const proctorOnly = Boolean(window.ExamAdmin?.isProctorForExam?.(exam.id));
 
-    attempts.forEach(attempt => {
-      const approved = attempt.grading_status === "approved" || attempt.grading_status === "not_required";
-      const item = document.createElement("div");
-      item.className = "exam-taker-item";
-      item.innerHTML = `
-        <button type="button" class="exam-taker-name-btn">
-          <span>
-            <strong>${escapeHtml(attempt.students?.full_name || "Unknown Student")}</strong>
-            <small>${escapeHtml(attempt.students?.student_no || "")}</small>
-          </span>
-          <span class="exam-taker-state">${approved ? "Approved" : (attempt.status === "submitted" ? "Needs review" : escapeHtml(attempt.status))}</span>
-        </button>
-        <div class="exam-taker-quick-actions">
-          ${attempt.status === "submitted" && !proctorOnly ? '<button type="button" class="inline-review-btn">Review / Edit Scores</button>' : ""}
-          ${attempt.status === "submitted" ? '<button type="button" class="inline-pdf-btn">Result PDF</button>' : ""}
-        </div>
+    rows.forEach(result => {
+      const approved = result.grading_status === "approved" || result.grading_status === "not_required";
+      const rank = rankMap.get(result.id);
+      const score = approved
+        ? (result.score_num === null
+            ? "—"
+            : `${trimNumber(result.score_num)}/${result.max_score_num === null ? "—" : trimNumber(result.max_score_num)}`)
+        : (result.provisional_score_num === null
+            ? (result.score_num === null
+                ? "Pending review"
+                : `${trimNumber(result.score_num)}/${result.max_score_num ?? "—"} + review`)
+            : `${trimNumber(result.provisional_score_num)}/${trimNumber(result.provisional_max_score_num)} provisional`);
+
+      const percentage = approved && result.percentage !== null
+        ? `${formatPct(result.percentage)}%`
+        : "Pending";
+
+      const tr = document.createElement("tr");
+      tr.dataset.inlineAttemptId = result.id;
+      tr.innerHTML = `
+        <td data-label="Rank"><strong>${rank ?? "—"}</strong></td>
+        <td data-label="Student"><strong>${escapeHtml(result.students?.full_name || "Unknown")}</strong></td>
+        <td data-label="Student No.">${escapeHtml(result.students?.student_no || "")}</td>
+        <td data-label="Score">${escapeHtml(score)}</td>
+        <td data-label="Percentage"><strong>${escapeHtml(percentage)}</strong></td>
+        <td data-label="Status"><span class="badge ${result.status === "submitted" ? "ok" : "warn"}">${escapeHtml(result.status)}</span></td>
+        <td data-label="Submitted">${fmt(result.submitted_at)}</td>
+        <td data-label="Actions" class="action-cell">
+          ${result.status === "submitted" && !proctorOnly
+            ? `<button type="button" class="inline-review-btn">${approved ? "Review / Edit Scores" : "Review Scores"}</button>`
+            : ""}
+          ${result.status === "submitted" ? '<button type="button" class="inline-pdf-btn">Result PDF</button>' : ""}
+          ${proctorOnly ? '<span class="badge proctor">Proctor</span>' : '<button type="button" class="danger-outline inline-delete-btn">Delete Attempt</button>'}
+        </td>
       `;
 
-      item.querySelector(".exam-taker-name-btn")?.addEventListener("click", async () => {
+      tr.querySelector(".inline-review-btn")?.addEventListener("click", async () => {
         const loaded = await openExamResults(exam, { noScroll: true });
-        const match = loaded.find(row => row.id === attempt.id) || attempt;
-        if (match.status === "submitted" && !proctorOnly) {
-          await openGradingReview(match, exam);
-        }
-      });
-
-      item.querySelector(".inline-review-btn")?.addEventListener("click", async () => {
-        const loaded = await openExamResults(exam, { noScroll: true });
-        const match = loaded.find(row => row.id === attempt.id) || attempt;
+        const match = loaded.find(item => item.id === result.id) || result;
         await openGradingReview(match, exam);
       });
 
-      item.querySelector(".inline-pdf-btn")?.addEventListener("click", async event => {
-        await window.ExamReport?.generateTeacher(attempt.id, event.currentTarget);
+      tr.querySelector(".inline-pdf-btn")?.addEventListener("click", async event => {
+        await window.ExamReport?.generateTeacher(result.id, event.currentTarget);
       });
 
-      list.appendChild(item);
+      tr.querySelector(".inline-delete-btn")?.addEventListener("click", async () => {
+        await deleteAttempt(result, exam);
+        if (!row.classList.contains("hidden")) {
+          await loadInlineExamTakers(exam, row);
+        }
+      });
+
+      tbody.appendChild(tr);
     });
   }
+
 
   async function openExamResults(exam, { noScroll = false } = {}) {
     panel.classList.remove("hidden");
