@@ -1479,7 +1479,7 @@
 
         <div class="holistic-rubric-builder hidden">
           <div class="rubric-list"></div>
-          <button type="button" class="add-rubric-btn">Add Performance Level</button>
+          <button type="button" class="add-rubric-btn">Add Criterion</button>
         </div>
 
         <div class="rubric-import-controls">
@@ -1926,8 +1926,8 @@
     holistic.classList.toggle("hidden", mode !== "holistic");
 
     if (mode === "holistic") {
-      if (help) help.textContent = "Holistic rubric: choose one overall performance level for the entire essay.";
-      if (excelHelp) excelHelp.textContent = "Excel columns: Level, Description, Score.";
+      if (help) help.textContent = "Holistic rubric: define each criterion, its description, and its maximum score. The student's score is entered during grading.";
+      if (excelHelp) excelHelp.textContent = "Excel columns: Criteria, Description, Max Score.";
     } else {
       if (help) help.textContent = "Analytic rubric: each criterion is evaluated across the same levels of performance.";
       if (excelHelp) excelHelp.textContent = "Excel columns: Criterion, then one Description column for each performance level, with a matching Score column.";
@@ -1946,9 +1946,9 @@
     const maxPoints = Number(item?.max_points ?? item?.points ?? item?.score ?? 0);
 
     row.innerHTML = `
-      <input class="rubric-criterion" placeholder="Performance level (e.g. Excellent)" value="${escapeAttr(criterion)}">
-      <input class="rubric-description" placeholder="Overall performance description" value="${escapeAttr(description)}">
-      <input class="rubric-max-points" type="number" min="0" step="0.25" placeholder="Score" value="${maxPoints >= 0 && item ? maxPoints : ""}">
+      <input class="rubric-criterion" placeholder="Criterion (e.g. Organization)" value="${escapeAttr(criterion)}">
+      <input class="rubric-description" placeholder="Description (e.g. Able to organize thoughts and ideas)" value="${escapeAttr(description)}">
+      <input class="rubric-max-points" type="number" min="0.25" step="0.25" placeholder="Max score" value="${maxPoints > 0 && item ? maxPoints : ""}">
       <button type="button" class="remove-rubric-btn">Remove</button>
     `;
 
@@ -1956,7 +1956,7 @@
     row.querySelector(".rubric-max-points").addEventListener("input", () => updateRubricTotal(card));
     row.querySelector(".remove-rubric-btn").addEventListener("click", () => {
       if (list.children.length <= 1) {
-        setCreateMessage("A holistic rubric needs at least one performance level.", true);
+        setCreateMessage("A holistic rubric needs at least one criterion.", true);
         return;
       }
       row.remove();
@@ -1973,7 +1973,7 @@
       const values = [...card.querySelectorAll(".rubric-max-points")]
         .map(input => Number(input.value))
         .filter(value => Number.isFinite(value) && value >= 0);
-      total = values.length ? Math.max(...values) : 0;
+      total = values.reduce((sum, value) => sum + value, 0);
     } else {
       const levels = currentAnalyticLevels(card)
         .map(level => level.points)
@@ -1989,7 +1989,7 @@
 
     if (totalNode) totalNode.textContent = trimNumber(total);
     if (totalLabel?.firstChild) {
-      totalLabel.firstChild.textContent = mode === "holistic" ? "Maximum: " : "Total: ";
+      totalLabel.firstChild.textContent = "Total: ";
     }
     if (pointInput && card.querySelector(".q-type").value === "essay") {
       pointInput.value = total > 0 ? String(total) : "0";
@@ -2045,11 +2045,10 @@
     }
 
     const rows = [
-      ["Level", "Description", "Score"],
-      ["Excellent", "Demonstrates complete, accurate, well-organized understanding with strong reasoning.", 10],
-      ["Proficient", "Demonstrates substantial understanding with generally correct reasoning.", 8],
-      ["Developing", "Demonstrates partial understanding with gaps or errors in reasoning.", 5],
-      ["Beginning", "Demonstrates limited understanding or an incomplete response.", 2]
+      ["Criteria", "Description", "Max Score"],
+      ["Organization", "Able to organize thoughts and ideas.", 20],
+      ["Content", "Demonstrates appropriate and relevant content.", 20],
+      ["Clarity", "Expresses ideas clearly and coherently.", 10]
     ];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -2124,23 +2123,23 @@
       }
 
       const parsed = rows.map(row => ({
-        criterion: String(row["Level"] ?? row["Performance Level"] ?? "").trim(),
+        criterion: String(row["Criteria"] ?? row["Criterion"] ?? "").trim(),
         description: String(row["Description"] ?? row["Descriptor"] ?? "").trim(),
-        max_points: Number(row["Score"] ?? row["Points"] ?? 0)
+        max_points: Number(row["Max Score"] ?? row["Maximum Score"] ?? row["Max Points"] ?? row["Points"] ?? 0)
       })).filter(item => item.criterion || item.description || Number.isFinite(item.max_points));
 
       const invalid = parsed.find(item =>
-        !item.criterion || !Number.isFinite(item.max_points) || item.max_points < 0
+        !item.criterion || !Number.isFinite(item.max_points) || item.max_points <= 0
       );
       if (!parsed.length || invalid) {
-        throw new Error("Holistic rubric columns must be Level, Description, Score.");
+        throw new Error("Holistic rubric columns must be Criteria, Description, Max Score.");
       }
 
       const list = card.querySelector(".rubric-list");
       list.innerHTML = "";
       parsed.forEach(item => addRubricRow(card, item));
       updateRubricTotal(card);
-      setCreateMessage(`${parsed.length} holistic performance levels imported successfully.`);
+      setCreateMessage(`${parsed.length} holistic criteria imported successfully.`);
     } catch (error) {
       setCreateMessage(`Could not import essay rubric: ${error?.message || error}`, true);
     }
@@ -2408,12 +2407,12 @@
 
         if (rubric_type === "holistic") {
           for (const level of rubric_criteria) {
-            if (!level.criterion) return fail(`Question ${i + 1} has a holistic level without a name.`);
-            if (!Number.isFinite(level.max_points) || level.max_points < 0) {
-              return fail(`Question ${i + 1} has a holistic level without a valid non-negative score.`);
+            if (!level.criterion) return fail(`Question ${i + 1} has a holistic criterion without a name.`);
+            if (!Number.isFinite(level.max_points) || level.max_points <= 0) {
+              return fail(`Question ${i + 1} has a holistic criterion without a positive maximum score.`);
             }
           }
-          points = Math.max(...rubric_criteria.map(item => item.max_points));
+          points = rubric_criteria.reduce((sum, item) => sum + item.max_points, 0);
         } else {
           for (const criterion of rubric_criteria) {
             if (!criterion.criterion) return fail(`Question ${i + 1} has an analytic criterion without a name.`);
