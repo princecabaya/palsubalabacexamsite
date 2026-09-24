@@ -6,6 +6,49 @@ alter table public.exams
   add column if not exists draft_payload jsonb not null default '{}'::jsonb,
   add column if not exists draft_updated_at timestamptz;
 
+-- Keep the Main Admin identity and teacher-workspace ownership helper current.
+insert into public.exam_admins (user_id, email, display_name, role, is_admin)
+select
+  u.id,
+  u.email,
+  coalesce(nullif(u.raw_user_meta_data->>'full_name',''), split_part(coalesce(u.email,''),'@',1)),
+  'main_admin',
+  true
+from auth.users u
+where lower(coalesce(u.email,'')) = 'sir.princejobetroh@gmail.com'
+on conflict (user_id) do update
+set email = excluded.email,
+    display_name = coalesce(nullif(public.exam_admins.display_name,''), excluded.display_name),
+    role = 'main_admin',
+    is_admin = true;
+
+create or replace function public.exam_guard_can_create_exam_for_owner(p_owner_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $auth$
+  select
+    auth.uid() is not null
+    and p_owner_id is not null
+    and (
+      (
+        public.exam_guard_current_user_is_main_admin()
+        and exists (
+          select 1 from public.exam_admins target_teacher
+          where target_teacher.user_id = p_owner_id
+            and target_teacher.is_admin = true
+        )
+      )
+      or
+      (
+        public.exam_guard_current_user_is_admin()
+        and p_owner_id = auth.uid()
+      )
+    );
+$auth$;
+
 create or replace function public.autosave_exam_draft(
   p_exam_id uuid,
   p_owner_id uuid,
