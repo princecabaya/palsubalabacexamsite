@@ -519,4 +519,8 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     })[c]);
   }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
+  }
 })();
