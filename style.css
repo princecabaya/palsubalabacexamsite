@@ -784,3 +784,69 @@ textarea{resize:vertical}
   .manage-exams-table .action-cell{grid-template-columns:1fr}
   .attempt-summary-grid{grid-template-columns:1fr}
 }
+
+
+/* Drag and drop import zones */
+.file-drop-zone{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:78px;
+  margin:0;
+  padding:14px 16px;
+  border:2px dashed #b9c5df;
+  border-radius:12px;
+  background:#fff;
+  cursor:pointer;
+  text-align:center;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.file-drop-zone:hover,
+.file-drop-zone.drag-over{
+  border-color:var(--primary);
+  background:#f5f8ff;
+  box-shadow:0 0 0 3px rgba(36,87,214,.08);
+}
+.file-drop-zone.has-file{
+  border-style:solid;
+  border-color:#8fb0ff;
+  background:#f8faff;
+}
+.file-drop-input{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
+}
+.file-drop-icon{
+  font-size:1.15rem;
+  color:var(--primary);
+  font-weight:800;
+}
+.file-drop-main{
+  font-weight:750;
+  color:var(--text);
+}
+.file-drop-name{
+  color:var(--muted);
+  font-size:.82rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:320px;
+}
+@media(max-width:720px){
+  .file-drop-zone{
+    flex-direction:column;
+    min-height:104px;
+    padding:16px 12px;
+  }
+  .file-drop-name{
+    max-width:100%;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+}
