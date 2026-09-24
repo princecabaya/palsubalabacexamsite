@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260924-1738">
+  <link rel="stylesheet" href="style.css?v=20260924-1945">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -39,10 +39,16 @@
         <span>I understand that exam-behavior events will be recorded, the front camera will take a proctoring photo approximately every 1 minute, and the microphone will be used only to detect possible speech events. Microphone audio is not recorded or uploaded. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
       </label>
 
-      <button id="startBtn" class="primary">Enter Fullscreen & Start Exam</button>
+      <div class="student-login-actions">
+        <button id="startBtn" class="primary">Enter Fullscreen & Start Exam</button>
+        <button id="viewResultBtn" type="button">View Updated Result</button>
+      </div>
       <p id="loginMsg" class="message" role="status"></p>
 
-      <a class="teacher-link" href="admin.html">Teacher dashboard</a>
+      <div class="student-site-tools">
+        <a class="teacher-link" href="admin.html">Teacher dashboard</a>
+        <button id="clearSiteDataBtn" type="button" class="link-button">Delete local storage of the site</button>
+      </div>
     </section>
 
     <div id="identityConfirmModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="identityConfirmTitle">
@@ -197,8 +203,8 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
-  <script src="exam-report.js?v=20260924-1615"></script>
-  <script src="app.js?v=20260924-1905"></script>
+  <script src="exam-report.js?v=20260924-1945"></script>
+  <script src="app.js?v=20260924-1945"></script>
   <script src="student-feedback.js?v=20260924-1905"></script>
 </body>
 </html>
