@@ -148,7 +148,7 @@
         <td><span class="badge ${r.status === "submitted" ? "ok" : "warn"}">${escapeHtml(r.status)}</span></td>
         <td>${fmt(r.submitted_at)}</td>
         <td class="action-cell">
-          ${r.status === "submitted" && !proctorOnly && !approved ? '<button type="button" class="review-grading-btn">Review Scores</button>' : ""}
+          ${r.status === "submitted" && !proctorOnly ? `<button type="button" class="review-grading-btn">${approved ? "Review / Edit Scores" : "Review Scores"}</button>` : ""}
           ${r.status === "submitted" ? '<button type="button" class="result-pdf-btn">Result PDF</button>' : ""}
           ${proctorOnly ? '<span class="badge proctor">Proctor</span>' : '<button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button>'}
         </td>
