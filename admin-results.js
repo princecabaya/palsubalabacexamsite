@@ -347,10 +347,9 @@
         "Provisional AI scoring completed. Reloading review…";
       await openGradingReview(activeGradingAttempt, activeGradingExam);
     } catch (error) {
-      const detail = await readEdgeFunctionError(error);
-      const statusCode = error?.context?.status || error?.status || "";
+      await readEdgeFunctionError(error);
       $("gradingAiStatus").textContent =
-        `AI provisional scoring failed${statusCode ? ` (HTTP ${statusCode})` : ""}: ${detail || error?.message || "Unknown error"}. You can still score every item manually.`;
+        "Optional AI scoring is unavailable right now. Continue with manual teacher scoring.";
     } finally {
       button.disabled = false;
       button.textContent = "Try AI Provisional Scoring";
