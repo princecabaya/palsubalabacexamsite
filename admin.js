@@ -9,6 +9,10 @@
   let examsCache = [];
   let questionCounter = 0;
   let editingExamId = null;
+  let draftAutosaveTimer = null;
+  let draftAutosaveInFlight = false;
+  let draftAutosaveQueued = false;
+  let draftLastFingerprint = "";
   let currentUserId = null;
   let currentTeacherProfile = null;
   let teacherWorkspaces = [];
@@ -1286,6 +1290,147 @@
     return Number(value).toFixed(2).replace(/\.00$/, "");
   }
 
+  function collectExamDraftSnapshot() {
+    const cards = [...$("questionBuilder").querySelectorAll(".question-card")];
+    const questions = cards.map(card => {
+      const question_type = card.querySelector(".q-type")?.value || "mcq";
+      let choices = null;
+      let correct_answer = "";
+      let rubric_type = "analytic";
+      let rubric_criteria = [];
+
+      if (question_type === "mcq") {
+        choices = [...card.querySelectorAll(".choice-input")].map(input => input.value);
+        correct_answer = card.querySelector(".q-correct")?.value || "";
+      } else if (question_type === "binary") {
+        choices = [
+          card.querySelector(".binary-choice-a")?.value || "",
+          card.querySelector(".binary-choice-b")?.value || ""
+        ];
+        correct_answer = card.querySelector(".binary-correct")?.value || "";
+      } else if (question_type === "short_response") {
+        correct_answer = card.querySelector(".short-reference-answer")?.value || "";
+      } else if (question_type === "math_solver") {
+        correct_answer = card.querySelector(".math-reference-answer")?.value || "";
+      } else if (question_type === "essay") {
+        rubric_type = rubricMode(card);
+        rubric_criteria = collectRubricCriteria(card);
+      }
+
+      const rawPoints = Number(card.querySelector(".q-points")?.value);
+      return {
+        section_title: sectionTitleForCard(card),
+        prompt: card.querySelector(".q-prompt")?.value || "",
+        question_type,
+        points: Number.isFinite(rawPoints) && rawPoints > 0 ? rawPoints : 1,
+        choices,
+        correct_answer,
+        rubric_type,
+        rubric_criteria
+      };
+    });
+
+    return {
+      title: $("examTitleInput")?.value || "",
+      code: ($("examCodeInput")?.value || "").toUpperCase(),
+      duration_minutes: Number($("durationInput")?.value) || 60,
+      start_at: toIsoOrNull($("startAtInput")?.value || ""),
+      end_at: toIsoOrNull($("endAtInput")?.value || ""),
+      questions
+    };
+  }
+
+  function draftHasMeaningfulContent(snapshot) {
+    if (!snapshot) return false;
+    if (String(snapshot.title || "").trim() || String(snapshot.code || "").trim()) return true;
+    return (snapshot.questions || []).some(q => {
+      if (String(q.prompt || "").trim() || String(q.correct_answer || "").trim()) return true;
+      if (Array.isArray(q.choices) && q.choices.some(v => String(v || "").trim())) return true;
+      if (Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) return true;
+      return false;
+    });
+  }
+
+  function scheduleExamDraftAutosave() {
+    clearTimeout(draftAutosaveTimer);
+    draftAutosaveTimer = setTimeout(() => autosaveExamDraft(), 900);
+  }
+
+  async function autosaveExamDraft() {
+    clearTimeout(draftAutosaveTimer);
+    draftAutosaveTimer = null;
+
+    const snapshot = collectExamDraftSnapshot();
+    if (!draftHasMeaningfulContent(snapshot)) return;
+
+    const fingerprint = JSON.stringify({
+      owner: getActiveWorkspaceOwnerId(),
+      exam: editingExamId,
+      snapshot
+    });
+    if (fingerprint === draftLastFingerprint && editingExamId) return;
+
+    if (draftAutosaveInFlight) {
+      draftAutosaveQueued = true;
+      return;
+    }
+
+    draftAutosaveInFlight = true;
+    const wasNewDraft = !editingExamId;
+
+    try {
+      const { data, error } = await db.rpc("autosave_exam_draft", {
+        p_exam_id: editingExamId,
+        p_owner_id: getActiveWorkspaceOwnerId(),
+        p_payload: snapshot
+      });
+
+      if (error) {
+        const missingUpgrade = /autosave_exam_draft|does not exist|schema cache|PGRST202|draft_payload/i.test(String(error.message || ""));
+        setCreateMessage(
+          missingUpgrade
+            ? "Automatic draft saving is not installed in Supabase yet. Run supabase-upgrade-autosaved-exam-drafts.sql once, then refresh the dashboard."
+            : `Draft autosave failed: ${error.message}`,
+          true
+        );
+        return;
+      }
+
+      const row = data?.[0];
+      if (row?.exam_id) editingExamId = row.exam_id;
+      draftLastFingerprint = JSON.stringify({
+        owner: getActiveWorkspaceOwnerId(),
+        exam: editingExamId,
+        snapshot
+      });
+
+      const heading = $("examFormHeading");
+      const intro = $("examFormIntro");
+      const saveBtn = $("saveExamBtn");
+      const cancelBtn = $("cancelEditExamBtn");
+      if (heading) heading.textContent = snapshot.title?.trim()
+        ? `Editing Draft — ${snapshot.title.trim()}`
+        : "Editing Autosaved Draft";
+      if (intro) intro.textContent = "Changes are saved automatically as a Draft. Publish only from Manage Exams when the paper is ready.";
+      if (saveBtn) saveBtn.textContent = "Save Draft Now";
+      if (cancelBtn) cancelBtn.classList.remove("hidden");
+
+      setCreateMessage(
+        `Draft autosaved${row?.saved_at ? ` at ${new Date(row.saved_at).toLocaleTimeString()}` : ""}. It will remain in Manage Exams until you delete it.`
+      );
+
+      if (wasNewDraft) {
+        await loadExams();
+      }
+    } finally {
+      draftAutosaveInFlight = false;
+      if (draftAutosaveQueued) {
+        draftAutosaveQueued = false;
+        scheduleExamDraftAutosave();
+      }
+    }
+  }
+
   function bindExamBuilder() {
     $("addQuestionBtn").addEventListener("click", () => addQuestionCard());
     $("addSectionBtn")?.addEventListener("click", () => addExamSection());
@@ -1294,6 +1439,17 @@
     $("saveExamBtn").addEventListener("click", saveExam);
     $("generateCodeBtn").addEventListener("click", generateExamCode);
     $("reloadExamsBtn").addEventListener("click", loadExams);
+
+    const createSection = $("createSection");
+    createSection?.addEventListener("input", scheduleExamDraftAutosave);
+    createSection?.addEventListener("change", scheduleExamDraftAutosave);
+
+    const builder = $("questionBuilder");
+    if (builder && !builder.dataset.draftObserverBound) {
+      builder.dataset.draftObserverBound = "true";
+      const observer = new MutationObserver(() => scheduleExamDraftAutosave());
+      observer.observe(builder, { childList: true, subtree: true });
+    }
   }
 
   function generateExamCode() {
@@ -1311,6 +1467,10 @@
   }
 
   function clearExamForm() {
+    clearTimeout(draftAutosaveTimer);
+    draftAutosaveTimer = null;
+    draftAutosaveQueued = false;
+    draftLastFingerprint = "";
     editingExamId = null;
     const heading = $("examFormHeading");
     const intro = $("examFormIntro");
@@ -2257,13 +2417,8 @@
 
     if (editingExamId) {
       const current = examsCache.find(e => e.id === editingExamId);
-      if (!current) {
-        $("saveExamBtn").disabled = false;
-        setCreateMessage("The exam being edited could not be found. Reload Existing Exams and try again.", true);
-        return;
-      }
 
-      if (current.status === "published") {
+      if (current?.status === "published") {
         $("saveExamBtn").disabled = false;
         setCreateMessage("Published examinations cannot be edited. Change the exam status before editing.", true);
         return;
@@ -2316,7 +2471,7 @@
       }
 
       const title = payload.exam.title;
-      setCreateMessage(`Exam "${title}" updated successfully.`);
+      setCreateMessage(`Draft "${title}" saved successfully.`);
       clearExamForm();
       await loadExams();
       activateTab("manage");
@@ -2366,7 +2521,7 @@
       return;
     }
 
-    setCreateMessage(`Exam "${exam.title}" saved successfully with code ${exam.code}.`);
+    setCreateMessage(`Draft "${exam.title}" saved successfully with code ${exam.code}. Publish it from Manage Exams when ready.`);
     clearExamForm();
     await loadExams();
     activateTab("manage");
@@ -2380,33 +2535,44 @@
       return;
     }
 
-    const { data: questions, error } = await db
-      .from("questions")
-      .select("id,position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
-      .eq("exam_id", exam.id)
-      .order("position", { ascending: true });
+    let questions = null;
+    const draft = exam.status === "draft" && exam.draft_payload && typeof exam.draft_payload === "object"
+      ? exam.draft_payload
+      : null;
 
-    if (error) {
-      alert(`Could not load exam questions for editing: ${error.message}`);
-      return;
+    if (draft && Array.isArray(draft.questions)) {
+      questions = draft.questions;
+    } else {
+      const response = await db
+        .from("questions")
+        .select("id,position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
+        .eq("exam_id", exam.id)
+        .order("position", { ascending: true });
+
+      if (response.error) {
+        alert(`Could not load exam questions for editing: ${response.error.message}`);
+        return;
+      }
+      questions = response.data || [];
     }
 
     editingExamId = exam.id;
+    draftLastFingerprint = "";
 
-    $("examTitleInput").value = exam.title || "";
-    $("examCodeInput").value = exam.code || "";
-    $("durationInput").value = exam.duration_minutes || 60;
-    $("statusInput").value = exam.status || "draft";
-    $("startAtInput").value = toLocalDateTimeInput(exam.start_at);
-    $("endAtInput").value = toLocalDateTimeInput(exam.end_at);
+    $("examTitleInput").value = draft?.title ?? exam.title ?? "";
+    $("examCodeInput").value = draft?.code || exam.code || "";
+    $("durationInput").value = draft?.duration_minutes || exam.duration_minutes || 60;
+    $("statusInput").value = "draft";
+    $("startAtInput").value = toLocalDateTimeInput(draft?.start_at ?? exam.start_at);
+    $("endAtInput").value = toLocalDateTimeInput(draft?.end_at ?? exam.end_at);
 
     const heading = $("examFormHeading");
     const intro = $("examFormIntro");
     const saveBtn = $("saveExamBtn");
     const cancelBtn = $("cancelEditExamBtn");
     if (heading) heading.textContent = `Edit Examination — ${exam.title}`;
-    if (intro) intro.textContent = "Update the examination details and questions. Published examinations are locked from editing.";
-    if (saveBtn) saveBtn.textContent = "Update Exam";
+    if (intro) intro.textContent = "Changes are saved automatically as a Draft. Publish from Manage Exams only when the examination is ready.";
+    if (saveBtn) saveBtn.textContent = "Save Draft Now";
     if (cancelBtn) cancelBtn.classList.remove("hidden");
 
     $("questionBuilder").innerHTML = "";
@@ -2443,7 +2609,7 @@
     const title = $("examTitleInput").value.trim();
     const code = $("examCodeInput").value.trim().toUpperCase();
     const duration = Number($("durationInput").value);
-    const status = $("statusInput").value;
+    const status = "draft";
     const startAt = toIsoOrNull($("startAtInput").value);
     const endAt = toIsoOrNull($("endAtInput").value);
 
@@ -2578,16 +2744,16 @@
   async function loadExams() {
     let { data: exams, error } = await db
       .from("exams")
-      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at, owner_id")
+      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at, owner_id, draft_payload, draft_updated_at")
       .order("created_at", { ascending: false });
 
     // Keep the dashboard usable before the one-time archive database upgrade is run.
-    if (error && /archived/i.test(error.message || "")) {
+    if (error && /archived|draft_payload|draft_updated_at/i.test(error.message || "")) {
       const fallback = await db
         .from("exams")
-        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id")
+        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id, draft_payload, draft_updated_at")
         .order("created_at", { ascending: false });
-      exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null }));
+      exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null, draft_payload: null, draft_updated_at: null }));
       error = fallback.error;
     }
 
@@ -2632,7 +2798,8 @@
 
     for (const exam of examsCache) {
       const tr = document.createElement("tr");
-      const qCount = counts[exam.id] || 0;
+      const draftQuestionCount = Array.isArray(exam.draft_payload?.questions) ? exam.draft_payload.questions.length : 0;
+      const qCount = Math.max(counts[exam.id] || 0, draftQuestionCount);
       const archived = Boolean(exam.archived);
       tr.classList.toggle("archived-row", archived);
       tr.innerHTML = `
