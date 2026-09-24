@@ -2841,7 +2841,14 @@
 
     const keys = document.createElement("div");
     keys.className = "math-keyboard-keys";
-    ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","].forEach(key => {
+    [
+      "7","8","9","÷",
+      "4","5","6","×",
+      "1","2","3","−",
+      "0",".","=","+",
+      "(",")","<",">",
+      "≤","≥",","
+    ].forEach(key => {
       const b = document.createElement("button");
       b.type = "button";
       b.disabled = true;
@@ -2852,7 +2859,7 @@
 
     const utility = document.createElement("div");
     utility.className = "math-keyboard-utility";
-    [["↶","Undo"],["↷","Redo"],["◀","Left"],["▶","Right"],["⌫","Backspace"],["Clear","Clear"]].forEach(([label,title]) => {
+    [["↶","Undo"],["↷","Redo"],["◀","Left"],["▶","Right"],["↵ Enter","New equation line"],["⌫","Backspace"],["Clear","Clear"]].forEach(([label,title]) => {
       const b = document.createElement("button");
       b.type = "button";
       b.disabled = true;
