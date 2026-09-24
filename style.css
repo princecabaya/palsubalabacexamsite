@@ -1574,3 +1574,10 @@ textarea{resize:vertical}
     width:100%;
   }
 }
+
+
+.manage-workspace.review-mode #examResultsPanel tr.active-review-student{
+  border-color:var(--primary);
+  background:#eef4ff;
+  box-shadow:0 0 0 2px rgba(37,99,235,.08);
+}
