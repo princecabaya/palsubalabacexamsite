@@ -1920,6 +1920,7 @@
       choices: q.choices,
       correct_answer: q.correct_answer,
       points: q.points,
+      rubric_type: q.rubric_type,
       rubric_criteria: q.rubric_criteria
     }));
 
