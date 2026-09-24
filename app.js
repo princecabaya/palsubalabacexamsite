@@ -823,19 +823,38 @@
               Array.isArray(item?.levels) && item.levels.length >= 2
             );
 
-            if (!isMatrix) {
+            const looksLikeLegacyConvertedRubric = isMatrix &&
+              q.rubric_criteria.every(item => {
+                const levels = Array.isArray(item?.levels) ? item.levels : [];
+                if (levels.length !== 2) return false;
+                const firstName = String(levels[0]?.level || "").trim().toLowerCase();
+                const secondName = String(levels[1]?.level || "").trim().toLowerCase();
+                const secondPoints = Number(levels[1]?.points ?? 0);
+                return firstName === "maximum" &&
+                  (/^level\s*2$/.test(secondName) || secondName === "") &&
+                  secondPoints === 0;
+              });
+
+            if (!isMatrix || looksLikeLegacyConvertedRubric) {
               table.classList.add("flat-criteria-table");
               table.innerHTML = "<thead><tr><th>Criterion (Max Score)</th><th>Description</th></tr></thead>";
               const tbody = document.createElement("tbody");
 
               q.rubric_criteria.forEach(item => {
                 const tr = document.createElement("tr");
+                const levels = Array.isArray(item?.levels) ? item.levels : [];
+                const legacyLevel = looksLikeLegacyConvertedRubric ? levels[0] : null;
+                const maxPoints = legacyLevel
+                  ? Number(legacyLevel?.points ?? 0)
+                  : Number(item?.max_points ?? item?.points ?? 0);
+
                 const criterion = document.createElement("td");
-                const maxPoints = Number(item?.max_points ?? item?.points ?? 0);
                 criterion.textContent = `${String(item?.criterion || "")}${maxPoints ? ` (${maxPoints} pts)` : ""}`;
 
                 const description = document.createElement("td");
-                description.textContent = String(item?.description || "");
+                description.textContent = legacyLevel
+                  ? String(legacyLevel?.description || "")
+                  : String(item?.description || "");
 
                 tr.append(criterion, description);
                 tbody.appendChild(tr);
