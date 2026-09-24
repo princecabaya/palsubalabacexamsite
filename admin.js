@@ -2631,12 +2631,15 @@
         <td data-label="End">${fmt(exam.end_at)}</td>
         <td data-label="Actions" class="action-cell">
           ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
+            <button type="button" data-exam-action="preview">Preview Exam</button>
             <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
             <span class="badge proctor">Proctor access</span>
           ` : archived ? `
+            <button type="button" data-exam-action="preview">Preview Exam</button>
             <button type="button" data-exam-action="restore">Restore</button>
             <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
           ` : `
+            <button type="button" data-exam-action="preview">Preview Exam</button>
             <button type="button" data-exam-action="edit" ${exam.status === "published" ? "disabled title=\"Published examinations cannot be edited\"" : ""}>Edit Exam</button>
             ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
             <button type="button" data-action="draft">Draft</button>
@@ -2657,6 +2660,7 @@
       tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
         btn.addEventListener("click", async () => {
           const action = btn.dataset.examAction;
+          if (action === "preview") await previewExam(exam);
           if (action === "edit") await editExam(exam);
           if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
           if (action === "archive") await archiveExam(exam);
@@ -2668,6 +2672,296 @@
       body.appendChild(tr);
     }
   }
+
+  async function previewExam(exam) {
+    const panel = $("examPreviewPanel");
+    const questionsNode = $("examPreviewQuestions");
+    if (!panel || !questionsNode) return;
+
+    $("examPreviewTitle").textContent = exam.title || "Exam Preview";
+    $("examPreviewMeta").textContent = `${exam.status || ""} • ${exam.code || ""}`;
+    $("examPreviewExamTitle").textContent = exam.title || "";
+    $("examPreviewExamCode").textContent = exam.code ? `Exam Code: ${exam.code}` : "";
+    $("examPreviewDuration").textContent = `${exam.duration_minutes || 0} min`;
+    questionsNode.innerHTML = '<p class="muted">Loading exam preview…</p>';
+    panel.classList.remove("hidden");
+
+    const { data: questions, error } = await db
+      .from("questions")
+      .select("id,position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria")
+      .eq("exam_id", exam.id)
+      .order("position", { ascending: true });
+
+    if (error) {
+      questionsNode.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    renderExamPreviewQuestions(questionsNode, questions || []);
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderExamPreviewQuestions(container, questions) {
+    container.innerHTML = "";
+
+    if (!questions.length) {
+      container.innerHTML = '<p class="muted">This exam does not contain any questions yet.</p>';
+      return;
+    }
+
+    let currentSection = null;
+
+    for (const q of questions) {
+      const sectionTitle = String(q.section_title || "Part 1").trim() || "Part 1";
+      if (sectionTitle !== currentSection) {
+        const heading = document.createElement("div");
+        heading.className = "preview-section-heading";
+        heading.textContent = sectionTitle;
+        container.appendChild(heading);
+        currentSection = sectionTitle;
+      }
+
+      const card = document.createElement("article");
+      card.className = "preview-question-card";
+
+      const head = document.createElement("div");
+      head.className = "preview-question-head";
+      head.innerHTML = `
+        <strong>Question ${escapeHtml(q.position)}</strong>
+        <span>${escapeHtml(q.points)} point${Number(q.points) === 1 ? "" : "s"}</span>
+      `;
+      card.appendChild(head);
+
+      const prompt = document.createElement("div");
+      prompt.className = "preview-question-prompt math-rendered";
+      appendPreviewRichText(prompt, String(q.prompt || ""));
+      card.appendChild(prompt);
+
+      if (q.question_type === "mcq" || q.question_type === "binary") {
+        const choices = Array.isArray(q.choices) ? q.choices : [];
+        const list = document.createElement("div");
+        list.className = "preview-choice-list";
+
+        choices.forEach((choice, index) => {
+          const label = document.createElement("label");
+          label.className = "preview-choice";
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.disabled = true;
+          const text = document.createElement("span");
+          appendPreviewRichText(
+            text,
+            `${q.question_type === "mcq" ? String.fromCharCode(65 + index) + ". " : ""}${choice}`
+          );
+          label.append(radio, text);
+          list.appendChild(label);
+        });
+
+        card.appendChild(list);
+      } else if (q.question_type === "short_response") {
+        const input = document.createElement("input");
+        input.className = "preview-answer-input";
+        input.placeholder = "Type your answer here";
+        input.disabled = true;
+        card.appendChild(input);
+      } else if (q.question_type === "math_solver") {
+        card.appendChild(buildMathSolverPreview());
+      } else if (q.question_type === "essay" || q.question_type === "text") {
+        const textarea = document.createElement("textarea");
+        textarea.className = "preview-answer-textarea";
+        textarea.rows = 7;
+        textarea.placeholder = "Write your essay response here";
+        textarea.disabled = true;
+        card.appendChild(textarea);
+
+        if (Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) {
+          card.appendChild(buildPreviewRubric(q));
+        }
+      }
+
+      container.appendChild(card);
+    }
+
+    if (window.MathJax?.typesetPromise) {
+      window.MathJax.typesetClear?.([container]);
+      window.MathJax.typesetPromise([container]).catch(() => {});
+    }
+  }
+
+  function appendPreviewRichText(parent, source) {
+    const pattern = /\\(textit|emph|textbf|underline)\{([^{}]*)\}/g;
+    let cursor = 0;
+    let match;
+
+    while ((match = pattern.exec(source)) !== null) {
+      if (match.index > cursor) {
+        parent.appendChild(document.createTextNode(source.slice(cursor, match.index)));
+      }
+
+      const tag = match[1] === "textbf" ? "strong" : (match[1] === "underline" ? "u" : "em");
+      const node = document.createElement(tag);
+      node.textContent = match[2];
+      parent.appendChild(node);
+      cursor = match.index + match[0].length;
+    }
+
+    if (cursor < source.length) {
+      parent.appendChild(document.createTextNode(source.slice(cursor)));
+    }
+  }
+
+  function buildMathSolverPreview() {
+    const board = document.createElement("div");
+    board.className = "math-solver-board preview-math-solver";
+
+    const answer = document.createElement("textarea");
+    answer.className = "math-solution-input";
+    answer.rows = 4;
+    answer.placeholder = "Tap here, then use the mathematics keyboard below.";
+    answer.disabled = true;
+
+    const preview = document.createElement("div");
+    preview.className = "math-solution-preview";
+    preview.textContent = "Math preview";
+
+    const keyboard = document.createElement("div");
+    keyboard.className = "math-virtual-keyboard preview-keyboard";
+
+    const tabs = document.createElement("div");
+    tabs.className = "math-keyboard-tabs";
+    ["123", "ABC", "αβγ", "ƒ()"].forEach((name, index) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.disabled = true;
+      b.textContent = name;
+      if (index === 0) b.classList.add("active");
+      tabs.appendChild(b);
+    });
+
+    const keys = document.createElement("div");
+    keys.className = "math-keyboard-keys";
+    ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","].forEach(key => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.disabled = true;
+      b.className = "math-key";
+      b.textContent = key;
+      keys.appendChild(b);
+    });
+
+    const utility = document.createElement("div");
+    utility.className = "math-keyboard-utility";
+    [["↶","Undo"],["↷","Redo"],["◀","Left"],["▶","Right"],["⌫","Backspace"],["Clear","Clear"]].forEach(([label,title]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.disabled = true;
+      b.className = "math-utility-key";
+      b.textContent = label;
+      b.title = title;
+      utility.appendChild(b);
+    });
+
+    keyboard.append(tabs, keys, utility);
+    board.append(answer, preview, keyboard);
+    return board;
+  }
+
+  function buildPreviewRubric(question) {
+    const details = document.createElement("details");
+    details.className = "student-rubric preview-rubric";
+    details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.textContent = question.rubric_type === "holistic"
+      ? "Holistic scoring rubric"
+      : "Analytic scoring rubric";
+    details.appendChild(summary);
+
+    const wrap = document.createElement("div");
+    wrap.className = "student-rubric-table-wrap";
+    const table = document.createElement("table");
+
+    if (question.rubric_type === "holistic") {
+      table.innerHTML = "<thead><tr><th>Criteria (Max Score)</th><th>Description</th><th>Student Score</th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      question.rubric_criteria.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(item?.criterion || "")} (${escapeHtml(item?.max_points ?? 0)} pts)</td>
+          <td>${escapeHtml(item?.description || "")}</td>
+          <td>—</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+    } else {
+      const isMatrix = question.rubric_criteria.every(item =>
+        Array.isArray(item?.levels) && item.levels.length >= 2
+      );
+
+      if (!isMatrix) {
+        table.classList.add("flat-criteria-table");
+        table.innerHTML = "<thead><tr><th>Criterion (Max Score)</th><th>Description</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        question.rubric_criteria.forEach(item => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${escapeHtml(item?.criterion || "")} (${escapeHtml(item?.max_points ?? item?.points ?? 0)} pts)</td>
+            <td>${escapeHtml(item?.description || "")}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+      } else {
+        const levels = question.rubric_criteria[0].levels;
+        const thead = document.createElement("thead");
+        const hr = document.createElement("tr");
+        const first = document.createElement("th");
+        first.textContent = "Criteria / Level of Performance";
+        hr.appendChild(first);
+
+        levels.forEach(level => {
+          const th = document.createElement("th");
+          th.innerHTML = `<strong>${escapeHtml(level.level || "")}</strong><span class="rubric-level-points">${escapeHtml(level.points ?? 0)} pts</span>`;
+          hr.appendChild(th);
+        });
+
+        thead.appendChild(hr);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        question.rubric_criteria.forEach(item => {
+          const tr = document.createElement("tr");
+          const criterion = document.createElement("td");
+          criterion.textContent = item.criterion || "";
+          tr.appendChild(criterion);
+
+          levels.forEach((headerLevel, index) => {
+            const td = document.createElement("td");
+            const rowLevels = Array.isArray(item.levels) ? item.levels : [];
+            const match = rowLevels.find(level =>
+              String(level?.level || "").toLowerCase() === String(headerLevel?.level || "").toLowerCase()
+            ) || rowLevels[index];
+            td.textContent = match?.description || "";
+            tr.appendChild(td);
+          });
+
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+      }
+    }
+
+    wrap.appendChild(table);
+    details.appendChild(wrap);
+    return details;
+  }
+
+  $("closeExamPreviewBtn")?.addEventListener("click", () => {
+    $("examPreviewPanel")?.classList.add("hidden");
+  });
 
   async function updateExamStatus(examId, status) {
     const { error } = await db
