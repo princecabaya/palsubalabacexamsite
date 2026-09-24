@@ -850,3 +850,8 @@ textarea{resize:vertical}
     overflow-wrap:anywhere;
   }
 }
+
+
+/* Essay rubric type selector */
+.rubric-type{max-width:360px}
+.essay-rubric-area>label:first-of-type{margin-top:10px}
