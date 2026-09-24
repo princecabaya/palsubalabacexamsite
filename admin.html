@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260924-1638">
+  <link rel="stylesheet" href="style.css?v=20260924-1658">
 </head>
 <body>
   <main class="shell wide">
@@ -329,6 +329,35 @@
             </table>
           </div>
 
+          <section id="examPreviewPanel" class="exam-preview-panel hidden">
+            <div class="exam-preview-toolbar">
+              <div>
+                <span class="eyebrow">Student View Preview</span>
+                <h2 id="examPreviewTitle">Exam Preview</h2>
+                <p id="examPreviewMeta" class="muted"></p>
+              </div>
+              <button id="closeExamPreviewBtn" type="button">Close Preview</button>
+            </div>
+
+            <div class="exam-preview-notice">
+              Preview only — answers are not saved, no timer is started, and no student attempt is created.
+            </div>
+
+            <div id="examPreviewShell" class="exam-preview-shell">
+              <header class="exam-preview-header">
+                <div>
+                  <strong id="examPreviewExamTitle"></strong>
+                  <span id="examPreviewExamCode" class="muted"></span>
+                </div>
+                <div class="exam-preview-time">
+                  <span>Duration</span>
+                  <strong id="examPreviewDuration">—</strong>
+                </div>
+              </header>
+              <main id="examPreviewQuestions" class="exam-preview-questions"></main>
+            </div>
+          </section>
+
           <section id="examResultsPanel" class="card exam-results-panel hidden">
             <div class="detail-head">
               <div>
@@ -568,7 +597,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260924-1615"></script>
-  <script src="admin.js?v=20260924-1615"></script>
+  <script src="admin.js?v=20260924-1658"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260924-1615"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
