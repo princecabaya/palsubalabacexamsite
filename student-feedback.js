@@ -10,7 +10,7 @@
 
       try {
         const { data, error } = await db.functions.invoke("grade-constructed-responses", {
-          body: { attempt_token: attemptToken }
+          body: { attempt_token: attemptToken, use_ai: false }
         });
         if (error) throw error;
         return data || null;
