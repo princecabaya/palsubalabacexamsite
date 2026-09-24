@@ -551,6 +551,59 @@
           y += choiceLines.length * 4.6 + 1.5;
         });
       } else {
+        if (q.question_type === "essay" && Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) {
+          const holistic = q.rubric_type === "holistic";
+          ensureSpace(12);
+          doc.setFont("times", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(40);
+          doc.text(holistic ? "Holistic Scoring Rubric" : "Analytic Scoring Rubric", left + 4, y);
+          y += 5;
+
+          if (holistic) {
+            q.rubric_criteria.forEach((level, index) => {
+              const rubricText = `${index + 1}. ${level.criterion || "Level"} — ${level.description || ""} (${fmtNumber(level.max_points || 0)} pts)`;
+              const lines = split(rubricText, 150);
+              ensureSpace(lines.length * 4.4 + 2);
+              doc.setFont("times", "normal");
+              doc.setFontSize(8.7);
+              doc.text(lines, left + 6, y);
+              y += lines.length * 4.4 + 1;
+            });
+          } else {
+            const firstLevels = Array.isArray(q.rubric_criteria[0]?.levels)
+              ? q.rubric_criteria[0].levels
+              : [];
+
+            q.rubric_criteria.forEach((criterion, criterionIndex) => {
+              ensureSpace(8);
+              doc.setFont("times", "bold");
+              doc.setFontSize(8.8);
+              doc.text(`${criterionIndex + 1}. ${criterion.criterion || "Criterion"}`, left + 6, y);
+              y += 4.5;
+
+              const levels = Array.isArray(criterion.levels) ? criterion.levels : [];
+              firstLevels.forEach((headerLevel, levelIndex) => {
+                const level = levels.find(item =>
+                  String(item?.level || "").trim().toLowerCase() ===
+                  String(headerLevel?.level || "").trim().toLowerCase()
+                ) || levels[levelIndex] || {};
+
+                const levelText = `${level.level || headerLevel.level || "Level"} (${fmtNumber(level.points ?? headerLevel.points ?? 0)} pts): ${level.description || ""}`;
+                const lines = split(levelText, 144);
+                ensureSpace(lines.length * 4.2 + 1);
+                doc.setFont("times", "normal");
+                doc.setFontSize(8.5);
+                doc.text(lines, left + 10, y);
+                y += lines.length * 4.2 + 1;
+              });
+              y += 1;
+            });
+          }
+
+          y += 2;
+        }
+
         for (let line = 0; line < 4; line += 1) {
           ensureSpace(7);
           doc.setDrawColor(150);
