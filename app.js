@@ -742,11 +742,14 @@
           const rubric = document.createElement("details");
           rubric.className = "student-rubric";
           const summary = document.createElement("summary");
-          summary.textContent = "View essay scoring criteria";
+          const holistic = q.rubric_type === "holistic";
+          summary.textContent = holistic ? "View holistic scoring rubric" : "View analytic scoring rubric";
           rubric.appendChild(summary);
 
           const table = document.createElement("table");
-          table.innerHTML = "<thead><tr><th>Criterion</th><th>Description</th><th>Max Points</th></tr></thead>";
+          table.innerHTML = holistic
+            ? "<thead><tr><th>Performance Level</th><th>Description</th><th>Score</th></tr></thead>"
+            : "<thead><tr><th>Criterion</th><th>Description</th><th>Max Points</th></tr></thead>";
           const tbody = document.createElement("tbody");
           q.rubric_criteria.forEach(item => {
             const tr = document.createElement("tr");
