@@ -391,6 +391,8 @@
     const raw = [block.firstPrompt].concat(block.lines).join("\n").trim();
     const hasBinary = /\\begin\{binary\}/i.test(raw);
     const hasChoices = /\\begin\{choices\}/i.test(raw);
+    const hasShortResponse = /\\begin\{shortresponse\}/i.test(raw);
+    const hasMathSolver = /\\begin\{mathsolver\}/i.test(raw);
     const hasCriteria = /\\begin\{essay\}/i.test(raw) ||
       /\\begin\{criteria\}/i.test(raw) ||
       /\\criterion(?:\[|\{)/i.test(raw);
@@ -423,6 +425,30 @@
       };
     }
 
+    if (hasShortResponse || hasMathSolver) {
+      const type = hasShortResponse ? "short_response" : "math_solver";
+      const envName = hasShortResponse ? "shortresponse" : "mathsolver";
+      const env = extractEnvironment(raw, envName);
+      const answer = parseLatexAnswer(env?.body || raw);
+
+      if (!answer) {
+        throw new Error(
+          "LaTeX question " + number +
+          " needs an \\answer{...} inside the " + envName + " environment."
+        );
+      }
+
+      return {
+        prompt: prompt,
+        question_type: type,
+        choices: null,
+        correct_answer: answer,
+        points: block.points,
+        rubric_type: "analytic",
+        rubric_criteria: []
+      };
+    }
+
     if (hasCriteria) {
       const env = extractEnvironment(raw, "criteria");
       const criteria = parseLatexCriteria(env?.body || raw);
@@ -442,7 +468,7 @@
 
     throw new Error(
       "LaTeX question " + number +
-      " has no supported answer block. Use choices, binary, or essay criteria."
+      " has no supported answer block. Use choices, binary, shortresponse, mathsolver, or essay criteria."
     );
   }
 
@@ -450,6 +476,8 @@
     const tokens = [
       "\\begin{choices}",
       "\\begin{binary}",
+      "\\begin{shortresponse}",
+      "\\begin{mathsolver}",
       "\\begin{essay}",
       "\\begin{criteria}",
       "\\criterion"
@@ -507,6 +535,19 @@
     });
 
     return { choices: choices, correct: correct };
+  }
+
+  function parseLatexAnswer(body) {
+    const source = String(body || "");
+    const token = "\\answer";
+    const start = source.indexOf(token);
+    if (start < 0) return "";
+
+    let pos = start + token.length;
+    while (/\s/.test(source[pos] || "")) pos += 1;
+
+    const group = readBraceGroup(source, pos);
+    return group ? group.value.trim() : "";
   }
 
   function parseLatexCriteria(body) {
@@ -584,7 +625,7 @@
         out += line[i];
       }
       return out;
-    }).join("\\n");
+    }).join("\n");
   }
 
   function parsePositiveNumber(value) {
@@ -619,6 +660,18 @@
       "  \\CorrectChoice True",
       "  \\choice False",
       "\\end{binary}",
+      "",
+      "% Short Response",
+      "\\question[2] Who wrote the novel \\textit{Noli Me Tangere}?",
+      "\\begin{shortresponse}",
+      "  \\answer{Jose P. Rizal}",
+      "\\end{shortresponse}",
+      "",
+      "% Math Solver",
+      "\\question[5] Solve for \\(x\\). Show your solution: \\(2x+6=18\\).",
+      "\\begin{mathsolver}",
+      "  \\answer{x = 6}",
+      "\\end{mathsolver}",
       "",
       "% Essay",
       "\\question Explain how you would solve a word problem involving fractions.",
