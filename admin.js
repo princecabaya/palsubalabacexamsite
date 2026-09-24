@@ -2812,67 +2812,58 @@
   }
 
   function buildMathSolverPreview() {
-    const board = document.createElement("div");
-    board.className = "math-solver-board preview-math-solver";
+    const board=document.createElement("div");
+    board.className="math-solver-board preview-math-solver";
 
-    const answer = document.createElement("textarea");
-    answer.className = "math-solution-input";
-    answer.rows = 4;
-    answer.placeholder = "Tap here, then use the mathematics keyboard below.";
-    answer.disabled = true;
+    const solutionLabel=document.createElement("label");
+    solutionLabel.className="math-answer-label";
+    solutionLabel.textContent="Solution / working steps";
 
-    const preview = document.createElement("div");
-    preview.className = "math-solution-preview";
-    preview.textContent = "Math preview";
+    const solution=document.createElement("textarea");
+    solution.className="math-solution-input";
+    solution.rows=4;
+    solution.placeholder="Use the mathematics keyboard to show the solution.";
+    solution.disabled=true;
 
-    const keyboard = document.createElement("div");
-    keyboard.className = "math-virtual-keyboard preview-keyboard";
+    const finalLabel=document.createElement("label");
+    finalLabel.className="math-answer-label math-final-label";
+    finalLabel.textContent="Final answer";
 
-    const tabs = document.createElement("div");
-    tabs.className = "math-keyboard-tabs";
-    ["123", "ABC", "αβγ", "ƒ()"].forEach((name, index) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.disabled = true;
-      b.textContent = name;
-      if (index === 0) b.classList.add("active");
-      tabs.appendChild(b);
+    const finalAnswer=document.createElement("input");
+    finalAnswer.className="math-final-answer-input";
+    finalAnswer.placeholder="Final answer";
+    finalAnswer.disabled=true;
+
+    const preview=document.createElement("div");
+    preview.className="math-solution-preview";
+    preview.innerHTML='<div class="math-preview-working">Solution preview</div><div class="math-preview-final"><strong>Final answer: </strong>—</div>';
+
+    const keyboard=document.createElement("div");
+    keyboard.className="math-virtual-keyboard preview-keyboard";
+    const tabs=document.createElement("div");
+    tabs.className="math-keyboard-tabs";
+    ["123","ABC","αβγ","ƒ()"].forEach((name,index)=>{
+      const b=document.createElement("button"); b.type="button"; b.disabled=true; b.textContent=name;
+      if(index===0)b.classList.add("active"); tabs.appendChild(b);
     });
 
-    const keys = document.createElement("div");
-    keys.className = "math-keyboard-keys";
-    [
-      "7","8","9","÷",
-      "4","5","6","×",
-      "1","2","3","−",
-      "0",".","=","+",
-      "(",")","<",">",
-      "≤","≥",","
-    ].forEach(key => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.disabled = true;
-      b.className = "math-key";
-      b.textContent = key;
-      keys.appendChild(b);
+    const keys=document.createElement("div");
+    keys.className="math-keyboard-keys";
+    ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","].forEach(key=>{
+      const b=document.createElement("button"); b.type="button"; b.disabled=true; b.className="math-key"; b.textContent=key; keys.appendChild(b);
     });
 
-    const utility = document.createElement("div");
-    utility.className = "math-keyboard-utility";
-    [["↶","Undo"],["↷","Redo"],["◀","Left"],["▶","Right"],["↵ Enter","New equation line"],["⌫","Backspace"],["Clear","Clear"]].forEach(([label,title]) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.disabled = true;
-      b.className = "math-utility-key";
-      b.textContent = label;
-      b.title = title;
-      utility.appendChild(b);
+    const utility=document.createElement("div");
+    utility.className="math-keyboard-utility";
+    [["↶","Undo"],["↷","Redo"],["◀","Left"],["▶","Right"],["↵ Enter","New solution line"],["⌫","Backspace"],["Clear","Clear"],["ⓧ","Close keyboard"]].forEach(([label,title])=>{
+      const b=document.createElement("button"); b.type="button"; b.disabled=true; b.className="math-utility-key"; b.textContent=label; b.title=title; utility.appendChild(b);
     });
 
-    keyboard.append(tabs, keys, utility);
-    board.append(answer, preview, keyboard);
+    keyboard.append(tabs,keys,utility);
+    board.append(solutionLabel,solution,finalLabel,finalAnswer,preview,keyboard);
     return board;
   }
+
 
   function buildPreviewRubric(question) {
     const details = document.createElement("details");
