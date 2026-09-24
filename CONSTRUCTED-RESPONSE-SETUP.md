@@ -21,7 +21,7 @@ Deploy:
 
 `grade-constructed-responses`
 
-The function is called by the student site immediately after a submitted exam.
+The function is called by the student site immediately after submission with AI disabled. It performs only free local checks at that stage.
 
 Recommended setting:
 - JWT verification OFF
@@ -81,7 +81,13 @@ The default first section is `Part 1`.
 
 ## OpenAI fallback
 
-The constructed-response grading function now uses this provider order:
+AI is optional. The default workflow is:
+
+1. Free local/deterministic checks
+2. Teacher manual scoring
+3. Optional AI only when the teacher clicks **Try AI Provisional Scoring**
+
+When AI is requested, the provider order is:
 
 1. Gemini
 2. OpenAI
