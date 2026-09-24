@@ -77,3 +77,21 @@ After adding a new section:
 - an Excel or LaTeX import will append to the newest section instead of replacing the earlier parts.
 
 The default first section is `Part 1`.
+
+
+## OpenAI fallback
+
+The constructed-response grading function now uses this provider order:
+
+1. Gemini
+2. OpenAI
+3. Teacher manual scoring
+
+To enable the OpenAI fallback, add these Supabase Edge Function secrets:
+
+- `OPENAI_API_KEY`
+- optional `OPENAI_MODEL`
+
+The default OpenAI fallback model in the function is `gpt-5.4-mini`.
+
+If Gemini fails or is unavailable, the function tries OpenAI automatically. If both AI providers fail, no constructed-response item is automatically forced to zero. The teacher review screen remains available for manual scoring and final approval.
