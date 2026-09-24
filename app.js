@@ -1070,7 +1070,15 @@
     const row = data?.[0];
     $("doneText").textContent = row?.score == null
       ? "Your responses have been recorded."
-      : `Your responses have been recorded. Auto-scored result: ${row.score}/${row.max_score}.`;
+      : `Your responses have been recorded. Objective auto-score: ${row.score}/${row.max_score}. Constructed responses, if any, still require teacher approval.`;
+
+    // Generate a provisional score for constructed-response items. This never
+    // becomes the final grade until the teacher reviews and approves it.
+    const provisional = await window.ExamAI?.gradeConstructed?.(attempt.attempt_token);
+    if (provisional?.grading_status === "pending_review") {
+      $("doneText").textContent =
+        `Your responses have been recorded. Provisional overall score: ${provisional.provisional_score}/${provisional.provisional_max_score}. Essay, Short Response, and Math Solver items are still subject to teacher review and approval.`;
+    }
 
     // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
     // The feedback helper fails gracefully if the Edge Function has not been deployed yet.
