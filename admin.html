@@ -231,11 +231,10 @@
             </label>
 
             <label>Status
-              <select id="statusInput">
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="closed">Closed</option>
+              <select id="statusInput" disabled>
+                <option value="draft">Draft — autosaved</option>
               </select>
+              <span class="muted">New and edited examination papers remain Drafts. Publish or Close them from Manage Exams.</span>
             </label>
 
             <label>Start date/time
@@ -608,7 +607,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260924-1615"></script>
-  <script src="admin.js?v=20260924-2329"></script>
+  <script src="admin.js?v=20260924-2358"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260924-2230"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
