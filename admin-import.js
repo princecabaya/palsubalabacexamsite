@@ -77,6 +77,29 @@
     });
   }
 
+  function getContinuationSectionTitle() {
+    const dividers = [...document.querySelectorAll("#questionBuilder .exam-part-divider")];
+    const latest = dividers[dividers.length - 1];
+    return latest?.querySelector(".exam-part-title")?.value?.trim() || "";
+  }
+
+  function removeEmptyTrailingSectionQuestion() {
+    const builder = document.getElementById("questionBuilder");
+    if (!builder) return;
+    const lastDivider = [...builder.querySelectorAll(".exam-part-divider")].pop();
+    if (!lastDivider) return;
+
+    let node = lastDivider.nextElementSibling;
+    while (node) {
+      const next = node.nextElementSibling;
+      if (node.classList?.contains("question-card")) {
+        const prompt = node.querySelector(".q-prompt")?.value?.trim();
+        if (!prompt) node.remove();
+      }
+      node = next;
+    }
+  }
+
   async function importWorkbook() {
     setMessage("");
 
@@ -220,19 +243,27 @@
         return Boolean(prompt);
       });
 
-      if (hasExistingContent) {
-        const proceed = confirm(
-          `Import ${parsed.length} questions and replace the questions currently in the builder?`
-        );
-        if (!proceed) {
-          setMessage("Import cancelled. Existing questions were kept.");
-          return;
-        }
-      }
+      const continuationSection = getContinuationSectionTitle();
+      const importedQuestions = parsed.map(({prompt,question_type,choices,correct_answer,points}) => ({
+        prompt, question_type, choices, correct_answer, points,
+        section_title: continuationSection || "Part 1"
+      }));
 
-      builder.replaceQuestions(parsed.map(({prompt,question_type,choices,correct_answer,points}) => ({
-        prompt, question_type, choices, correct_answer, points
-      })));
+      if (continuationSection) {
+        removeEmptyTrailingSectionQuestion();
+        builder.appendQuestions(importedQuestions);
+      } else {
+        if (hasExistingContent) {
+          const proceed = confirm(
+            `Import ${parsed.length} questions and replace the questions currently in the builder?`
+          );
+          if (!proceed) {
+            setMessage("Import cancelled. Existing questions were kept.");
+            return;
+          }
+        }
+        builder.replaceQuestions(importedQuestions);
+      }
 
       setMessage(
         `Imported ${parsed.length} question${parsed.length === 1 ? "" : "s"} successfully. Review them, then click Save Exam.`
@@ -284,19 +315,25 @@
         return Boolean(card.querySelector(".q-prompt")?.value?.trim());
       });
 
-      if (hasExistingContent) {
-        const proceed = confirm(
-          "Import " + parsed.length + " LaTeX question" +
-          (parsed.length === 1 ? "" : "s") +
-          " and replace the questions currently in the builder?"
-        );
-        if (!proceed) {
-          setLatexMessage("Import cancelled. Existing questions were kept.");
-          return;
-        }
-      }
+      const continuationSection = getContinuationSectionTitle();
 
-      builder.replaceQuestions(parsed);
+      if (continuationSection) {
+        removeEmptyTrailingSectionQuestion();
+        builder.appendQuestions(parsed.map(q => ({ ...q, section_title: continuationSection })));
+      } else {
+        if (hasExistingContent) {
+          const proceed = confirm(
+            "Import " + parsed.length + " LaTeX question" +
+            (parsed.length === 1 ? "" : "s") +
+            " and replace the questions currently in the builder?"
+          );
+          if (!proceed) {
+            setLatexMessage("Import cancelled. Existing questions were kept.");
+            return;
+          }
+        }
+        builder.replaceQuestions(parsed.map(q => ({ ...q, section_title: q.section_title || "Part 1" })));
+      }
       setLatexMessage(
         "Imported " + parsed.length + " LaTeX question" +
         (parsed.length === 1 ? "" : "s") +
