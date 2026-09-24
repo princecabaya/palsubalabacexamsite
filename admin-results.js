@@ -36,7 +36,7 @@
     const { data, error } = await db
       .from("attempts")
       .select(`
-        id,status,started_at,submitted_at,score,max_score,
+        id,status,started_at,submitted_at,score,max_score,grading_status,provisional_score,provisional_max_score,
         students(student_no,full_name)
       `)
       .eq("exam_id", exam.id);
@@ -58,6 +58,8 @@
         ...a,
         score_num: score,
         max_score_num: maxScore,
+        provisional_score_num: numberOrNull(a.provisional_score),
+        provisional_max_score_num: numberOrNull(a.provisional_max_score),
         percentage
       };
     });
@@ -127,10 +129,13 @@
 
     for (const r of rows) {
       const rank = rankMap.get(r.id);
-      const score = r.score_num === null
-        ? "—"
-        : `${trimNumber(r.score_num)}/${r.max_score_num === null ? "—" : trimNumber(r.max_score_num)}`;
-      const percentage = r.percentage === null ? "—" : `${formatPct(r.percentage)}%`;
+      const approved = r.grading_status === "approved" || r.grading_status === "not_required";
+      const score = approved
+        ? (r.score_num === null ? "—" : `${trimNumber(r.score_num)}/${r.max_score_num === null ? "—" : trimNumber(r.max_score_num)}`)
+        : (r.provisional_score_num === null
+            ? (r.score_num === null ? "Pending review" : `${trimNumber(r.score_num)}/${r.max_score_num ?? "—"} + review`)
+            : `${trimNumber(r.provisional_score_num)}/${trimNumber(r.provisional_max_score_num)} provisional`);
+      const percentage = approved && r.percentage !== null ? `${formatPct(r.percentage)}%` : "Pending";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -142,10 +147,15 @@
         <td><span class="badge ${r.status === "submitted" ? "ok" : "warn"}">${escapeHtml(r.status)}</span></td>
         <td>${fmt(r.submitted_at)}</td>
         <td class="action-cell">
+          ${r.status === "submitted" && !proctorOnly && !approved ? '<button type="button" class="review-grading-btn">Review Scores</button>' : ""}
           ${r.status === "submitted" ? '<button type="button" class="result-pdf-btn">Result PDF</button>' : ""}
           ${proctorOnly ? '<span class="badge proctor">Proctor</span>' : '<button type="button" class="danger-outline delete-attempt-btn">Delete Attempt</button>'}
         </td>
       `;
+
+      tr.querySelector(".review-grading-btn")?.addEventListener("click", async () => {
+        await openGradingReview(r, exam);
+      });
 
       tr.querySelector(".result-pdf-btn")?.addEventListener("click", async (event) => {
         await window.ExamReport?.generateTeacher(r.id, event.currentTarget);
@@ -158,6 +168,142 @@
       tbody.appendChild(tr);
     }
   }
+
+  let activeGradingAttempt = null;
+  let activeGradingExam = null;
+
+  async function openGradingReview(attempt, exam) {
+    activeGradingAttempt = attempt;
+    activeGradingExam = exam;
+    const panel = $("gradingReviewPanel");
+    const itemsNode = $("gradingReviewItems");
+    const msg = $("gradingReviewMsg");
+    if (!panel || !itemsNode) return;
+
+    panel.classList.remove("hidden");
+    $("gradingReviewTitle").textContent = `Review — ${attempt.students?.full_name || "Student"}`;
+    $("gradingReviewMeta").textContent = `${attempt.students?.student_no || ""} • ${exam.title || ""}`;
+    itemsNode.innerHTML = '<p class="muted">Loading constructed responses…</p>';
+    if (msg) msg.textContent = "";
+
+    const { data, error } = await db.rpc("admin_get_grading_review", {
+      p_attempt_id: attempt.id
+    });
+
+    if (error) {
+      itemsNode.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
+      return;
+    }
+
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!items.length) {
+      itemsNode.innerHTML = '<p class="muted">This attempt has no Essay, Short Response, or Math Solver items.</p>';
+      $("approveGradingBtn").disabled = true;
+      return;
+    }
+
+    $("approveGradingBtn").disabled = false;
+    itemsNode.innerHTML = "";
+
+    for (const item of items) {
+      const article = document.createElement("article");
+      article.className = "grading-review-card";
+      article.dataset.questionId = item.question_id;
+      const provisional = item.provisional_score == null ? "" : Number(item.provisional_score);
+      const startingScore = item.teacher_score == null ? provisional : Number(item.teacher_score);
+
+      article.innerHTML = `
+        <div class="grading-review-head">
+          <div>
+            <strong>${escapeHtml(item.section_title || "Part 1")} • Question ${escapeHtml(item.position)}</strong>
+            <span class="badge">${escapeHtml(formatQuestionType(item.question_type))}</span>
+          </div>
+          <strong>${escapeHtml(item.points)} pts</strong>
+        </div>
+        <div class="grading-review-prompt">${escapeHtml(item.prompt || "")}</div>
+        <div class="grading-student-answer"><strong>Student response</strong><pre>${escapeHtml(item.student_answer || "(No response)")}</pre></div>
+        ${item.reference_answer ? `<p><strong>Reference:</strong> ${escapeHtml(item.reference_answer)}</p>` : ""}
+        <div class="provisional-grade">
+          <strong>Provisional AI score:</strong>
+          <span>${item.provisional_score == null ? "Not available" : `${escapeHtml(item.provisional_score)} / ${escapeHtml(item.points)}`}</span>
+          <p class="muted">${escapeHtml(item.provisional_reason || "Teacher review required.")}</p>
+        </div>
+        <div class="form-grid compact grading-inputs">
+          <label>Teacher score
+            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${Number.isFinite(startingScore) ? startingScore : ""}">
+          </label>
+          <label>Teacher comment
+            <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
+          </label>
+        </div>
+      `;
+
+      itemsNode.appendChild(article);
+    }
+
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function formatQuestionType(type) {
+    return ({
+      essay: "Essay",
+      short_response: "Short Response",
+      math_solver: "Math Solver"
+    })[type] || type || "Response";
+  }
+
+  async function approveCurrentGrading() {
+    if (!activeGradingAttempt || !activeGradingExam) return;
+
+    const cards = [...document.querySelectorAll("#gradingReviewItems .grading-review-card")];
+    const scores = [];
+
+    for (const card of cards) {
+      const input = card.querySelector(".teacher-score-input");
+      const comment = card.querySelector(".teacher-comment-input")?.value?.trim() || "";
+      const max = Number(input.max);
+      const score = Number(input.value);
+
+      if (!Number.isFinite(score) || score < 0 || score > max) {
+        $("gradingReviewMsg").textContent = `Enter a score from 0 to ${max} for every response.`;
+        return;
+      }
+
+      scores.push({
+        question_id: card.dataset.questionId,
+        score,
+        comment
+      });
+    }
+
+    if (!confirm("Approve these teacher-reviewed scores as the student's final exam score?")) return;
+
+    const button = $("approveGradingBtn");
+    button.disabled = true;
+    button.textContent = "Approving…";
+
+    const { data, error } = await db.rpc("admin_approve_constructed_scores", {
+      p_attempt_id: activeGradingAttempt.id,
+      p_scores: scores
+    });
+
+    button.disabled = false;
+    button.textContent = "Approve Final Scores";
+
+    if (error) {
+      $("gradingReviewMsg").textContent = error.message;
+      return;
+    }
+
+    $("gradingReviewMsg").textContent = `Approved final score: ${data?.score ?? "—"}/${data?.max_score ?? "—"}.`;
+    await openExamResults(activeGradingExam);
+    window.ExamAdmin?.refreshAttempts?.();
+  }
+
+  $("approveGradingBtn")?.addEventListener("click", approveCurrentGrading);
+  $("closeGradingReviewBtn")?.addEventListener("click", () => {
+    $("gradingReviewPanel")?.classList.add("hidden");
+  });
 
   async function deleteAttempt(attempt, exam) {
     const studentName = attempt.students?.full_name || "this student";
