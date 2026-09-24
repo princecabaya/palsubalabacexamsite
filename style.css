@@ -933,3 +933,74 @@ textarea{resize:vertical}
   .math-key{min-height:50px}
   .grading-review-head{align-items:flex-start;flex-direction:column}
 }
+
+
+/* Refined math keyboard and legacy rubric display */
+.math-virtual-keyboard{
+  border-top:1px solid #cbd2dc;
+}
+.math-keyboard-tabs{
+  padding:0 2px;
+}
+.math-keyboard-tabs button{
+  min-height:42px;
+  font-size:.95rem;
+}
+.math-keyboard-keys{
+  grid-template-columns:repeat(6,minmax(50px,1fr));
+  gap:8px;
+}
+.math-key{
+  min-height:52px;
+  font-size:1.08rem;
+}
+.math-keyboard-utility{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(52px,1fr));
+  gap:8px;
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid #c7ced8;
+}
+.math-utility-key{
+  min-height:46px;
+  padding:7px 9px;
+  border:1px solid #b8c0cc;
+  border-radius:9px;
+  background:#f8fafc;
+  font-size:1rem;
+  font-weight:800;
+}
+.math-utility-key.delete-key{
+  background:#fff1f2;
+  color:#9f1239;
+  border-color:#fecdd3;
+}
+.math-utility-key.clear-key{
+  background:#f1f5f9;
+}
+.student-rubric .flat-criteria-table{
+  min-width:0;
+}
+.student-rubric .flat-criteria-table th:first-child,
+.student-rubric .flat-criteria-table td:first-child{
+  width:34%;
+  min-width:170px;
+}
+.student-rubric .flat-criteria-table th:last-child,
+.student-rubric .flat-criteria-table td:last-child{
+  text-align:left;
+  white-space:normal;
+}
+.student-rubric td{
+  line-height:1.4;
+}
+
+@media(max-width:720px){
+  .math-keyboard-keys{
+    grid-template-columns:repeat(4,minmax(48px,1fr));
+  }
+  .math-keyboard-utility{
+    grid-template-columns:repeat(3,minmax(70px,1fr));
+  }
+}
