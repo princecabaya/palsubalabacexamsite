@@ -663,11 +663,38 @@
 
   function renderMathContent(element, text) {
     if (!element) return;
-    element.textContent = text || "";
+    element.replaceChildren();
     element.classList.add("math-rendered");
+
+    appendLatexRichText(element, String(text || ""));
+
     if (window.MathJax?.typesetPromise) {
       window.MathJax.typesetClear?.([element]);
       window.MathJax.typesetPromise([element]).catch(() => {});
+    }
+  }
+
+  function appendLatexRichText(parent, source) {
+    const commandPattern = /\\(textit|emph|textbf|underline)\{([^{}]*)\}/g;
+    let cursor = 0;
+    let match;
+
+    while ((match = commandPattern.exec(source)) !== null) {
+      if (match.index > cursor) {
+        parent.appendChild(document.createTextNode(source.slice(cursor, match.index)));
+      }
+
+      const tag = match[1] === "textbf"
+        ? "strong"
+        : (match[1] === "underline" ? "u" : "em");
+      const node = document.createElement(tag);
+      node.textContent = match[2];
+      parent.appendChild(node);
+      cursor = match.index + match[0].length;
+    }
+
+    if (cursor < source.length) {
+      parent.appendChild(document.createTextNode(source.slice(cursor)));
     }
   }
 
@@ -792,48 +819,73 @@
             });
             table.appendChild(tbody);
           } else {
-            const firstLevels = Array.isArray(q.rubric_criteria[0]?.levels) ? q.rubric_criteria[0].levels : [];
-            const thead = document.createElement("thead");
-            const headerRow = document.createElement("tr");
-            const criteriaHead = document.createElement("th");
-            criteriaHead.textContent = "Criteria / Level of Performance";
-            headerRow.appendChild(criteriaHead);
+            const isMatrix = q.rubric_criteria.every(item =>
+              Array.isArray(item?.levels) && item.levels.length >= 2
+            );
 
-            firstLevels.forEach(level => {
-              const th = document.createElement("th");
-              const title = document.createElement("strong");
-              title.textContent = String(level?.level || "");
-              const points = document.createElement("span");
-              points.className = "rubric-level-points";
-              points.textContent = Number.isFinite(Number(level?.points)) ? `${level.points} pts` : "";
-              th.append(title, points);
-              headerRow.appendChild(th);
-            });
+            if (!isMatrix) {
+              table.classList.add("flat-criteria-table");
+              table.innerHTML = "<thead><tr><th>Criterion (Max Score)</th><th>Description</th></tr></thead>";
+              const tbody = document.createElement("tbody");
 
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
+              q.rubric_criteria.forEach(item => {
+                const tr = document.createElement("tr");
+                const criterion = document.createElement("td");
+                const maxPoints = Number(item?.max_points ?? item?.points ?? 0);
+                criterion.textContent = `${String(item?.criterion || "")}${maxPoints ? ` (${maxPoints} pts)` : ""}`;
 
-            const tbody = document.createElement("tbody");
-            q.rubric_criteria.forEach(item => {
-              const tr = document.createElement("tr");
-              const criterion = document.createElement("td");
-              criterion.textContent = String(item?.criterion || "");
-              tr.appendChild(criterion);
+                const description = document.createElement("td");
+                description.textContent = String(item?.description || "");
 
-              firstLevels.forEach((headerLevel, index) => {
-                const td = document.createElement("td");
-                const levels = Array.isArray(item?.levels) ? item.levels : [];
-                const match = levels.find(level =>
-                  String(level?.level || "").trim().toLowerCase() === String(headerLevel?.level || "").trim().toLowerCase()
-                ) || levels[index];
-                td.textContent = String(match?.description || "");
-                tr.appendChild(td);
+                tr.append(criterion, description);
+                tbody.appendChild(tr);
               });
 
-              tbody.appendChild(tr);
-            });
+              table.appendChild(tbody);
+            } else {
+              const firstLevels = q.rubric_criteria[0].levels;
+              const thead = document.createElement("thead");
+              const headerRow = document.createElement("tr");
+              const criteriaHead = document.createElement("th");
+              criteriaHead.textContent = "Criteria / Level of Performance";
+              headerRow.appendChild(criteriaHead);
 
-            table.appendChild(tbody);
+              firstLevels.forEach(level => {
+                const th = document.createElement("th");
+                const title = document.createElement("strong");
+                title.textContent = String(level?.level || "");
+                const points = document.createElement("span");
+                points.className = "rubric-level-points";
+                points.textContent = Number.isFinite(Number(level?.points)) ? `${level.points} pts` : "";
+                th.append(title, points);
+                headerRow.appendChild(th);
+              });
+
+              thead.appendChild(headerRow);
+              table.appendChild(thead);
+
+              const tbody = document.createElement("tbody");
+              q.rubric_criteria.forEach(item => {
+                const tr = document.createElement("tr");
+                const criterion = document.createElement("td");
+                criterion.textContent = String(item?.criterion || "");
+                tr.appendChild(criterion);
+
+                firstLevels.forEach((headerLevel, index) => {
+                  const td = document.createElement("td");
+                  const levels = item.levels;
+                  const match = levels.find(level =>
+                    String(level?.level || "").trim().toLowerCase() === String(headerLevel?.level || "").trim().toLowerCase()
+                  ) || levels[index];
+                  td.textContent = String(match?.description || "");
+                  tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+              });
+
+              table.appendChild(tbody);
+            }
           }
 
           tableWrap.appendChild(table);
@@ -861,62 +913,173 @@
 
     const preview = document.createElement("div");
     preview.className = "math-solution-preview";
+
     const keyboard = document.createElement("div");
     keyboard.className = "math-virtual-keyboard hidden";
 
-    const tabs = [
-      { name: "123", keys: ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","<",">","≤","≥","(",")",","] },
-      { name: "ABC", keys: ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"] },
-      { name: "αβγ", keys: ["α","β","γ","θ","λ","μ","σ","Δ","π"] },
-      { name: "ƒ()", keys: ["x²","x^□","√□","|□|","frac","sin","cos","tan","log","ln","e","i","newline","⌫"] }
-    ];
-
     const tabBar = document.createElement("div");
     tabBar.className = "math-keyboard-tabs";
+
     const keyArea = document.createElement("div");
     keyArea.className = "math-keyboard-keys";
+
+    const utilityBar = document.createElement("div");
+    utilityBar.className = "math-keyboard-utility";
+
+    const tabs = [
+      {
+        name: "123",
+        keys: ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","]
+      },
+      {
+        name: "ABC",
+        keys: ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
+      },
+      {
+        name: "αβγ",
+        keys: ["α","β","γ","δ","θ","λ","μ","ρ","σ","φ","ω","Δ","Σ","π"]
+      },
+      {
+        name: "ƒ()",
+        keys: ["x²","x^□","√□","frac","|□|","sin","cos","tan","log","ln","e","∞","newline"]
+      }
+    ];
+
+    const undoStack = [];
+    const redoStack = [];
+
+    function snapshot() {
+      undoStack.push({
+        value: textarea.value,
+        start: textarea.selectionStart ?? textarea.value.length,
+        end: textarea.selectionEnd ?? textarea.value.length
+      });
+      if (undoStack.length > 60) undoStack.shift();
+      redoStack.length = 0;
+    }
+
+    function restore(entry) {
+      if (!entry) return;
+      textarea.value = entry.value;
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(entry.start, entry.end);
+      afterEdit();
+    }
 
     function latexForKey(key) {
       return ({
         "÷":"\\div ","×":"\\times ","−":"-","≤":"\\le ","≥":"\\ge ",
-        "α":"\\alpha ","β":"\\beta ","γ":"\\gamma ","θ":"\\theta ","λ":"\\lambda ",
-        "μ":"\\mu ","σ":"\\sigma ","Δ":"\\Delta ","π":"\\pi ",
+        "α":"\\alpha ","β":"\\beta ","γ":"\\gamma ","δ":"\\delta ",
+        "θ":"\\theta ","λ":"\\lambda ","μ":"\\mu ","ρ":"\\rho ",
+        "σ":"\\sigma ","φ":"\\phi ","ω":"\\omega ","Δ":"\\Delta ",
+        "Σ":"\\Sigma ","π":"\\pi ","∞":"\\infty ",
         "x²":"x^2","x^□":"x^{}","√□":"\\sqrt{}","|□|":"\\left| \\right|",
         "frac":"\\frac{}{}","sin":"\\sin ","cos":"\\cos ","tan":"\\tan ",
         "log":"\\log ","ln":"\\ln ","newline":"\n"
       })[key] ?? key;
     }
 
-    function insertToken(token) {
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? start;
-
-      if (token === "⌫") {
-        if (start === end && start > 0) {
-          textarea.value = textarea.value.slice(0, start - 1) + textarea.value.slice(end);
-          textarea.setSelectionRange(start - 1, start - 1);
-        } else {
-          textarea.value = textarea.value.slice(0, start) + textarea.value.slice(end);
-          textarea.setSelectionRange(start, start);
-        }
-      } else {
-        const value = latexForKey(token);
-        textarea.value = textarea.value.slice(0, start) + value + textarea.value.slice(end);
-        const next = start + value.length;
-        textarea.setSelectionRange(next, next);
-      }
-
+    function afterEdit() {
       autosize();
       updatePreview();
       stateNode.textContent = "Saving…";
       clearTimeout(textarea._saveTimer);
-      textarea._saveTimer = setTimeout(() => saveAnswer(question.question_id, textarea.value, stateNode), 500);
-      textarea.focus({ preventScroll: true });
+      textarea._saveTimer = setTimeout(
+        () => saveAnswer(question.question_id, textarea.value, stateNode),
+        500
+      );
     }
+
+    function insertToken(token) {
+      snapshot();
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? start;
+      const value = latexForKey(token);
+
+      textarea.value = textarea.value.slice(0, start) + value + textarea.value.slice(end);
+      const next = start + value.length;
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(next, next);
+      afterEdit();
+    }
+
+    function backspace() {
+      snapshot();
+      let start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? start;
+
+      if (start === end && start > 0) {
+        textarea.value = textarea.value.slice(0, start - 1) + textarea.value.slice(end);
+        start -= 1;
+      } else {
+        textarea.value = textarea.value.slice(0, start) + textarea.value.slice(end);
+      }
+
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(start, start);
+      afterEdit();
+    }
+
+    function clearAll() {
+      if (!textarea.value) return;
+      snapshot();
+      textarea.value = "";
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(0, 0);
+      afterEdit();
+    }
+
+    function moveCursor(delta) {
+      const pos = textarea.selectionStart ?? textarea.value.length;
+      const next = Math.max(0, Math.min(textarea.value.length, pos + delta));
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(next, next);
+    }
+
+    function undo() {
+      const previous = undoStack.pop();
+      if (!previous) return;
+      redoStack.push({
+        value: textarea.value,
+        start: textarea.selectionStart ?? textarea.value.length,
+        end: textarea.selectionEnd ?? textarea.value.length
+      });
+      restore(previous);
+    }
+
+    function redo() {
+      const next = redoStack.pop();
+      if (!next) return;
+      undoStack.push({
+        value: textarea.value,
+        start: textarea.selectionStart ?? textarea.value.length,
+        end: textarea.selectionEnd ?? textarea.value.length
+      });
+      restore(next);
+    }
+
+    function makeUtility(label, title, handler, extraClass = "") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `math-utility-key ${extraClass}`.trim();
+      button.textContent = label;
+      button.title = title;
+      button.addEventListener("mousedown", event => event.preventDefault());
+      button.addEventListener("click", handler);
+      utilityBar.appendChild(button);
+    }
+
+    makeUtility("↶", "Undo", undo);
+    makeUtility("↷", "Redo", redo);
+    makeUtility("◀", "Move cursor left", () => moveCursor(-1));
+    makeUtility("▶", "Move cursor right", () => moveCursor(1));
+    makeUtility("⌫", "Backspace / delete previous character", backspace, "delete-key");
+    makeUtility("Clear", "Clear the whole solution", clearAll, "clear-key");
 
     function renderKeys(index) {
       [...tabBar.children].forEach((button, i) => button.classList.toggle("active", i === index));
       keyArea.innerHTML = "";
+
       tabs[index].keys.forEach(key => {
         const button = document.createElement("button");
         button.type = "button";
@@ -940,12 +1103,15 @@
 
     function autosize() {
       textarea.style.height = "auto";
-      textarea.style.height = `${Math.max(110, textarea.scrollHeight + 6)}px`;
+      textarea.style.height = `${Math.max(110, textarea.scrollHeight + 8)}px`;
     }
 
     function updatePreview() {
       const value = textarea.value.trim();
-      preview.textContent = value ? `\\[${value.replace(/\n/g, "\\\\")}\\]` : "Math preview";
+      preview.textContent = value
+        ? `\\[${value.replace(/\n/g, "\\\\")}\\]`
+        : "Math preview";
+
       if (window.MathJax?.typesetPromise) {
         window.MathJax.typesetClear?.([preview]);
         window.MathJax.typesetPromise([preview]).catch(() => {});
@@ -959,7 +1125,7 @@
       }
     });
 
-    keyboard.append(tabBar, keyArea);
+    keyboard.append(tabBar, keyArea, utilityBar);
     container.append(textarea, preview, keyboard);
     renderKeys(0);
     autosize();
@@ -967,6 +1133,7 @@
 
     return { container, textarea };
   }
+
 
   async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
     if (!attempt?.attempt_token || submitted) return;
