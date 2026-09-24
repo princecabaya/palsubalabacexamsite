@@ -16,7 +16,12 @@
         return data || null;
       } catch (error) {
         console.warn("Provisional constructed-response grading unavailable:", error);
-        return null;
+        const detail = await readFunctionError(error);
+        return {
+          grading_status: "pending_review",
+          ai_error: detail || error?.message || "AI provisional scoring is unavailable.",
+          message: "AI provisional scoring is unavailable. Your teacher will review the constructed-response items manually."
+        };
       }
     },
 
