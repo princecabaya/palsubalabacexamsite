@@ -564,3 +564,46 @@ $review$;
 revoke all on function public.admin_get_grading_review(uuid) from public;
 grant execute on function public.admin_get_grading_review(uuid) to authenticated;
 
+-- Student result lookup by Exam Code + Student ID.
+create or replace function public.get_student_exam_result(
+  p_exam_code text,
+  p_student_no text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $result$
+declare
+  v_attempt_id uuid;
+  v_report jsonb;
+begin
+  select a.id
+  into v_attempt_id
+  from public.attempts a
+  join public.exams e on e.id = a.exam_id
+  join public.students s on s.id = a.student_id
+  where lower(trim(e.code)) = lower(trim(p_exam_code))
+    and lower(regexp_replace(s.student_no, '[^a-zA-Z0-9]', '', 'g')) =
+        lower(regexp_replace(p_student_no, '[^a-zA-Z0-9]', '', 'g'))
+    and a.status = 'submitted'
+  order by a.submitted_at desc nulls last, a.started_at desc
+  limit 1;
+
+  if v_attempt_id is null then
+    raise exception 'No submitted exam result was found for this Exam Code and Student ID.';
+  end if;
+
+  v_report := public.exam_guard_build_attempt_report(v_attempt_id);
+
+  if v_report is null then
+    raise exception 'Result report is not available.';
+  end if;
+
+  return v_report;
+end;
+$result$;
+
+revoke all on function public.get_student_exam_result(text,text) from public;
+grant execute on function public.get_student_exam_result(text,text) to anon, authenticated;
+
