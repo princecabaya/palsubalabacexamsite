@@ -126,7 +126,7 @@ begin
       end
     ),0),
     coalesce(sum(case when q.question_type in ('mcq','binary') then q.points else 0 end),0),
-    bool_or(q.question_type in ('essay','short_response','math_solver'))
+    bool_or(q.question_type in ('essay','text','short_response','math_solver'))
   into v_score, v_auto_max, v_has_constructed
   from public.questions q
   left join public.responses r on r.question_id = q.id and r.attempt_id = v_attempt.id
@@ -137,7 +137,7 @@ begin
   from public.questions q
   where r.question_id = q.id
     and r.attempt_id = v_attempt.id
-    and q.question_type in ('essay','short_response','math_solver');
+    and q.question_type in ('essay','text','short_response','math_solver');
 
   update public.attempts
   set status = 'submitted',
@@ -196,7 +196,7 @@ as $review$
       from public.questions q
       left join public.responses r on r.question_id=q.id and r.attempt_id=a.id
       where q.exam_id=a.exam_id
-        and q.question_type in ('essay','short_response','math_solver')
+        and q.question_type in ('essay','text','short_response','math_solver')
     ), '[]'::jsonb)
   )
   from public.attempts a
@@ -247,7 +247,7 @@ begin
       join public.attempts a on a.exam_id=q.exam_id
       where a.id=p_attempt_id
         and q.id=v_question_id
-        and q.question_type in ('essay','short_response','math_solver')
+        and q.question_type in ('essay','text','short_response','math_solver')
         and v_score between 0 and q.points
     ) then
       raise exception 'Invalid score for question %.', v_question_id;
@@ -268,8 +268,8 @@ begin
       and lower(trim(coalesce(r.answer,'')))=lower(trim(q.correct_answer))
       then q.points else 0 end),0),
     coalesce(sum(case when q.question_type in ('mcq','binary') then q.points else 0 end),0),
-    coalesce(sum(case when q.question_type in ('essay','short_response','math_solver') then coalesce(r.teacher_score,0) else 0 end),0),
-    coalesce(sum(case when q.question_type in ('essay','short_response','math_solver') then q.points else 0 end),0)
+    coalesce(sum(case when q.question_type in ('essay','text','short_response','math_solver') then coalesce(r.teacher_score,0) else 0 end),0),
+    coalesce(sum(case when q.question_type in ('essay','text','short_response','math_solver') then q.points else 0 end),0)
   into v_auto_score,v_auto_max,v_constructed_score,v_constructed_max
   from public.questions q
   left join public.responses r on r.question_id=q.id and r.attempt_id=p_attempt_id
