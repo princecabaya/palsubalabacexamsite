@@ -28,6 +28,9 @@
     examRows.querySelectorAll(".exam-takers-row").forEach(other => {
       if (other !== row) other.classList.add("hidden");
     });
+    examRows.querySelectorAll(".exam-title-link").forEach(otherButton => {
+      if (otherButton !== button) otherButton.classList.remove("expanded");
+    });
 
     row.classList.toggle("hidden", !opening);
     button.classList.toggle("expanded", opening);
@@ -215,7 +218,7 @@
 
     renderRows(rows, rankMap, exam);
     if (!noScroll && !$("manageWorkspace")?.classList.contains("split-active")) {
-      if (!workspace?.classList.contains("split-active")) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     return rows;
   }
@@ -291,6 +294,11 @@
     const workspace = $("manageWorkspace");
     workspace?.classList.remove("preview-mode");
     workspace?.classList.add("review-mode", "split-active");
+    document.querySelectorAll("#examStudentRows tr").forEach(row => row.classList.remove("active-review-student"));
+    [...document.querySelectorAll("#examStudentRows tr")].find(row =>
+      row.textContent?.includes(attempt.students?.student_no || "__no_student__")
+    )?.classList.add("active-review-student");
+
     $("gradingReviewTitle").textContent = `Review — ${attempt.students?.full_name || "Student"}`;
     $("gradingReviewMeta").textContent = `${attempt.students?.student_no || ""} • ${exam.title || ""}`;
     itemsNode.innerHTML = '<p class="muted">Loading constructed responses…</p>';
@@ -339,10 +347,8 @@
 
     const hasAi = items.some(item => item.provisional_score !== null && item.provisional_score !== undefined);
     $("gradingAiStatus").textContent = hasAi
-      ? "Provisional AI scores are available. Review and edit them before approval."
-      : "No provisional AI scores are available. You can score manually or click Try AI Provisional Scoring.";
-
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      ? "Optional AI suggestions are available. Teacher scoring remains final."
+      : "Manual scoring is ready. AI is optional.";
   }
 
   async function loadConstructedItemsDirectly(attempt, exam) {
