@@ -1354,6 +1354,7 @@
       points: 1,
       choices: ["", "", "", ""],
       correct_answer: "",
+      rubric_type: "analytic",
       rubric_criteria: []
     };
 
@@ -1421,19 +1422,27 @@
       <div class="essay-rubric-area hidden">
         <div class="rubric-head">
           <div>
-            <h4>Essay Criteria</h4>
-            <p class="muted">Essay points are calculated automatically from the maximum points of the criteria below.</p>
+            <h4>Essay Rubric</h4>
+            <p class="muted rubric-mode-help">Analytic rubric: score each criterion separately, then add the criterion points.</p>
           </div>
           <span class="rubric-total">Total: <strong class="rubric-total-value">0</strong> points</span>
         </div>
+
+        <label>Rubric type
+          <select class="rubric-type">
+            <option value="analytic" ${(q.rubric_type || "analytic") === "analytic" ? "selected" : ""}>Analytic Rubric</option>
+            <option value="holistic" ${q.rubric_type === "holistic" ? "selected" : ""}>Holistic Rubric</option>
+          </select>
+        </label>
+
         <div class="rubric-list"></div>
         <div class="rubric-import-controls">
           <button type="button" class="add-rubric-btn">Add Criterion</button>
-          <button type="button" class="download-rubric-template-btn">Download Criteria Template</button>
+          <button type="button" class="download-rubric-template-btn">Download Rubric Template</button>
           <input class="rubric-excel-file" type="file" accept=".xlsx,.xls">
-          <button type="button" class="import-rubric-btn">Import Criteria Excel</button>
+          <button type="button" class="import-rubric-btn">Import Rubric Excel</button>
         </div>
-        <p class="muted">Excel columns: Criterion, Description, Max Points.</p>
+        <p class="muted rubric-excel-help">Excel columns: Criterion, Description, Max Points.</p>
       </div>
     `;
 
@@ -1467,8 +1476,9 @@
 
     card.querySelector(".binary-choice-a").addEventListener("input", () => refreshBinaryAnswerOptions(card));
     card.querySelector(".binary-choice-b").addEventListener("input", () => refreshBinaryAnswerOptions(card));
+    card.querySelector(".rubric-type").addEventListener("change", () => updateRubricMode(card));
     card.querySelector(".add-rubric-btn").addEventListener("click", () => addRubricRow(card));
-    card.querySelector(".download-rubric-template-btn").addEventListener("click", downloadRubricTemplate);
+    card.querySelector(".download-rubric-template-btn").addEventListener("click", () => downloadRubricTemplate(card));
     card.querySelector(".import-rubric-btn").addEventListener("click", () => importRubricExcel(card));
 
     (Array.isArray(q.choices) && q.choices.length ? q.choices : ["", "", "", ""]).forEach(choice => addChoiceInput(card, choice));
@@ -1476,6 +1486,7 @@
     if (rubric.length) rubric.forEach(item => addRubricRow(card, item));
     else addRubricRow(card);
 
+    updateRubricMode(card);
     toggleQuestionMode(card);
     refreshCorrectAnswerOptions(card, q.correct_answer);
     refreshBinaryAnswerOptions(card, q.correct_answer);
@@ -1594,18 +1605,51 @@
     if (![a,b].includes(current)) select.value = "";
   }
 
+  function rubricMode(card) {
+    return card.querySelector(".rubric-type")?.value === "holistic" ? "holistic" : "analytic";
+  }
+
+  function updateRubricMode(card) {
+    const mode = rubricMode(card);
+    const help = card.querySelector(".rubric-mode-help");
+    const excelHelp = card.querySelector(".rubric-excel-help");
+    const addBtn = card.querySelector(".add-rubric-btn");
+
+    if (mode === "holistic") {
+      if (help) help.textContent = "Holistic rubric: choose one overall performance level for the entire essay. The essay point value is the highest level score.";
+      if (excelHelp) excelHelp.textContent = "Excel columns: Level, Description, Score.";
+      if (addBtn) addBtn.textContent = "Add Performance Level";
+    } else {
+      if (help) help.textContent = "Analytic rubric: score each criterion separately, then add the criterion points.";
+      if (excelHelp) excelHelp.textContent = "Excel columns: Criterion, Description, Max Points.";
+      if (addBtn) addBtn.textContent = "Add Criterion";
+    }
+
+    [...card.querySelectorAll(".rubric-row")].forEach(row => {
+      const name = row.querySelector(".rubric-criterion");
+      const points = row.querySelector(".rubric-max-points");
+      if (name) name.placeholder = mode === "holistic"
+        ? "Performance level (e.g. Excellent)"
+        : "Criterion (e.g. Mathematical reasoning)";
+      if (points) points.placeholder = mode === "holistic" ? "Score" : "Max points";
+    });
+
+    updateRubricTotal(card);
+  }
+
   function addRubricRow(card, item = null) {
     const list = card.querySelector(".rubric-list");
     const row = document.createElement("div");
     row.className = "rubric-row";
-    const criterion = item?.criterion || "";
+    const criterion = item?.criterion || item?.level || "";
     const description = item?.description || "";
-    const maxPoints = Number(item?.max_points || 0);
+    const maxPoints = Number(item?.max_points ?? item?.points ?? item?.score ?? 0);
+    const mode = rubricMode(card);
 
     row.innerHTML = `
-      <input class="rubric-criterion" placeholder="Criterion (e.g. Mathematical reasoning)" value="${escapeAttr(criterion)}">
+      <input class="rubric-criterion" placeholder="${mode === "holistic" ? "Performance level (e.g. Excellent)" : "Criterion (e.g. Mathematical reasoning)"}" value="${escapeAttr(criterion)}">
       <input class="rubric-description" placeholder="Description / performance expectation" value="${escapeAttr(description)}">
-      <input class="rubric-max-points" type="number" min="0.25" step="0.25" placeholder="Max points" value="${maxPoints > 0 ? maxPoints : ""}">
+      <input class="rubric-max-points" type="number" min="0" step="0.25" placeholder="${mode === "holistic" ? "Score" : "Max points"}" value="${maxPoints >= 0 && item ? maxPoints : ""}">
       <button type="button" class="remove-rubric-btn">Remove</button>
     `;
 
@@ -1613,7 +1657,7 @@
     row.querySelector(".rubric-max-points").addEventListener("input", () => updateRubricTotal(card));
     row.querySelector(".remove-rubric-btn").addEventListener("click", () => {
       if (list.children.length <= 1) {
-        setCreateMessage("An essay needs at least one criterion.", true);
+        setCreateMessage("An essay rubric needs at least one row.", true);
         return;
       }
       row.remove();
@@ -1625,11 +1669,20 @@
   function updateRubricTotal(card) {
     const values = [...card.querySelectorAll(".rubric-max-points")]
       .map(input => Number(input.value))
-      .filter(value => Number.isFinite(value) && value > 0);
-    const total = values.reduce((sum, value) => sum + value, 0);
+      .filter(value => Number.isFinite(value) && value >= 0);
+    const mode = rubricMode(card);
+    const total = mode === "holistic"
+      ? (values.length ? Math.max(...values) : 0)
+      : values.reduce((sum, value) => sum + value, 0);
+
     const totalNode = card.querySelector(".rubric-total-value");
+    const totalLabel = card.querySelector(".rubric-total");
     const pointInput = card.querySelector(".q-points");
+
     if (totalNode) totalNode.textContent = trimNumber(total);
+    if (totalLabel) {
+      totalLabel.firstChild.textContent = mode === "holistic" ? "Maximum: " : "Total: ";
+    }
     if (pointInput && card.querySelector(".q-type").value === "essay") {
       pointInput.value = total > 0 ? String(total) : "0";
     }
@@ -1643,29 +1696,40 @@
     }));
   }
 
-  function downloadRubricTemplate() {
+  function downloadRubricTemplate(card) {
     if (!window.XLSX) {
       alert("Excel library is unavailable. Refresh the dashboard and try again.");
       return;
     }
-    const rows = [
-      ["Criterion", "Description", "Max Points"],
-      ["Content Accuracy", "Information is accurate, relevant, and complete.", 5],
-      ["Reasoning / Explanation", "Ideas are logically explained and supported.", 5],
-      ["Organization", "Response is clear and well organized.", 3]
-    ];
+
+    const mode = rubricMode(card);
+    const rows = mode === "holistic"
+      ? [
+          ["Level", "Description", "Score"],
+          ["Excellent", "Demonstrates complete, accurate, well-organized understanding with strong reasoning.", 10],
+          ["Proficient", "Demonstrates substantial understanding with generally correct reasoning.", 8],
+          ["Developing", "Demonstrates partial understanding with gaps or errors in reasoning.", 5],
+          ["Beginning", "Demonstrates limited understanding or an incomplete response.", 2]
+        ]
+      : [
+          ["Criterion", "Description", "Max Points"],
+          ["Content Accuracy", "Information is accurate, relevant, and complete.", 5],
+          ["Reasoning / Explanation", "Ideas are logically explained and supported.", 5],
+          ["Organization", "Response is clear and well organized.", 3]
+        ];
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{wch:24},{wch:55},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, ws, "Essay Criteria");
-    XLSX.writeFile(wb, "Essay_Criteria_Template.xlsx");
+    ws["!cols"] = [{wch:24},{wch:65},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, ws, mode === "holistic" ? "Holistic Rubric" : "Analytic Rubric");
+    XLSX.writeFile(wb, mode === "holistic" ? "Holistic_Rubric_Template.xlsx" : "Analytic_Rubric_Template.xlsx");
   }
 
   async function importRubricExcel(card) {
     const input = card.querySelector(".rubric-excel-file");
     const file = input?.files?.[0];
     if (!file) {
-      setCreateMessage("Choose a criteria Excel file first.", true);
+      setCreateMessage("Choose a rubric Excel file first.", true);
       return;
     }
     if (!window.XLSX) {
@@ -1678,33 +1742,56 @@
       const wb = XLSX.read(buffer, { type: "array" });
       const firstSheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+      const mode = rubricMode(card);
+
       const parsed = rows.map(row => {
-        const criterion = String(row["Criterion"] ?? row["Criteria"] ?? row["criterion"] ?? "").trim();
+        const criterion = mode === "holistic"
+          ? String(row["Level"] ?? row["Performance Level"] ?? row["Criterion"] ?? "").trim()
+          : String(row["Criterion"] ?? row["Criteria"] ?? row["criterion"] ?? "").trim();
         const description = String(row["Description"] ?? row["Descriptor"] ?? row["description"] ?? "").trim();
-        const maxPoints = Number(row["Max Points"] ?? row["Maximum Points"] ?? row["Points"] ?? row["max_points"] ?? 0);
+        const maxPoints = mode === "holistic"
+          ? Number(row["Score"] ?? row["Points"] ?? row["Max Points"] ?? 0)
+          : Number(row["Max Points"] ?? row["Maximum Points"] ?? row["Points"] ?? row["max_points"] ?? 0);
         return { criterion, description, max_points: maxPoints };
-      }).filter(item => item.criterion || item.description || item.max_points > 0);
+      }).filter(item => item.criterion || item.description || Number.isFinite(item.max_points));
 
       if (!parsed.length) {
-        setCreateMessage("No criteria rows were found. Use columns: Criterion, Description, Max Points.", true);
+        setCreateMessage(
+          mode === "holistic"
+            ? "No rubric levels were found. Use columns: Level, Description, Score."
+            : "No criteria rows were found. Use columns: Criterion, Description, Max Points.",
+          true
+        );
         return;
       }
 
-      const invalid = parsed.find(item => !item.criterion || !Number.isFinite(item.max_points) || item.max_points <= 0);
+      const invalid = parsed.find(item =>
+        !item.criterion ||
+        !Number.isFinite(item.max_points) ||
+        (mode === "holistic" ? item.max_points < 0 : item.max_points <= 0)
+      );
       if (invalid) {
-        setCreateMessage("Every imported criterion needs a Criterion name and a positive Max Points value.", true);
+        setCreateMessage(
+          mode === "holistic"
+            ? "Every holistic level needs a Level name and a non-negative Score."
+            : "Every analytic criterion needs a Criterion name and a positive Max Points value.",
+          true
+        );
         return;
       }
 
       const list = card.querySelector(".rubric-list");
       list.innerHTML = "";
       parsed.forEach(item => addRubricRow(card, item));
-      updateRubricTotal(card);
-      setCreateMessage(`${parsed.length} essay criteria imported successfully.`);
+      updateRubricMode(card);
+      setCreateMessage(
+        `${parsed.length} ${mode === "holistic" ? "performance levels" : "criteria"} imported successfully.`
+      );
     } catch (error) {
-      setCreateMessage(`Could not import essay criteria: ${error?.message || error}`, true);
+      setCreateMessage(`Could not import essay rubric: ${error?.message || error}`, true);
     }
   }
+
 
   function toggleQuestionMode(card) {
     const type = card.querySelector(".q-type").value;
@@ -1789,6 +1876,7 @@
         choices: q.choices,
         correct_answer: q.correct_answer,
         points: q.points,
+        rubric_type: q.rubric_type,
         rubric_criteria: q.rubric_criteria
       }));
 
@@ -1862,7 +1950,7 @@
 
     const { data: questions, error } = await db
       .from("questions")
-      .select("id,position,prompt,question_type,choices,correct_answer,points,rubric_criteria")
+      .select("id,position,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
       .eq("exam_id", exam.id)
       .order("position", { ascending: true });
 
@@ -1935,6 +2023,7 @@
 
       let choices = null;
       let correct_answer = null;
+      let rubric_type = "analytic";
       let rubric_criteria = [];
 
       if (question_type === "mcq") {
@@ -1958,15 +2047,26 @@
         correct_answer = card.querySelector(".binary-correct").value.trim();
         if (!correct_answer) return fail(`Question ${i + 1} needs a correct binary response.`);
       } else if (question_type === "essay") {
+        rubric_type = rubricMode(card);
         rubric_criteria = collectRubricCriteria(card);
-        if (!rubric_criteria.length) return fail(`Question ${i + 1} needs at least one essay criterion.`);
+        if (!rubric_criteria.length) return fail(`Question ${i + 1} needs at least one rubric row.`);
+
         for (const criterion of rubric_criteria) {
-          if (!criterion.criterion) return fail(`Question ${i + 1} has a criterion without a name.`);
-          if (!Number.isFinite(criterion.max_points) || criterion.max_points <= 0) {
-            return fail(`Question ${i + 1} has a criterion without a positive Max Points value.`);
+          if (!criterion.criterion) {
+            return fail(`Question ${i + 1} has a rubric row without a ${rubric_type === "holistic" ? "performance level" : "criterion"} name.`);
+          }
+          if (!Number.isFinite(criterion.max_points) || (rubric_type === "holistic" ? criterion.max_points < 0 : criterion.max_points <= 0)) {
+            return fail(
+              rubric_type === "holistic"
+                ? `Question ${i + 1} has a holistic level without a valid non-negative score.`
+                : `Question ${i + 1} has an analytic criterion without a positive Max Points value.`
+            );
           }
         }
-        points = rubric_criteria.reduce((sum, criterion) => sum + criterion.max_points, 0);
+
+        points = rubric_type === "holistic"
+          ? Math.max(...rubric_criteria.map(item => item.max_points))
+          : rubric_criteria.reduce((sum, criterion) => sum + criterion.max_points, 0);
       }
 
       if (!points || points <= 0) return fail(`Question ${i + 1} must have a positive point value.`);
@@ -1977,6 +2077,7 @@
         points,
         choices,
         correct_answer,
+        rubric_type,
         rubric_criteria
       });
     }
