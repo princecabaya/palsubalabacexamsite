@@ -855,3 +855,28 @@ textarea{resize:vertical}
 /* Essay rubric type selector */
 .rubric-type{max-width:360px}
 .essay-rubric-area>label:first-of-type{margin-top:10px}
+
+
+/* Analytic rubric matrix */
+.analytic-levels-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin:14px 0 8px}
+.analytic-levels-head h5{margin:0;font-size:.95rem}
+.analytic-levels-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.analytic-level-row{display:grid;grid-template-columns:minmax(140px,1fr) 90px auto;gap:7px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:10px;background:#fff;min-width:300px}
+.analytic-matrix-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:12px 0}
+.analytic-rubric-table{min-width:780px;width:100%;border-collapse:collapse}
+.analytic-rubric-table th,.analytic-rubric-table td{border:1px solid var(--line);padding:8px;vertical-align:top}
+.analytic-rubric-table th{background:#f8faff;text-align:center}
+.analytic-rubric-table th:first-child{text-align:left;min-width:170px}
+.analytic-rubric-table th strong{display:block}
+.analytic-level-score{display:block;color:var(--muted);font-size:.76rem;margin-top:3px;font-weight:500}
+.analytic-rubric-table textarea{min-width:170px;min-height:78px;resize:vertical}
+.analytic-rubric-table .analytic-criterion-name{min-width:150px}
+.student-rubric-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.student-rubric .rubric-level-points{display:block;color:var(--muted);font-size:.74rem;margin-top:2px}
+.student-rubric table{min-width:640px}
+@media(max-width:720px){
+  .analytic-levels-head{flex-direction:column}
+  .analytic-levels-head button{width:100%}
+  .analytic-level-row{grid-template-columns:1fr 90px;min-width:0;width:100%}
+  .analytic-level-row .remove-analytic-level-btn{grid-column:1/-1}
+}
