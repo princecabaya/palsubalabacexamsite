@@ -70,6 +70,8 @@
   function resultLabel(item) {
     if (item?.result === "correct") return "CORRECT";
     if (item?.result === "wrong") return "WRONG";
+    if (item?.result === "approved") return "TEACHER APPROVED";
+    if (item?.result === "pending_review") return "PROVISIONAL";
     return "NOT AUTO-SCORED";
   }
 
