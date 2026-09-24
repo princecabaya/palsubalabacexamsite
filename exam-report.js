@@ -561,8 +561,8 @@
           y += 5;
 
           if (holistic) {
-            q.rubric_criteria.forEach((level, index) => {
-              const rubricText = `${index + 1}. ${level.criterion || "Level"} — ${level.description || ""} (${fmtNumber(level.max_points || 0)} pts)`;
+            q.rubric_criteria.forEach((criterion, index) => {
+              const rubricText = `${index + 1}. ${criterion.criterion || "Criterion"} (${fmtNumber(criterion.max_points || 0)} pts) — ${criterion.description || ""} — Student Score: _____`;
               const lines = split(rubricText, 150);
               ensureSpace(lines.length * 4.4 + 2);
               doc.setFont("times", "normal");
