@@ -20,14 +20,114 @@
       code: button.dataset.examCode || "",
       title: button.dataset.examTitle || "Exam"
     };
-    await openExamResults(exam);
+
+    const row = examRows.querySelector(`tr[data-exam-takers-for="${CSS.escape(String(exam.id))}"]`);
+    if (!row) return;
+
+    const opening = row.classList.contains("hidden");
+    examRows.querySelectorAll(".exam-takers-row").forEach(other => {
+      if (other !== row) other.classList.add("hidden");
+    });
+
+    row.classList.toggle("hidden", !opening);
+    button.classList.toggle("expanded", opening);
+
+    if (opening) {
+      await loadInlineExamTakers(exam, row);
+    }
   });
 
   $("closeExamResultsBtn")?.addEventListener("click", () => {
     panel.classList.add("hidden");
+    const workspace = $("manageWorkspace");
+    workspace?.classList.remove("review-mode", "split-active");
+    if ($("examPreviewPanel")?.classList.contains("hidden")) {
+      $("manageRightPane")?.classList.add("hidden");
+    }
   });
 
-  async function openExamResults(exam) {
+  async function loadInlineExamTakers(exam, row) {
+    const container = row.querySelector(".exam-takers-dropdown");
+    if (!container) return;
+
+    container.innerHTML = '<p class="muted">Loading student takers…</p>';
+
+    const { data, error } = await db
+      .from("attempts")
+      .select(`
+        id,attempt_token,status,started_at,submitted_at,score,max_score,grading_status,provisional_score,provisional_max_score,
+        students(student_no,full_name)
+      `)
+      .eq("exam_id", exam.id)
+      .order("started_at", { ascending: true });
+
+    if (error) {
+      container.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
+      return;
+    }
+
+    const attempts = data || [];
+    if (!attempts.length) {
+      container.innerHTML = '<p class="muted">No student has taken this exam yet.</p>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="exam-takers-dropdown-head">
+        <strong>${attempts.length} student${attempts.length === 1 ? "" : "s"} took this exam</strong>
+        <button type="button" class="open-full-results-btn">Open Results Summary</button>
+      </div>
+      <div class="exam-taker-list"></div>
+    `;
+
+    container.querySelector(".open-full-results-btn")?.addEventListener("click", async () => {
+      await openExamResults(exam);
+    });
+
+    const list = container.querySelector(".exam-taker-list");
+    const proctorOnly = Boolean(window.ExamAdmin?.isProctorForExam?.(exam.id));
+
+    attempts.forEach(attempt => {
+      const approved = attempt.grading_status === "approved" || attempt.grading_status === "not_required";
+      const item = document.createElement("div");
+      item.className = "exam-taker-item";
+      item.innerHTML = `
+        <button type="button" class="exam-taker-name-btn">
+          <span>
+            <strong>${escapeHtml(attempt.students?.full_name || "Unknown Student")}</strong>
+            <small>${escapeHtml(attempt.students?.student_no || "")}</small>
+          </span>
+          <span class="exam-taker-state">${approved ? "Approved" : (attempt.status === "submitted" ? "Needs review" : escapeHtml(attempt.status))}</span>
+        </button>
+        <div class="exam-taker-quick-actions">
+          ${attempt.status === "submitted" && !proctorOnly ? '<button type="button" class="inline-review-btn">Review / Edit Scores</button>' : ""}
+          ${attempt.status === "submitted" ? '<button type="button" class="inline-pdf-btn">Result PDF</button>' : ""}
+        </div>
+      `;
+
+      item.querySelector(".exam-taker-name-btn")?.addEventListener("click", async () => {
+        const loaded = await openExamResults(exam, { noScroll: true });
+        const match = loaded.find(row => row.id === attempt.id) || attempt;
+        if (match.status === "submitted" && !proctorOnly) {
+          await openGradingReview(match, exam);
+        }
+      });
+
+      item.querySelector(".inline-review-btn")?.addEventListener("click", async () => {
+        const loaded = await openExamResults(exam, { noScroll: true });
+        const match = loaded.find(row => row.id === attempt.id) || attempt;
+        await openGradingReview(match, exam);
+      });
+
+      item.querySelector(".inline-pdf-btn")?.addEventListener("click", async event => {
+        await window.ExamReport?.generateTeacher(attempt.id, event.currentTarget);
+      });
+
+      list.appendChild(item);
+    });
+  }
+
+  async function openExamResults(exam, { noScroll = false } = {}) {
     panel.classList.remove("hidden");
     $("examResultsTitle").textContent = exam.title;
     $("examResultsMeta").textContent = `${exam.code} • Loading student results…`;
@@ -44,7 +144,7 @@
     if (error) {
       $("examResultsMeta").textContent = `${exam.code} • Could not load results`;
       $("examStudentRows").innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
-      return;
+      return [];
     }
 
     const rows = (data || []).map(a => {
@@ -114,7 +214,10 @@
     $("examResultsMeta").textContent = `${exam.code} • ${rows.length} student${rows.length === 1 ? "" : "s"} took this exam`;
 
     renderRows(rows, rankMap, exam);
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!noScroll && !$("manageWorkspace")?.classList.contains("split-active")) {
+      if (!workspace?.classList.contains("split-active")) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return rows;
   }
 
   function renderRows(rows, rankMap, exam) {
@@ -182,6 +285,12 @@
     if (!panel || !itemsNode) return;
 
     panel.classList.remove("hidden");
+    $("manageRightPane")?.classList.remove("hidden");
+    $("examPreviewPanel")?.classList.add("hidden");
+    $("examResultsPanel")?.classList.remove("hidden");
+    const workspace = $("manageWorkspace");
+    workspace?.classList.remove("preview-mode");
+    workspace?.classList.add("review-mode", "split-active");
     $("gradingReviewTitle").textContent = `Review — ${attempt.students?.full_name || "Student"}`;
     $("gradingReviewMeta").textContent = `${attempt.students?.student_no || ""} • ${exam.title || ""}`;
     itemsNode.innerHTML = '<p class="muted">Loading constructed responses…</p>';
@@ -594,6 +703,11 @@
   $("retryAiGradingBtn")?.addEventListener("click", retryAiGrading);
   $("closeGradingReviewBtn")?.addEventListener("click", () => {
     $("gradingReviewPanel")?.classList.add("hidden");
+    const workspace = $("manageWorkspace");
+    workspace?.classList.remove("review-mode", "split-active");
+    if ($("examPreviewPanel")?.classList.contains("hidden")) {
+      $("manageRightPane")?.classList.add("hidden");
+    }
   });
 
   async function deleteAttempt(attempt, exam) {
