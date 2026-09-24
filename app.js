@@ -72,6 +72,13 @@
     const checked = wrap.querySelector('input[type="radio"]:checked');
     if (checked) return checked.value;
 
+    const mathBoard = wrap.querySelector(".math-solver-board");
+    if (mathBoard) {
+      const solution = mathBoard.querySelector(".math-solution-input")?.value || "";
+      const finalAnswer = mathBoard.querySelector(".math-final-answer-input")?.value || "";
+      return `Solution:\n${solution}\nFinal Answer:\n${finalAnswer}`;
+    }
+
     const textarea = wrap.querySelector("textarea");
     if (textarea) return textarea.value;
 
@@ -483,6 +490,87 @@
       try { await document.documentElement.requestFullscreen(); } catch (_) {}
     }
   }
+
+  $("viewResultBtn")?.addEventListener("click", async () => {
+    const examCode = $("examCode").value.trim();
+    const studentNo = $("studentNo").value.trim();
+    const msg = $("loginMsg");
+
+    if (!examCode || !studentNo) {
+      msg.textContent = "Enter the Exam Code and Student ID to view the latest result.";
+      return;
+    }
+
+    const button = $("viewResultBtn");
+    button.disabled = true;
+    msg.textContent = "Loading latest submitted result…";
+
+    const { data, error } = await db.rpc("get_student_exam_result", {
+      p_exam_code: examCode,
+      p_student_no: studentNo
+    });
+
+    button.disabled = false;
+
+    if (error || !data) {
+      msg.textContent = error?.message || "No submitted result was found.";
+      return;
+    }
+
+    loginView.classList.add("hidden");
+    examView.classList.add("hidden");
+    doneView.classList.remove("hidden");
+    $("doneText").textContent = data.grading_status === "approved"
+      ? "Your latest teacher-approved score is shown below."
+      : "Your latest submitted result is shown below. Some constructed-response scores may still be awaiting teacher review.";
+    $("aiFeedbackPanel")?.classList.add("hidden");
+    window.ExamReport?.showStudentReport?.(data);
+  });
+
+  $("clearSiteDataBtn")?.addEventListener("click", async () => {
+    const ok = confirm(
+      "Delete this exam site's local browser data on this device? This clears local/session storage, site caches, accessible cookies, and saved browser-side exam state. It does not delete exam records stored in Supabase."
+    );
+    if (!ok) return;
+
+    try {
+      clearExamBrowserState();
+
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (_) {}
+
+      if (window.caches?.keys) {
+        const names = await caches.keys();
+        await Promise.all(names.map(name => caches.delete(name)));
+      }
+
+      if (navigator.serviceWorker?.getRegistrations) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(registration => registration.unregister()));
+      }
+
+      document.cookie.split(";").forEach(cookie => {
+        const eqPos = cookie.indexOf("=");
+        const name = (eqPos > -1 ? cookie.slice(0, eqPos) : cookie).trim();
+        if (!name) return;
+        document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+      });
+
+      if (indexedDB?.databases) {
+        const databases = await indexedDB.databases();
+        for (const database of databases) {
+          if (database?.name) indexedDB.deleteDatabase(database.name);
+        }
+      }
+
+      $("loginMsg").textContent = "Local site data was cleared. The page will reload.";
+      setTimeout(() => location.reload(), 700);
+    } catch (error) {
+      $("loginMsg").textContent = `Some local site data could not be cleared: ${error?.message || error}`;
+    }
+  });
 
   $("startBtn").addEventListener("click", async () => {
     const examCode = $("examCode").value.trim();
@@ -922,13 +1010,32 @@
     const container = document.createElement("div");
     container.className = "math-solver-board";
 
-    const textarea = document.createElement("textarea");
-    textarea.className = "math-solution-input";
-    textarea.rows = 4;
-    textarea.readOnly = true;
-    textarea.inputMode = "none";
-    textarea.placeholder = "Tap here, then use the mathematics keyboard below.";
-    textarea.value = saved ? String(saved.answer ?? "") : "";
+    const savedText = saved ? String(saved.answer ?? "") : "";
+    const parsedSaved = parseSavedMathResponse(savedText);
+
+    const solutionLabel = document.createElement("label");
+    solutionLabel.className = "math-answer-label";
+    solutionLabel.textContent = "Solution / working steps";
+
+    const solution = document.createElement("textarea");
+    solution.className = "math-solution-input";
+    solution.rows = 4;
+    solution.readOnly = true;
+    solution.inputMode = "none";
+    solution.placeholder = "Tap here, then use the mathematics keyboard below.";
+    solution.value = parsedSaved.solution;
+
+    const finalLabel = document.createElement("label");
+    finalLabel.className = "math-answer-label math-final-label";
+    finalLabel.textContent = "Final answer";
+
+    const finalAnswer = document.createElement("input");
+    finalAnswer.type = "text";
+    finalAnswer.className = "math-final-answer-input";
+    finalAnswer.readOnly = true;
+    finalAnswer.inputMode = "none";
+    finalAnswer.placeholder = "Tap here and enter only the final answer.";
+    finalAnswer.value = parsedSaved.finalAnswer;
 
     const preview = document.createElement("div");
     preview.className = "math-solution-preview";
@@ -945,44 +1052,38 @@
     const utilityBar = document.createElement("div");
     utilityBar.className = "math-keyboard-utility";
 
+    let activeInput = solution;
+
     const tabs = [
-      {
-        name: "123",
-        keys: [
-          "7","8","9","÷",
-          "4","5","6","×",
-          "1","2","3","−",
-          "0",".","=","+",
-          "(",")","<",">",
-          "≤","≥",","
-        ]
-      },
-      {
-        name: "ABC",
-        keys: [
-          "q","w","e","r","t","y","u","i","o","p",
-          "a","s","d","f","g","h","j","k","l",
-          "z","x","c","v","b","n","m"
-        ]
-      },
-      {
-        name: "αβγ",
-        keys: ["α","β","γ","δ","θ","λ","μ","ρ","σ","φ","ω","Δ","Σ","π"]
-      },
-      {
-        name: "ƒ()",
-        keys: ["x²","x^□","√□","frac","|□|","sin","cos","tan","log","ln","e","∞"]
-      }
+      { name:"123", keys:["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","] },
+      { name:"ABC", keys:["q","w","e","r","t","y","u","i","o","p","a","s","d","f","g","h","j","k","l","z","x","c","v","b","n","m"] },
+      { name:"αβγ", keys:["α","β","γ","δ","θ","λ","μ","ρ","σ","φ","ω","Δ","Σ","π"] },
+      { name:"ƒ()", keys:["x²","x^□","√□","frac","|□|","sin","cos","tan","log","ln","e","∞"] }
     ];
 
     const undoStack = [];
     const redoStack = [];
 
+    function combinedAnswer() {
+      return `Solution:\n${solution.value}\nFinal Answer:\n${finalAnswer.value}`;
+    }
+
+    function saveCombined() {
+      stateNode.textContent = "Saving…";
+      clearTimeout(container._saveTimer);
+      container._saveTimer = setTimeout(
+        () => saveAnswer(question.question_id, combinedAnswer(), stateNode),
+        500
+      );
+    }
+
     function snapshot() {
       undoStack.push({
-        value: textarea.value,
-        start: textarea.selectionStart ?? textarea.value.length,
-        end: textarea.selectionEnd ?? textarea.value.length
+        target: activeInput === finalAnswer ? "final" : "solution",
+        solution: solution.value,
+        finalAnswer: finalAnswer.value,
+        start: activeInput.selectionStart ?? activeInput.value.length,
+        end: activeInput.selectionEnd ?? activeInput.value.length
       });
       if (undoStack.length > 60) undoStack.shift();
       redoStack.length = 0;
@@ -990,9 +1091,11 @@
 
     function restore(entry) {
       if (!entry) return;
-      textarea.value = entry.value;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(entry.start, entry.end);
+      solution.value = entry.solution;
+      finalAnswer.value = entry.finalAnswer;
+      activeInput = entry.target === "final" ? finalAnswer : solution;
+      activeInput.focus({ preventScroll:true });
+      activeInput.setSelectionRange(entry.start, entry.end);
       afterEdit();
     }
 
@@ -1012,67 +1115,66 @@
     function afterEdit() {
       autosize();
       updatePreview();
-      stateNode.textContent = "Saving…";
-      clearTimeout(textarea._saveTimer);
-      textarea._saveTimer = setTimeout(
-        () => saveAnswer(question.question_id, textarea.value, stateNode),
-        500
-      );
+      saveCombined();
     }
 
     function insertToken(token) {
-      snapshot();
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? start;
-      const value = latexForKey(token);
+      if (token === "newline" && activeInput === finalAnswer) {
+        activeInput = solution;
+        solution.focus({ preventScroll:true });
+      }
 
-      textarea.value = textarea.value.slice(0, start) + value + textarea.value.slice(end);
+      snapshot();
+      const start = activeInput.selectionStart ?? activeInput.value.length;
+      const end = activeInput.selectionEnd ?? start;
+      const value = latexForKey(token);
+      activeInput.value = activeInput.value.slice(0,start) + value + activeInput.value.slice(end);
       const next = start + value.length;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(next, next);
+      activeInput.focus({ preventScroll:true });
+      activeInput.setSelectionRange(next,next);
       afterEdit();
     }
 
     function backspace() {
       snapshot();
-      let start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? start;
-
+      let start = activeInput.selectionStart ?? activeInput.value.length;
+      const end = activeInput.selectionEnd ?? start;
       if (start === end && start > 0) {
-        textarea.value = textarea.value.slice(0, start - 1) + textarea.value.slice(end);
+        activeInput.value = activeInput.value.slice(0,start-1) + activeInput.value.slice(end);
         start -= 1;
       } else {
-        textarea.value = textarea.value.slice(0, start) + textarea.value.slice(end);
+        activeInput.value = activeInput.value.slice(0,start) + activeInput.value.slice(end);
       }
-
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(start, start);
+      activeInput.focus({ preventScroll:true });
+      activeInput.setSelectionRange(start,start);
       afterEdit();
     }
 
-    function clearAll() {
-      if (!textarea.value) return;
+    function clearActive() {
+      if (!activeInput.value) return;
       snapshot();
-      textarea.value = "";
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(0, 0);
+      activeInput.value = "";
+      activeInput.focus({ preventScroll:true });
+      activeInput.setSelectionRange(0,0);
       afterEdit();
     }
 
     function moveCursor(delta) {
-      const pos = textarea.selectionStart ?? textarea.value.length;
-      const next = Math.max(0, Math.min(textarea.value.length, pos + delta));
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(next, next);
+      const pos = activeInput.selectionStart ?? activeInput.value.length;
+      const next = Math.max(0,Math.min(activeInput.value.length,pos+delta));
+      activeInput.focus({ preventScroll:true });
+      activeInput.setSelectionRange(next,next);
     }
 
     function undo() {
       const previous = undoStack.pop();
       if (!previous) return;
       redoStack.push({
-        value: textarea.value,
-        start: textarea.selectionStart ?? textarea.value.length,
-        end: textarea.selectionEnd ?? textarea.value.length
+        target: activeInput === finalAnswer ? "final" : "solution",
+        solution:solution.value,
+        finalAnswer:finalAnswer.value,
+        start:activeInput.selectionStart ?? activeInput.value.length,
+        end:activeInput.selectionEnd ?? activeInput.value.length
       });
       restore(previous);
     }
@@ -1081,97 +1183,131 @@
       const next = redoStack.pop();
       if (!next) return;
       undoStack.push({
-        value: textarea.value,
-        start: textarea.selectionStart ?? textarea.value.length,
-        end: textarea.selectionEnd ?? textarea.value.length
+        target: activeInput === finalAnswer ? "final" : "solution",
+        solution:solution.value,
+        finalAnswer:finalAnswer.value,
+        start:activeInput.selectionStart ?? activeInput.value.length,
+        end:activeInput.selectionEnd ?? activeInput.value.length
       });
       restore(next);
     }
 
-    function makeUtility(label, title, handler, extraClass = "") {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `math-utility-key ${extraClass}`.trim();
-      button.textContent = label;
-      button.title = title;
-      button.addEventListener("mousedown", event => event.preventDefault());
-      button.addEventListener("click", handler);
+    function closeKeyboard() {
+      keyboard.classList.add("hidden");
+      activeInput.blur();
+      updatePreview();
+      saveCombined();
+      stateNode.textContent = "Answer finalized and saved";
+    }
+
+    function makeUtility(label,title,handler,extraClass="") {
+      const button=document.createElement("button");
+      button.type="button";
+      button.className=`math-utility-key ${extraClass}`.trim();
+      button.textContent=label;
+      button.title=title;
+      button.addEventListener("mousedown",event=>event.preventDefault());
+      button.addEventListener("click",handler);
       utilityBar.appendChild(button);
     }
 
-    makeUtility("↶", "Undo", undo);
-    makeUtility("↷", "Redo", redo);
-    makeUtility("◀", "Move cursor left", () => moveCursor(-1));
-    makeUtility("▶", "Move cursor right", () => moveCursor(1));
-    makeUtility("↵ Enter", "Start a new equation line", () => insertToken("newline"), "enter-key");
-    makeUtility("⌫", "Backspace / delete previous character", backspace, "delete-key");
-    makeUtility("Clear", "Clear the whole solution", clearAll, "clear-key");
+    makeUtility("↶","Undo",undo);
+    makeUtility("↷","Redo",redo);
+    makeUtility("◀","Move cursor left",()=>moveCursor(-1));
+    makeUtility("▶","Move cursor right",()=>moveCursor(1));
+    makeUtility("↵ Enter","Start a new solution line",()=>insertToken("newline"),"enter-key");
+    makeUtility("⌫","Backspace",backspace,"delete-key");
+    makeUtility("Clear","Clear active box",clearActive,"clear-key");
+    makeUtility("ⓧ","Close keyboard and finalize answer",closeKeyboard,"close-key");
 
     function renderKeys(index) {
-      [...tabBar.children].forEach((button, i) => button.classList.toggle("active", i === index));
-      keyArea.innerHTML = "";
-
-      tabs[index].keys.forEach(key => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "math-key";
-        button.textContent = key === "newline" ? "↵" : key;
-        button.title = key === "newline" ? "New line" : key;
-        button.addEventListener("mousedown", event => event.preventDefault());
-        button.addEventListener("click", () => insertToken(key));
+      [...tabBar.children].forEach((button,i)=>button.classList.toggle("active",i===index));
+      keyArea.innerHTML="";
+      tabs[index].keys.forEach(key=>{
+        const button=document.createElement("button");
+        button.type="button";
+        button.className="math-key";
+        button.textContent=key;
+        button.addEventListener("mousedown",event=>event.preventDefault());
+        button.addEventListener("click",()=>insertToken(key));
         keyArea.appendChild(button);
       });
     }
 
-    tabs.forEach((tab, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = tab.name;
-      button.addEventListener("mousedown", event => event.preventDefault());
-      button.addEventListener("click", () => renderKeys(index));
+    tabs.forEach((tab,index)=>{
+      const button=document.createElement("button");
+      button.type="button";
+      button.textContent=tab.name;
+      button.addEventListener("mousedown",event=>event.preventDefault());
+      button.addEventListener("click",()=>renderKeys(index));
       tabBar.appendChild(button);
     });
 
     function autosize() {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.max(110, textarea.scrollHeight + 8)}px`;
+      solution.style.height="auto";
+      solution.style.height=`${Math.max(110,solution.scrollHeight+8)}px`;
+    }
+
+    function renderMathLines(value) {
+      const lines=String(value||"").split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+      if (!lines.length) return "";
+      return lines.length>1
+        ? `\\[\\begin{gathered}${lines.join(" \\\\ ")}\\end{gathered}\\]`
+        : `\\[${lines[0]}\\]`;
     }
 
     function updatePreview() {
-      const value = textarea.value.trim();
-      if (!value) {
-        preview.textContent = "Math preview";
-      } else {
-        const lines = value
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean);
+      const working = renderMathLines(solution.value);
+      const final = finalAnswer.value.trim();
 
-        preview.textContent = lines.length > 1
-          ? `\\[\\begin{gathered}${lines.join(" \\\\ ")}\\end{gathered}\\]`
-          : `\\[${lines[0] || ""}\\]`;
-      }
+      preview.innerHTML="";
+      const workingWrap=document.createElement("div");
+      workingWrap.className="math-preview-working";
+      workingWrap.textContent=working || "Solution preview";
+
+      const finalWrap=document.createElement("div");
+      finalWrap.className="math-preview-final";
+      const label=document.createElement("strong");
+      label.textContent="Final answer: ";
+      const math=document.createElement("span");
+      math.textContent=final ? `\\(${final}\\)` : "—";
+      finalWrap.append(label,math);
+      preview.append(workingWrap,finalWrap);
 
       if (window.MathJax?.typesetPromise) {
         window.MathJax.typesetClear?.([preview]);
-        window.MathJax.typesetPromise([preview]).catch(() => {});
+        window.MathJax.typesetPromise([preview]).catch(()=>{});
       }
     }
 
-    textarea.addEventListener("focus", () => keyboard.classList.remove("hidden"));
-    container.addEventListener("focusout", event => {
-      if (!container.contains(event.relatedTarget)) {
-        setTimeout(() => keyboard.classList.add("hidden"), 120);
-      }
+    [solution,finalAnswer].forEach(input=>{
+      input.addEventListener("focus",()=>{
+        activeInput=input;
+        keyboard.classList.remove("hidden");
+      });
     });
 
-    keyboard.append(tabBar, keyArea, utilityBar);
-    container.append(textarea, preview, keyboard);
+    keyboard.append(tabBar,keyArea,utilityBar);
+    container.append(solutionLabel,solution,finalLabel,finalAnswer,preview,keyboard);
     renderKeys(0);
     autosize();
     updatePreview();
 
-    return { container, textarea };
+    return { container, textarea:solution };
+  }
+
+  function parseSavedMathResponse(value) {
+    const text=String(value||"");
+    const match=text.match(/^Solution:\n([\s\S]*?)\nFinal Answer:\n([\s\S]*)$/);
+    if (match) {
+      return { solution:match[1] || "", finalAnswer:match[2] || "" };
+    }
+
+    const lines=text.split(/\r?\n/);
+    return {
+      solution:text,
+      finalAnswer:lines.length ? lines[lines.length-1].trim() : ""
+    };
   }
 
 
