@@ -2268,3 +2268,84 @@ revoke all on function public.admin_approve_constructed_scores(uuid,jsonb) from 
 grant execute on function public.admin_get_grading_review(uuid) to authenticated;
 grant execute on function public.admin_approve_constructed_scores(uuid,jsonb) to authenticated;
 
+
+-- Result reports include provisional/teacher-reviewed constructed-response scores.
+create or replace function public.exam_guard_build_attempt_report(p_attempt_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $report$
+  select jsonb_build_object(
+    'attempt_id', a.id,
+    'student_name', s.full_name,
+    'student_no', s.student_no,
+    'exam_title', e.title,
+    'exam_code', e.code,
+    'teacher_name', coalesce(nullif(ea.display_name,''), nullif(ea.email,''), 'Teacher'),
+    'grading_status', a.grading_status,
+    'started_at', a.started_at,
+    'submitted_at', a.submitted_at,
+    'score', case
+      when a.grading_status in ('pending_ai','pending_review') and a.provisional_score is not null
+        then a.provisional_score
+      else a.score
+    end,
+    'max_score', case
+      when a.grading_status in ('pending_ai','pending_review') and a.provisional_max_score is not null
+        then a.provisional_max_score
+      else a.max_score
+    end,
+    'percentage', case
+      when a.grading_status in ('pending_ai','pending_review')
+       and coalesce(a.provisional_max_score,0)>0
+        then round((a.provisional_score/a.provisional_max_score)*100,2)
+      when coalesce(a.max_score,0)>0
+        then round((a.score/a.max_score)*100,2)
+      else null
+    end,
+    'items', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'position', q.position,
+          'section_title', q.section_title,
+          'prompt', q.prompt,
+          'question_type', q.question_type,
+          'student_answer', coalesce(r.answer,''),
+          'correct_answer', q.correct_answer,
+          'points', q.points,
+          'provisional_reason', r.provisional_reason,
+          'points_awarded', case
+            when q.question_type in ('mcq','binary') then
+              case when q.correct_answer is not null
+                and lower(trim(coalesce(r.answer,'')))=lower(trim(q.correct_answer))
+                then q.points else 0 end
+            when a.grading_status='approved' then r.teacher_score
+            else r.provisional_score
+          end,
+          'result', case
+            when q.question_type in ('mcq','binary') then
+              case when q.correct_answer is not null
+                and lower(trim(coalesce(r.answer,'')))=lower(trim(q.correct_answer))
+                then 'correct' else 'wrong' end
+            when a.grading_status='approved' then 'approved'
+            else 'pending_review'
+          end
+        ) order by q.position
+      )
+      from public.questions q
+      left join public.responses r
+        on r.question_id=q.id and r.attempt_id=a.id
+      where q.exam_id=a.exam_id
+    ), '[]'::jsonb)
+  )
+  from public.attempts a
+  join public.students s on s.id=a.student_id
+  join public.exams e on e.id=a.exam_id
+  left join public.exam_admins ea on ea.user_id=e.owner_id
+  where a.id=p_attempt_id and a.status='submitted';
+$report$;
+
+revoke all on function public.exam_guard_build_attempt_report(uuid) from public;
+
