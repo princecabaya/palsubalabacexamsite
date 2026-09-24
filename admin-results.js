@@ -252,7 +252,7 @@
     if (questionIds.length) {
       const responseResult = await db
         .from("responses")
-        .select("question_id,answer,provisional_score,provisional_reason,teacher_score,teacher_comment,review_status")
+        .select("question_id,answer,provisional_score,provisional_reason,teacher_score,teacher_comment,teacher_rubric_scores,review_status")
         .eq("attempt_id", attempt.id)
         .in("question_id", questionIds);
 
@@ -279,6 +279,7 @@
         provisional_reason: response.provisional_reason || "",
         teacher_score: response.teacher_score ?? null,
         teacher_comment: response.teacher_comment || "",
+        teacher_rubric_scores: response.teacher_rubric_scores || null,
         review_status: response.review_status || "pending"
       };
     });
@@ -294,11 +295,20 @@
       const article = document.createElement("article");
       article.className = "grading-review-card";
       article.dataset.questionId = item.question_id;
+
       const provisional = item.provisional_score == null ? null : Number(item.provisional_score);
       const teacher = item.teacher_score == null ? null : Number(item.teacher_score);
       const startingScore = Number.isFinite(teacher)
         ? teacher
         : (Number.isFinite(provisional) ? provisional : "");
+
+      const isAnalyticMatrix = item.question_type === "essay" &&
+        item.rubric_type === "analytic" &&
+        Array.isArray(item.rubric_criteria) &&
+        item.rubric_criteria.length > 0 &&
+        item.rubric_criteria.every(criterion =>
+          Array.isArray(criterion?.levels) && criterion.levels.length >= 2
+        );
 
       article.innerHTML = `
         <div class="grading-review-head">
@@ -311,9 +321,10 @@
         <div class="grading-review-prompt">${escapeHtml(item.prompt || "")}</div>
         <div class="grading-student-answer"><strong>Student response</strong><pre>${escapeHtml(item.student_answer || "(No response)")}</pre></div>
         ${item.reference_answer ? `<p><strong>Reference:</strong> ${escapeHtml(item.reference_answer)}</p>` : ""}
+        ${isAnalyticMatrix ? '<div class="analytic-grading-mount"></div>' : ""}
         <div class="form-grid compact grading-inputs">
           <label>Teacher score
-            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}">
+            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}" ${isAnalyticMatrix ? "readonly" : ""}>
           </label>
           <label>Teacher comment
             <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
@@ -322,8 +333,143 @@
       `;
 
       itemsNode.appendChild(article);
+
+      if (isAnalyticMatrix) {
+        renderAnalyticGradingSelector(article, item);
+      }
     }
   }
+
+  function renderAnalyticGradingSelector(article, item) {
+    const mount = article.querySelector(".analytic-grading-mount");
+    const scoreInput = article.querySelector(".teacher-score-input");
+    if (!mount || !scoreInput) return;
+
+    const persisted = item.teacher_rubric_scores && typeof item.teacher_rubric_scores === "object"
+      ? item.teacher_rubric_scores
+      : {};
+
+    const selected = {};
+
+    mount.innerHTML = `
+      <div class="analytic-grading-header">
+        <div>
+          <strong>Analytic Rubric</strong>
+          <p class="muted">Select one performance level for every criterion.</p>
+        </div>
+        <div class="analytic-grading-total">
+          <span>Rubric score</span>
+          <strong class="analytic-running-score">0 / ${escapeHtml(item.points)}</strong>
+        </div>
+      </div>
+      <div class="analytic-grading-criteria"></div>
+    `;
+
+    const criteriaWrap = mount.querySelector(".analytic-grading-criteria");
+    const running = mount.querySelector(".analytic-running-score");
+
+    function recalculate() {
+      let total = 0;
+      let complete = true;
+
+      item.rubric_criteria.forEach((criterion, criterionIndex) => {
+        const choice = selected[String(criterionIndex)];
+        if (!choice) {
+          complete = false;
+          return;
+        }
+        total += Number(choice.points || 0);
+      });
+
+      scoreInput.value = complete ? String(total) : "";
+      article.dataset.rubricScores = JSON.stringify(selected);
+      running.textContent = `${formatNumber(total)} / ${formatNumber(item.points)}`;
+      mount.classList.toggle("rubric-incomplete", !complete);
+    }
+
+    item.rubric_criteria.forEach((criterion, criterionIndex) => {
+      const section = document.createElement("section");
+      section.className = "analytic-grade-criterion";
+
+      const criterionMax = Math.max(
+        ...criterion.levels.map(level => Number(level?.points || 0))
+      );
+
+      const heading = document.createElement("div");
+      heading.className = "analytic-grade-criterion-head";
+      heading.innerHTML = `
+        <div>
+          <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
+          <span class="muted">Maximum ${formatNumber(criterionMax)} pts</span>
+        </div>
+        <strong class="criterion-selected-score">— / ${formatNumber(criterionMax)}</strong>
+      `;
+      section.appendChild(heading);
+
+      const levels = document.createElement("div");
+      levels.className = "analytic-grade-levels";
+
+      criterion.levels.forEach((level, levelIndex) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "analytic-level-choice";
+        button.dataset.criterionIndex = String(criterionIndex);
+        button.dataset.levelIndex = String(levelIndex);
+        button.innerHTML = `
+          <div class="analytic-level-choice-head">
+            <strong>${escapeHtml(level?.level || `Level ${levelIndex + 1}`)}</strong>
+            <span>${formatNumber(level?.points)} pts</span>
+          </div>
+          <p>${escapeHtml(level?.description || "No descriptor provided.")}</p>
+        `;
+
+        button.addEventListener("click", () => {
+          selected[String(criterionIndex)] = {
+            level: String(level?.level || ""),
+            points: Number(level?.points || 0),
+            description: String(level?.description || "")
+          };
+
+          levels.querySelectorAll(".analytic-level-choice").forEach(node => {
+            node.classList.toggle("selected", node === button);
+          });
+
+          heading.querySelector(".criterion-selected-score").textContent =
+            `${formatNumber(level?.points)} / ${formatNumber(criterionMax)}`;
+
+          recalculate();
+        });
+
+        levels.appendChild(button);
+      });
+
+      section.appendChild(levels);
+      criteriaWrap.appendChild(section);
+
+      const savedChoice = persisted[String(criterionIndex)] || persisted[criterion.criterion];
+      if (savedChoice) {
+        const wantedLevel = String(savedChoice.level || "").trim().toLowerCase();
+        const wantedPoints = Number(savedChoice.points);
+        const matching = [...levels.querySelectorAll(".analytic-level-choice")].find((button, levelIndex) => {
+          const level = criterion.levels[levelIndex];
+          return (
+            (wantedLevel && String(level?.level || "").trim().toLowerCase() === wantedLevel) ||
+            (Number.isFinite(wantedPoints) && Number(level?.points) === wantedPoints)
+          );
+        });
+        matching?.click();
+      }
+    });
+
+    recalculate();
+  }
+
+  function formatNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "0";
+    return number.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+
 
   async function retryAiGrading() {
     if (!activeGradingAttempt?.attempt_token) {
@@ -397,10 +543,26 @@
         return;
       }
 
+      let rubric_scores = null;
+      if (card.querySelector(".analytic-grading-mount")) {
+        try {
+          rubric_scores = JSON.parse(card.dataset.rubricScores || "{}");
+        } catch (_) {
+          rubric_scores = {};
+        }
+
+        const criteriaCount = card.querySelectorAll(".analytic-grade-criterion").length;
+        if (Object.keys(rubric_scores).length !== criteriaCount) {
+          $("gradingReviewMsg").textContent = "Select one performance level for every analytic rubric criterion before approval.";
+          return;
+        }
+      }
+
       scores.push({
         question_id: card.dataset.questionId,
         score,
-        comment
+        comment,
+        rubric_scores
       });
     }
 
