@@ -2331,7 +2331,14 @@
 
     if (examError) {
       $("saveExamBtn").disabled = false;
-      setCreateMessage(`Exam save failed: ${examError.message}`, true);
+      const rawMessage = String(examError.message || "");
+      const isOwnershipRls = /row-level security|violates.*policy.*exams/i.test(rawMessage);
+      setCreateMessage(
+        isOwnershipRls
+          ? "Exam save was blocked by the database ownership policy. Run supabase-upgrade-exam-owner-rls-fix.sql once in Supabase SQL Editor, refresh this dashboard, then save again. Main Admin may create exams in an authorized co-teacher workspace; regular teachers may create only in their own workspace."
+          : `Exam save failed: ${rawMessage}`,
+        true
+      );
       return;
     }
 
