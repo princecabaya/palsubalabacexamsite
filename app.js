@@ -751,17 +751,18 @@
           const table = document.createElement("table");
 
           if (holistic) {
-            table.innerHTML = "<thead><tr><th>Performance Level</th><th>Description</th><th>Score</th></tr></thead>";
+            table.innerHTML = "<thead><tr><th>Criteria (Max Score)</th><th>Description</th><th>Student Score</th></tr></thead>";
             const tbody = document.createElement("tbody");
             q.rubric_criteria.forEach(item => {
               const tr = document.createElement("tr");
-              const level = document.createElement("td");
-              level.textContent = String(item?.criterion || "");
+              const criterion = document.createElement("td");
+              const maxScore = Number(item?.max_points ?? 0);
+              criterion.textContent = `${String(item?.criterion || "")} (${maxScore} point${maxScore === 1 ? "" : "s"})`;
               const description = document.createElement("td");
               description.textContent = String(item?.description || "");
               const score = document.createElement("td");
-              score.textContent = String(item?.max_points ?? "");
-              tr.append(level, description, score);
+              score.textContent = "—";
+              tr.append(criterion, description, score);
               tbody.appendChild(tr);
             });
             table.appendChild(tbody);
