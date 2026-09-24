@@ -11,6 +11,10 @@ alter table public.questions
   add constraint questions_question_type_check
   check (question_type in ('mcq','binary','text','essay','short_response','math_solver'));
 
+-- Persist teacher selections for analytic rubric grading.
+alter table public.responses
+  add column if not exists teacher_rubric_scores jsonb;
+
 alter table public.responses
   add column if not exists provisional_score numeric(10,2),
   add column if not exists provisional_reason text,
@@ -613,9 +617,5 @@ $result$;
 
 revoke all on function public.get_student_exam_result(text,text) from public;
 grant execute on function public.get_student_exam_result(text,text) to anon, authenticated;
-
--- Persist teacher selections for analytic rubric grading.
-alter table public.responses
-  add column if not exists teacher_rubric_scores jsonb;
 
 
