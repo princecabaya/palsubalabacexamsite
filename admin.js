@@ -2670,6 +2670,18 @@
       });
 
       body.appendChild(tr);
+
+      const takerRow = document.createElement("tr");
+      takerRow.className = "exam-takers-row hidden";
+      takerRow.dataset.examTakersFor = exam.id;
+      takerRow.innerHTML = `
+        <td colspan="8">
+          <div class="exam-takers-dropdown" id="examTakers-${escapeAttr(exam.id)}">
+            <p class="muted">Click the exam title to load student takers.</p>
+          </div>
+        </td>
+      `;
+      body.appendChild(takerRow);
     }
   }
 
@@ -2684,6 +2696,13 @@
     $("examPreviewExamCode").textContent = exam.code ? `Exam Code: ${exam.code}` : "";
     $("examPreviewDuration").textContent = `${exam.duration_minutes || 0} min`;
     questionsNode.innerHTML = '<p class="muted">Loading exam preview…</p>';
+
+    const workspace = $("manageWorkspace");
+    $("manageRightPane")?.classList.remove("hidden");
+    $("gradingReviewPanel")?.classList.add("hidden");
+    $("examResultsPanel")?.classList.add("hidden");
+    workspace?.classList.remove("review-mode");
+    workspace?.classList.add("preview-mode", "split-active");
     panel.classList.remove("hidden");
 
     const { data: questions, error } = await db
@@ -2694,12 +2713,10 @@
 
     if (error) {
       questionsNode.innerHTML = `<p class="message-inline error">${escapeHtml(error.message)}</p>`;
-      panel.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
     renderExamPreviewQuestions(questionsNode, questions || []);
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderExamPreviewQuestions(container, questions) {
@@ -2980,6 +2997,11 @@
 
   $("closeExamPreviewBtn")?.addEventListener("click", () => {
     $("examPreviewPanel")?.classList.add("hidden");
+    const workspace = $("manageWorkspace");
+    workspace?.classList.remove("preview-mode", "split-active");
+    if ($("gradingReviewPanel")?.classList.contains("hidden")) {
+      $("manageRightPane")?.classList.add("hidden");
+    }
   });
 
   async function updateExamStatus(examId, status) {
