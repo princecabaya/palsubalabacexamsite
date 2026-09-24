@@ -311,11 +311,6 @@
         <div class="grading-review-prompt">${escapeHtml(item.prompt || "")}</div>
         <div class="grading-student-answer"><strong>Student response</strong><pre>${escapeHtml(item.student_answer || "(No response)")}</pre></div>
         ${item.reference_answer ? `<p><strong>Reference:</strong> ${escapeHtml(item.reference_answer)}</p>` : ""}
-        <div class="provisional-grade">
-          <strong>Provisional AI score:</strong>
-          <span>${item.provisional_score == null ? "Not available" : `${escapeHtml(item.provisional_score)} / ${escapeHtml(item.points)}`}</span>
-          <p class="muted">${escapeHtml(item.provisional_reason || "No AI score is available. Teacher scoring is still fully available.")}</p>
-        </div>
         <div class="form-grid compact grading-inputs">
           <label>Teacher score
             <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}">
