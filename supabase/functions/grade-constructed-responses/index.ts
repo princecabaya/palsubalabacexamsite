@@ -32,9 +32,10 @@ Deno.serve(async (req) => {
     const serviceKey = getSupabaseAdminKey();
     const geminiKey = String(Deno.env.get("GEMINI_API_KEY") || "").trim();
     const geminiModel = String(Deno.env.get("GEMINI_MODEL") || "gemini-3.6-flash").trim();
+    const openaiKey = String(Deno.env.get("OPENAI_API_KEY") || "").trim();
+    const openaiModel = String(Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini").trim();
 
     if (!supabaseUrl || !serviceKey) return json({ error: "Supabase server configuration is incomplete." }, 500);
-    if (!geminiKey) return json({ error: "GEMINI_API_KEY is missing.", code: "missing_gemini_api_key" }, 503);
 
     const admin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -109,6 +110,8 @@ Deno.serve(async (req) => {
     }
 
     let generated: Array<{question_id:string;score:number;reason:string}> = [];
+    let aiProvider: "gemini" | "openai" | null = null;
+    const aiErrors: string[] = [];
 
     if (aiItems.length) {
       const gradingPrompt = [
@@ -124,6 +127,7 @@ Deno.serve(async (req) => {
         "",
         "MATH SOLVER:",
         "- Consider the final answer and the mathematical work shown.",
+        "- Treat line breaks as separate steps in the student's solution.",
         "- Equivalent algebraic forms are acceptable.",
         "- Award partial credit when reasoning is substantially correct but contains a limited error.",
         "- Do not assume an omitted step is correct if it changes the validity of the solution.",
@@ -141,77 +145,152 @@ Deno.serve(async (req) => {
         JSON.stringify(aiItems)
       ].join("\n");
 
-      const responseFormat = {
-        type: "text",
-        mime_type: "application/json",
-        schema: {
-          type: "object",
-          properties: {
-            grades: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  question_id: { type: "string" },
-                  score: { type: "number" },
-                  reason: { type: "string" }
-                },
-                required: ["question_id","score","reason"]
-              }
+      const schema = {
+        type: "object",
+        properties: {
+          grades: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                question_id: { type: "string" },
+                score: { type: "number" },
+                reason: { type: "string" }
+              },
+              required: ["question_id","score","reason"],
+              additionalProperties: false
             }
-          },
-          required: ["grades"]
-        }
+          }
+        },
+        required: ["grades"],
+        additionalProperties: false
       };
 
-      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiKey,
-        },
-        body: JSON.stringify({
-          model: geminiModel,
-          store: false,
-          system_instruction: "Provide provisional educational scoring only. A human teacher makes the final grading decision.",
-          input: gradingPrompt,
-          response_format: responseFormat,
-        }),
-      });
-
-      if (!geminiResponse.ok) {
-        const detail = await geminiResponse.text();
-        console.error("Gemini grading error", geminiResponse.status, detail);
-        return json({
-          error: "AI provisional grading is temporarily unavailable.",
-          code: "gemini_grading_error",
-          detail: safeGeminiError(detail)
-        }, 502);
-      }
-
-      const interaction = await geminiResponse.json();
-      const outputText = extractInteractionText(interaction);
-      const parsed = JSON.parse(outputText || "{}");
       const allowed = new Map(aiItems.map(item => [item.question_id, Number(item.max_points || 0)]));
 
-      generated = (parsed.grades || []).map((item:any) => {
-        const max = allowed.get(String(item.question_id));
-        if (max === undefined) return null;
-        const raw = Number(item.score);
-        const score = Math.max(0, Math.min(max, Number.isFinite(raw) ? raw : 0));
-        return {
-          question_id: String(item.question_id),
-          score: Number(score.toFixed(2)),
-          reason: String(item.reason || "AI provisional score.").slice(0, 4000)
-        };
-      }).filter(Boolean);
+      function normalizeGrades(parsed:any, provider:string) {
+        return (parsed?.grades || []).map((item:any) => {
+          const max = allowed.get(String(item.question_id));
+          if (max === undefined) return null;
+          const raw = Number(item.score);
+          const score = Math.max(0, Math.min(max, Number.isFinite(raw) ? raw : 0));
+          return {
+            question_id: String(item.question_id),
+            score: Number(score.toFixed(2)),
+            reason: `[${provider}] ${String(item.reason || "AI provisional score.").slice(0, 3970)}`
+          };
+        }).filter(Boolean);
+      }
+
+      // Primary provider: Gemini.
+      if (geminiKey) {
+        try {
+          const responseFormat = {
+            type: "text",
+            mime_type: "application/json",
+            schema
+          };
+
+          const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": geminiKey,
+            },
+            body: JSON.stringify({
+              model: geminiModel,
+              store: false,
+              system_instruction: "Provide provisional educational scoring only. A human teacher makes the final grading decision.",
+              input: gradingPrompt,
+              response_format: responseFormat,
+            }),
+          });
+
+          if (!geminiResponse.ok) {
+            const detail = await geminiResponse.text();
+            throw new Error(`Gemini HTTP ${geminiResponse.status}: ${safeGeminiError(detail)}`);
+          }
+
+          const interaction = await geminiResponse.json();
+          const outputText = extractInteractionText(interaction);
+          const parsed = JSON.parse(outputText || "{}");
+          generated = normalizeGrades(parsed, "Gemini");
+
+          if (generated.length) aiProvider = "gemini";
+          else throw new Error("Gemini returned no usable grades.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error("Gemini provisional grading failed:", message);
+          aiErrors.push(message);
+          generated = [];
+        }
+      } else {
+        aiErrors.push("Gemini is not configured: GEMINI_API_KEY is missing.");
+      }
+
+      // Fallback provider: OpenAI.
+      if (!generated.length && openaiKey) {
+        try {
+          const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${openaiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: openaiModel,
+              input: [
+                {
+                  role: "system",
+                  content: [{
+                    type: "input_text",
+                    text: "Provide provisional educational scoring only. A human teacher makes the final grading decision."
+                  }]
+                },
+                {
+                  role: "user",
+                  content: [{ type: "input_text", text: gradingPrompt }]
+                }
+              ],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "provisional_exam_grades",
+                  strict: true,
+                  schema
+                }
+              }
+            })
+          });
+
+          if (!openaiResponse.ok) {
+            const detail = await openaiResponse.text();
+            throw new Error(`OpenAI HTTP ${openaiResponse.status}: ${safeOpenAIError(detail)}`);
+          }
+
+          const openaiResult = await openaiResponse.json();
+          const outputText = extractOpenAIText(openaiResult);
+          const parsed = JSON.parse(outputText || "{}");
+          generated = normalizeGrades(parsed, "OpenAI");
+
+          if (generated.length) aiProvider = "openai";
+          else throw new Error("OpenAI returned no usable grades.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error("OpenAI provisional grading failed:", message);
+          aiErrors.push(message);
+          generated = [];
+        }
+      } else if (!generated.length && !openaiKey) {
+        aiErrors.push("OpenAI is not configured: OPENAI_API_KEY is missing.");
+      }
     }
 
     const allGrades = [...deterministic, ...generated];
     const gradeMap = new Map(allGrades.map(g => [g.question_id, g]));
 
     for (const q of questions as ConstructedQuestion[]) {
-      const grade = gradeMap.get(q.id) || { question_id: q.id, score: 0, reason: "No provisional score was returned; teacher review required." };
+      const grade = gradeMap.get(q.id) || null;
 
       const { error: updateError } = await admin
         .from("responses")
@@ -219,8 +298,10 @@ Deno.serve(async (req) => {
           attempt_id: attempt.id,
           question_id: q.id,
           answer: responseMap.get(q.id) || "",
-          provisional_score: grade.score,
-          provisional_reason: grade.reason,
+          provisional_score: grade?.score ?? null,
+          provisional_reason: grade?.reason || (aiErrors.length
+            ? `AI unavailable. ${aiErrors.join(" | ").slice(0, 3800)} Teacher manual scoring required.`
+            : "No provisional score was returned; teacher review required."),
           review_status: "pending",
           saved_at: new Date().toISOString()
         }, { onConflict: "attempt_id,question_id" });
@@ -228,6 +309,8 @@ Deno.serve(async (req) => {
       if (updateError) throw updateError;
     }
 
+    const unresolvedCount = (questions as ConstructedQuestion[])
+      .filter(q => !gradeMap.has(q.id)).length;
     const provisionalConstructed = (questions as ConstructedQuestion[])
       .reduce((sum, q) => sum + Number(gradeMap.get(q.id)?.score || 0), 0);
     const constructedMax = (questions as ConstructedQuestion[])
@@ -235,7 +318,7 @@ Deno.serve(async (req) => {
     const autoScore = Number(attempt.score || 0);
     const autoMax = Number(attempt.max_score || 0);
 
-    const provisionalScore = autoScore + provisionalConstructed;
+    const provisionalScore = unresolvedCount ? null : autoScore + provisionalConstructed;
     const provisionalMax = autoMax + constructedMax;
 
     const { error: attemptUpdateError } = await admin
@@ -254,7 +337,11 @@ Deno.serve(async (req) => {
       provisional_score: provisionalScore,
       provisional_max_score: provisionalMax,
       grading_status: "pending_review",
-      message: "Provisional constructed-response scoring is ready for teacher review."
+      ai_provider: aiProvider,
+      ai_errors: aiErrors,
+      message: aiProvider
+        ? `Provisional constructed-response scoring is ready for teacher review (${aiProvider === "openai" ? "OpenAI fallback" : "Gemini"}).`
+        : "AI provisional scoring was unavailable. Teacher manual scoring is required."
     });
   } catch (error) {
     console.error("grade-constructed-responses error", error);
@@ -283,6 +370,32 @@ function extractInteractionText(interaction:any): string {
   }
   if (!chunks.length && typeof interaction?.output_text === "string") chunks.push(interaction.output_text);
   return chunks.join("\n").trim();
+}
+
+function extractOpenAIText(response:any): string {
+  if (typeof response?.output_text === "string" && response.output_text.trim()) {
+    return response.output_text.trim();
+  }
+
+  const chunks:string[] = [];
+  for (const item of response?.output || []) {
+    if (item?.type !== "message") continue;
+    for (const content of item?.content || []) {
+      if (content?.type === "output_text" && typeof content?.text === "string") {
+        chunks.push(content.text);
+      }
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+function safeOpenAIError(detail:string): string {
+  try {
+    const parsed = JSON.parse(detail);
+    return String(parsed?.error?.message || parsed?.message || "OpenAI API error").slice(0,500);
+  } catch {
+    return String(detail || "OpenAI API error").replace(/[\r\n]+/g," ").slice(0,500);
+  }
 }
 
 function getSupabaseAdminKey(): string {
