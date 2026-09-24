@@ -2162,6 +2162,7 @@ as $review$
           'provisional_reason', r.provisional_reason,
           'teacher_score', r.teacher_score,
           'teacher_comment', r.teacher_comment,
+          'teacher_rubric_scores', r.teacher_rubric_scores,
           'review_status', r.review_status
         ) order by q.position
       )
@@ -2419,7 +2420,7 @@ begin
 
     insert into public.responses(
       attempt_id, question_id, answer,
-      teacher_score, teacher_comment, review_status,
+      teacher_score, teacher_comment, teacher_rubric_scores, review_status,
       reviewed_at, reviewed_by, saved_at
     )
     values(
@@ -2431,6 +2432,10 @@ begin
       ), ''),
       v_score,
       v_comment,
+      case
+        when v_item ? 'rubric_scores' then v_item->'rubric_scores'
+        else null
+      end,
       'approved',
       now(),
       auth.uid(),
@@ -2440,6 +2445,7 @@ begin
     do update set
       teacher_score=excluded.teacher_score,
       teacher_comment=excluded.teacher_comment,
+      teacher_rubric_scores=excluded.teacher_rubric_scores,
       review_status='approved',
       reviewed_at=excluded.reviewed_at,
       reviewed_by=excluded.reviewed_by;
@@ -2516,6 +2522,7 @@ as $review$
           'provisional_reason', r.provisional_reason,
           'teacher_score', r.teacher_score,
           'teacher_comment', r.teacher_comment,
+          'teacher_rubric_scores', r.teacher_rubric_scores,
           'review_status', r.review_status
         ) order by q.position
       )
@@ -2578,4 +2585,9 @@ $result$;
 
 revoke all on function public.get_student_exam_result(text,text) from public;
 grant execute on function public.get_student_exam_result(text,text) to anon, authenticated;
+
+-- Persist teacher selections for analytic rubric grading.
+alter table public.responses
+  add column if not exists teacher_rubric_scores jsonb;
+
 
