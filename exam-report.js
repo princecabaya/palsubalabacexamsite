@@ -452,7 +452,7 @@
 
     const { data: questions, error: questionError } = await db
       .from("questions")
-      .select("position,prompt,question_type,choices,points,rubric_criteria")
+      .select("position,prompt,question_type,choices,points,rubric_type,rubric_criteria")
       .eq("exam_id", examId)
       .order("position", { ascending: true });
 
