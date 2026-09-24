@@ -231,7 +231,7 @@
     const hasAi = items.some(item => item.provisional_score !== null && item.provisional_score !== undefined);
     $("gradingAiStatus").textContent = hasAi
       ? "Provisional AI scores are available. Review and edit them before approval."
-      : "No provisional AI scores are available. You can score manually or click Retry AI Provisional Scoring.";
+      : "No provisional AI scores are available. You can score manually or click Try AI Provisional Scoring.";
 
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -339,11 +339,11 @@
     const button = $("retryAiGradingBtn");
     button.disabled = true;
     button.textContent = "Generating…";
-    $("gradingAiStatus").textContent = "Requesting provisional scores from Gemini…";
+    $("gradingAiStatus").textContent = "Trying Gemini first, then OpenAI if needed…";
 
     try {
       const { data, error } = await db.functions.invoke("grade-constructed-responses", {
-        body: { attempt_token: activeGradingAttempt.attempt_token }
+        body: { attempt_token: activeGradingAttempt.attempt_token, use_ai: true }
       });
 
       if (error) throw error;
@@ -358,7 +358,7 @@
         `AI provisional scoring failed${statusCode ? ` (HTTP ${statusCode})` : ""}: ${detail || error?.message || "Unknown error"}. You can still score every item manually.`;
     } finally {
       button.disabled = false;
-      button.textContent = "Retry AI Provisional Scoring";
+      button.textContent = "Try AI Provisional Scoring";
     }
   }
 
