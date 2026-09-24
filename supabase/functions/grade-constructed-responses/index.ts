@@ -10,7 +10,7 @@ type ConstructedQuestion = {
   position: number;
   section_title: string | null;
   prompt: string;
-  question_type: "essay" | "short_response" | "math_solver";
+  question_type: "essay" | "text" | "short_response" | "math_solver";
   correct_answer: string | null;
   points: number;
   rubric_type: string | null;
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       .from("questions")
       .select("id,position,section_title,prompt,question_type,correct_answer,points,rubric_type,rubric_criteria")
       .eq("exam_id", attempt.exam_id)
-      .in("question_type", ["essay","short_response","math_solver"])
+      .in("question_type", ["essay","text","short_response","math_solver"])
       .order("position", { ascending: true });
 
     if (questionError) throw questionError;
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         question_id: q.id,
         position: q.position,
         section: q.section_title || "",
-        type: q.question_type,
+        type: q.question_type === "text" ? "essay" : q.question_type,
         prompt: q.prompt,
         student_answer: answer,
         reference_answer: q.correct_answer || null,
