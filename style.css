@@ -880,3 +880,56 @@ textarea{resize:vertical}
   .analytic-level-row{grid-template-columns:1fr 90px;min-width:0;width:100%}
   .analytic-level-row .remove-analytic-level-btn{grid-column:1/-1}
 }
+
+
+/* Constructed responses and math solver */
+.short-response-area,.math-solver-area{
+  margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fbfdff
+}
+.short-response-input{width:100%}
+.student-exam-section-heading{
+  margin:24px 0 12px;padding:12px 16px;border-left:5px solid var(--primary);
+  background:#eef4ff;border-radius:10px;font-size:1.08rem;font-weight:800
+}
+.exam-part-divider{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px;margin:20px 0 10px;border:2px dashed #aebde0;border-radius:12px;background:#f5f8ff
+}
+.exam-part-divider>div{display:grid;gap:5px;flex:1}
+.exam-part-title{font-weight:800;font-size:1rem}
+
+.math-solver-board{margin-top:10px;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.math-solution-input{
+  width:100%;min-height:110px;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:1rem;line-height:1.5;background:#fff
+}
+.math-solution-preview{min-height:54px;padding:12px 14px;background:#fafcff;border-bottom:1px solid var(--line);overflow-x:auto}
+.math-virtual-keyboard{padding:10px;background:#dfe3e8}
+.math-keyboard-tabs{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto}
+.math-keyboard-tabs button{min-width:58px;background:transparent;border:0;border-bottom:3px solid transparent;border-radius:0;font-weight:800}
+.math-keyboard-tabs button.active{color:var(--primary);border-bottom-color:var(--primary)}
+.math-keyboard-keys{display:grid;grid-template-columns:repeat(8,minmax(42px,1fr));gap:7px}
+.math-key{
+  min-height:48px;padding:7px;border:1px solid #c6ccd5;border-radius:9px;background:#fff;
+  font-size:1.05rem;font-weight:700;box-shadow:0 2px 0 rgba(15,23,42,.1)
+}
+.math-key:active{transform:translateY(1px);box-shadow:none}
+
+.grading-review-panel{margin-top:18px;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.review-warning{padding:10px 12px;border-radius:10px;background:#fff7ed;color:#9a3412}
+.grading-review-items{display:grid;gap:14px;margin-top:14px}
+.grading-review-card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fbfdff}
+.grading-review-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.grading-review-head>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grading-review-prompt{font-weight:750;margin:10px 0}
+.grading-student-answer pre{white-space:pre-wrap;word-break:break-word;background:#fff;padding:10px;border:1px solid var(--line);border-radius:8px}
+.provisional-grade{margin:10px 0;padding:10px;border-radius:10px;background:#f3f6ff}
+.grading-inputs{margin-top:10px}
+
+@media(max-width:720px){
+  .exam-part-divider{align-items:stretch;flex-direction:column}
+  .exam-part-divider button{width:100%}
+  .math-keyboard-keys{grid-template-columns:repeat(4,minmax(48px,1fr))}
+  .math-key{min-height:50px}
+  .grading-review-head{align-items:flex-start;flex-direction:column}
+}
