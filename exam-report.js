@@ -454,7 +454,7 @@
 
     const { data: questions, error: questionError } = await db
       .from("questions")
-      .select("position,prompt,question_type,choices,points,rubric_type,rubric_criteria")
+      .select("position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria")
       .eq("exam_id", examId)
       .order("position", { ascending: true });
 
@@ -523,7 +523,20 @@
 
     const split = (text, width) => doc.splitTextToSize(String(text || ""), width);
 
+    let currentSectionTitle = null;
+
     for (const q of exam.questions || []) {
+      const sectionTitle = String(q.section_title || "Part 1").trim() || "Part 1";
+      if (sectionTitle !== currentSectionTitle) {
+        ensureSpace(12);
+        doc.setFont("times", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(25);
+        doc.text(sectionTitle, left, y);
+        y += 7;
+        currentSectionTitle = sectionTitle;
+      }
+
       const qNo = Number(q.position) || "";
       const pointText = Number(q.points) === 1 ? "1 point" : `${fmtNumber(q.points)} points`;
       const promptLines = split(`${qNo}. ${q.prompt || ""}`, 157);
