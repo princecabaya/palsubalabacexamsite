@@ -1581,3 +1581,128 @@ textarea{resize:vertical}
   background:#eef4ff;
   box-shadow:0 0 0 2px rgba(37,99,235,.08);
 }
+
+
+/* Complete results inside exam dropdown */
+.inline-results-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:10px;
+}
+.inline-results-head p{
+  margin:.2rem 0 0;
+}
+.inline-result-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(120px,1fr));
+  gap:10px;
+  margin:10px 0 12px;
+}
+.inline-result-summary .metric-card{
+  min-height:82px;
+  padding:11px 13px;
+}
+.inline-result-summary .metric-card span{
+  font-size:.74rem;
+}
+.inline-result-summary .metric-card strong{
+  margin-top:5px;
+  font-size:1.08rem;
+}
+.inline-results-table-wrap{
+  max-height:520px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:10px;
+}
+.inline-results-table{
+  width:100%;
+  min-width:940px;
+}
+.inline-results-table thead{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#f8fafc;
+}
+.inline-results-table th,
+.inline-results-table td{
+  padding:9px 10px;
+  vertical-align:top;
+}
+.inline-results-table .action-cell{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.inline-results-table .action-cell button{
+  padding:7px 9px;
+  white-space:nowrap;
+}
+.exam-takers-dropdown .result-note{
+  margin:.7rem 0 0;
+}
+
+@media(max-width:900px){
+  .inline-result-summary{
+    grid-template-columns:repeat(2,minmax(120px,1fr));
+  }
+}
+
+@media(max-width:640px){
+  .inline-result-summary{
+    grid-template-columns:1fr 1fr;
+  }
+  .inline-results-table-wrap{
+    max-height:none;
+    overflow:visible;
+    border:0;
+  }
+  .inline-results-table{
+    min-width:0;
+    display:block;
+  }
+  .inline-results-table thead{
+    display:none;
+  }
+  .inline-results-table tbody{
+    display:grid;
+    gap:9px;
+  }
+  .inline-results-table tr{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px 10px;
+    padding:11px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#fff;
+  }
+  .inline-results-table td{
+    display:grid;
+    gap:2px;
+    padding:0;
+    border:0;
+  }
+  .inline-results-table td::before{
+    content:attr(data-label);
+    font-size:.68rem;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .inline-results-table td[data-label="Student"],
+  .inline-results-table td[data-label="Actions"]{
+    grid-column:1/-1;
+  }
+  .inline-results-table .action-cell{
+    display:grid!important;
+    grid-template-columns:1fr 1fr;
+  }
+  .inline-results-table .action-cell button{
+    width:100%;
+    white-space:normal;
+  }
+}
