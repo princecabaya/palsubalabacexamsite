@@ -746,24 +746,72 @@
           summary.textContent = holistic ? "View holistic scoring rubric" : "View analytic scoring rubric";
           rubric.appendChild(summary);
 
+          const tableWrap = document.createElement("div");
+          tableWrap.className = "student-rubric-table-wrap";
           const table = document.createElement("table");
-          table.innerHTML = holistic
-            ? "<thead><tr><th>Performance Level</th><th>Description</th><th>Score</th></tr></thead>"
-            : "<thead><tr><th>Criterion</th><th>Description</th><th>Max Points</th></tr></thead>";
-          const tbody = document.createElement("tbody");
-          q.rubric_criteria.forEach(item => {
-            const tr = document.createElement("tr");
-            const criterion = document.createElement("td");
-            criterion.textContent = String(item?.criterion || "");
-            const description = document.createElement("td");
-            description.textContent = String(item?.description || "");
-            const max = document.createElement("td");
-            max.textContent = String(item?.max_points ?? "");
-            tr.append(criterion, description, max);
-            tbody.appendChild(tr);
-          });
-          table.appendChild(tbody);
-          rubric.appendChild(table);
+
+          if (holistic) {
+            table.innerHTML = "<thead><tr><th>Performance Level</th><th>Description</th><th>Score</th></tr></thead>";
+            const tbody = document.createElement("tbody");
+            q.rubric_criteria.forEach(item => {
+              const tr = document.createElement("tr");
+              const level = document.createElement("td");
+              level.textContent = String(item?.criterion || "");
+              const description = document.createElement("td");
+              description.textContent = String(item?.description || "");
+              const score = document.createElement("td");
+              score.textContent = String(item?.max_points ?? "");
+              tr.append(level, description, score);
+              tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+          } else {
+            const firstLevels = Array.isArray(q.rubric_criteria[0]?.levels) ? q.rubric_criteria[0].levels : [];
+            const thead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            const criteriaHead = document.createElement("th");
+            criteriaHead.textContent = "Criteria / Level of Performance";
+            headerRow.appendChild(criteriaHead);
+
+            firstLevels.forEach(level => {
+              const th = document.createElement("th");
+              const title = document.createElement("strong");
+              title.textContent = String(level?.level || "");
+              const points = document.createElement("span");
+              points.className = "rubric-level-points";
+              points.textContent = Number.isFinite(Number(level?.points)) ? `${level.points} pts` : "";
+              th.append(title, points);
+              headerRow.appendChild(th);
+            });
+
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+            q.rubric_criteria.forEach(item => {
+              const tr = document.createElement("tr");
+              const criterion = document.createElement("td");
+              criterion.textContent = String(item?.criterion || "");
+              tr.appendChild(criterion);
+
+              firstLevels.forEach((headerLevel, index) => {
+                const td = document.createElement("td");
+                const levels = Array.isArray(item?.levels) ? item.levels : [];
+                const match = levels.find(level =>
+                  String(level?.level || "").trim().toLowerCase() === String(headerLevel?.level || "").trim().toLowerCase()
+                ) || levels[index];
+                td.textContent = String(match?.description || "");
+                tr.appendChild(td);
+              });
+
+              tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+          }
+
+          tableWrap.appendChild(table);
+          rubric.appendChild(tableWrap);
           wrap.appendChild(rubric);
         }
       }
