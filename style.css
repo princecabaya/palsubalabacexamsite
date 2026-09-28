@@ -2252,3 +2252,110 @@ textarea{resize:vertical}
     grid-template-columns:1fr;
   }
 }
+
+
+/* =========================================================
+   Live teacher-to-student attempt messaging
+   ========================================================= */
+.teacher-live-message{
+  position:fixed;
+  top:64px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:945;
+  width:min(760px,calc(100% - 24px));
+  padding:10px 12px 11px;
+  border:1px solid #f59e0b;
+  border-radius:14px;
+  background:rgba(255,251,235,.97);
+  box-shadow:0 10px 26px rgba(15,23,42,.16);
+  backdrop-filter:blur(10px);
+  color:#78350f;
+}
+.teacher-live-message-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:.78rem;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.teacher-live-message-head button{
+  width:28px;
+  min-width:28px;
+  height:28px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:rgba(120,53,15,.1);
+  color:#78350f;
+  font-size:1.15rem;
+  line-height:1;
+}
+.teacher-live-message-text{
+  margin-top:4px;
+  font-size:.95rem;
+  font-weight:800;
+  line-height:1.35;
+}
+.teacher-live-message-time{
+  margin-top:4px;
+  font-size:.72rem;
+  opacity:.75;
+}
+.teacher-message-arrive{
+  animation:teacherMessageArrive .28s ease-out;
+}
+@keyframes teacherMessageArrive{
+  from{opacity:0;transform:translate(-50%,-8px) scale(.985)}
+  to{opacity:1;transform:translate(-50%,0) scale(1)}
+}
+#examView.hidden .teacher-live-message{display:none}
+
+.teacher-message-actions{
+  margin-top:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.teacher-message-presets{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.message-preset{
+  font-size:.82rem;
+}
+.attempt-message-history{
+  display:grid;
+  gap:8px;
+  margin-top:14px;
+}
+.attempt-message-history-item{
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fbfdff;
+}
+.attempt-message-history-meta{
+  margin-bottom:3px;
+  color:var(--muted);
+  font-size:.75rem;
+}
+
+@media(max-width:620px){
+  .teacher-live-message{
+    top:58px;
+    width:calc(100% - 12px);
+    padding:9px 10px 10px;
+    border-radius:12px;
+  }
+  .teacher-live-message-text{font-size:.88rem}
+  .teacher-message-presets{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .teacher-message-presets button{width:100%}
+}
