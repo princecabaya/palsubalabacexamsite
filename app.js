@@ -10,6 +10,25 @@
   });
 
   const $ = (id) => document.getElementById(id);
+
+  function isIOSBrowser() {
+    const ua = navigator.userAgent || "";
+    return /iPad|iPhone|iPod/i.test(ua) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function updateMobileMonitoringCapabilityNote() {
+    const note = $("mobileMonitoringNote");
+    if (!note) return;
+    if (isIOSBrowser()) {
+      note.textContent = "iPhone/iPad note: Safari does not expose system screenshot events to webpages. Screenshot detection is unavailable; focus, restricted actions, camera, and microphone monitoring remain active.";
+      note.classList.remove("hidden");
+      note.title = "System screenshots taken with the iPhone buttons cannot be reliably detected by Safari.";
+    } else {
+      note.classList.add("hidden");
+      note.textContent = "";
+    }
+  }
   const loginView = $("loginView");
   const examView = $("examView");
   const doneView = $("doneView");
@@ -176,6 +195,10 @@
 
   function updateExamFlagBar() {
     const restricted = $("restrictedFlagCount");
+    const restrictedChip = restricted?.closest(".flag-chip");
+    if (restrictedChip && isIOSBrowser()) {
+      restrictedChip.title = "Restricted actions detected by the browser. System screenshot button presses are not detectable by iPhone/iPad Safari.";
+    }
     const focus = $("focusFlagCount");
     const speech = $("speechFlagCount");
     if (restricted) restricted.textContent = String(examFlagCounts.restricted);
@@ -413,8 +436,9 @@
 
     const source = microphoneAudioContext.createMediaStreamSource(microphoneStream);
     microphoneAnalyser = microphoneAudioContext.createAnalyser();
-    microphoneAnalyser.fftSize = 1024;
-    microphoneAnalyser.smoothingTimeConstant = 0.35;
+    const iosAudio = isIOSBrowser();
+    microphoneAnalyser.fftSize = iosAudio ? 2048 : 1024;
+    microphoneAnalyser.smoothingTimeConstant = iosAudio ? 0.2 : 0.35;
     source.connect(microphoneAnalyser);
     microphoneData = new Float32Array(microphoneAnalyser.fftSize);
 
@@ -422,8 +446,8 @@
     speechActiveStartedAt = 0;
     speechLastLoudAt = 0;
     speechPeakRms = 0;
-    microphoneNoiseFloor = 0.01;
-    updateMicrophoneStatus("Listening locally");
+    microphoneNoiseFloor = isIOSBrowser() ? 0.006 : 0.01;
+    updateMicrophoneStatus(isIOSBrowser() ? "Listening • iPhone tuned" : "Listening locally");
 
     const monitor = () => {
       if (!microphoneAnalyser || !microphoneStream?.active || submitted) return;
@@ -437,12 +461,20 @@
       const rms = Math.sqrt(sum / microphoneData.length);
       const now = performance.now();
 
+      const iosAudio = isIOSBrowser();
+
       // Adapt slowly to ordinary room/background sound when no speech event is active.
-      if (!speechActiveStartedAt && rms < 0.05) {
-        microphoneNoiseFloor = microphoneNoiseFloor * 0.985 + rms * 0.015;
+      // iOS Safari often reports lower RMS levels after its built-in processing,
+      // so use a lower floor and a gentler multiplier on iPhone/iPad.
+      const calibrationCeiling = iosAudio ? 0.035 : 0.05;
+      if (!speechActiveStartedAt && rms < calibrationCeiling) {
+        const smoothing = iosAudio ? 0.025 : 0.015;
+        microphoneNoiseFloor = microphoneNoiseFloor * (1 - smoothing) + rms * smoothing;
       }
 
-      const threshold = Math.max(0.025, microphoneNoiseFloor * 2.8);
+      const threshold = iosAudio
+        ? Math.max(0.011, microphoneNoiseFloor * 1.85)
+        : Math.max(0.025, microphoneNoiseFloor * 2.8);
       const loud = rms >= threshold;
 
       if (loud) {
@@ -452,18 +484,23 @@
         if (!speechCandidateStartedAt) speechCandidateStartedAt = now;
 
         // Require sustained sound before treating it as a possible speech segment.
-        if (!speechActiveStartedAt && now - speechCandidateStartedAt >= 1200) {
+        // iPhone/iPad uses a shorter window because Safari's audio processing can
+        // attenuate speech more aggressively.
+        const activationMs = isIOSBrowser() ? 650 : 1200;
+        if (!speechActiveStartedAt && now - speechCandidateStartedAt >= activationMs) {
           speechActiveStartedAt = speechCandidateStartedAt;
           updateMicrophoneStatus("Possible speech detected");
         }
       } else {
-        if (!speechActiveStartedAt && speechCandidateStartedAt && now - speechCandidateStartedAt > 450) {
+        const candidateResetMs = isIOSBrowser() ? 300 : 450;
+        if (!speechActiveStartedAt && speechCandidateStartedAt && now - speechCandidateStartedAt > candidateResetMs) {
           speechCandidateStartedAt = 0;
           speechPeakRms = 0;
         }
 
         // End a speech segment after a short quiet period.
-        if (speechActiveStartedAt && now - speechLastLoudAt >= 900) {
+        const releaseMs = isIOSBrowser() ? 650 : 900;
+        if (speechActiveStartedAt && now - speechLastLoudAt >= releaseMs) {
           finishSpeechSegment(now);
         }
       }
@@ -480,11 +517,12 @@
     const endedAt = Math.max(speechLastLoudAt || now, speechActiveStartedAt);
     const durationMs = Math.max(0, endedAt - speechActiveStartedAt);
 
-    if (durationMs >= 1200) {
+    const minimumDurationMs = isIOSBrowser() ? 650 : 1200;
+    if (durationMs >= minimumDurationMs) {
       logEvent("possible_speech_detected", {
         duration_seconds: Number((durationMs / 1000).toFixed(1)),
         peak_level: Number(speechPeakRms.toFixed(4)),
-        detection: "local_audio_level_only"
+        detection: isIOSBrowser() ? "local_audio_level_ios_tuned" : "local_audio_level_only"
       });
     }
 
@@ -494,7 +532,7 @@
     speechPeakRms = 0;
 
     if (microphoneStream?.active && !submitted) {
-      updateMicrophoneStatus("Listening locally");
+      updateMicrophoneStatus(isIOSBrowser() ? "Listening • iPhone tuned" : "Listening locally");
     }
   }
 
@@ -1060,6 +1098,7 @@
     clearExamBrowserState();
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     resetExamFlagCounts();
+    updateMobileMonitoringCapabilityNote();
     startAttemptMessagePolling();
 
     let existingResponses = [];
