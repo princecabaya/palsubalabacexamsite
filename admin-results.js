@@ -139,6 +139,7 @@
           <strong>${escapeHtml(exam.title || "Exam Results")}</strong>
           <p class="muted">${escapeHtml(exam.code || "")} • ${rows.length} student${rows.length === 1 ? "" : "s"} took this exam</p>
         </div>
+        <button type="button" class="inline-test-analysis-btn">Test Analysis</button>
       </div>
 
       <div class="inline-result-summary">
@@ -183,6 +184,17 @@
 
     const tbody = container.querySelector(".inline-results-body");
     const proctorOnly = Boolean(window.ExamAdmin?.isProctorForExam?.(exam.id));
+    const analysisButton = container.querySelector(".inline-test-analysis-btn");
+    if (analysisButton) {
+      if (proctorOnly) {
+        analysisButton.classList.add("hidden");
+      } else {
+        analysisButton.addEventListener("click", async () => {
+          await openExamResults(exam, { noScroll: true });
+          $("openTestAnalysisBtn")?.click();
+        });
+      }
+    }
 
     rows.forEach(result => {
       const approved = result.grading_status === "approved" || result.grading_status === "not_required";
