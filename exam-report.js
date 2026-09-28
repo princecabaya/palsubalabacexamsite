@@ -496,7 +496,7 @@
 
     const { data: questions, error: questionError } = await db
       .from("questions")
-      .select("position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria")
+      .select("position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria,stimulus_type,stimulus_payload")
       .eq("exam_id", examId)
       .order("position", { ascending: true });
 
@@ -506,6 +506,66 @@
       ...exam,
       questions: questions || []
     };
+  }
+
+  async function imageUrlToDataUrl(url) {
+    const response=await fetch(url,{cache:"no-store"});
+    if(!response.ok) throw new Error("Stimulus image could not be downloaded.");
+    const blob=await response.blob();
+    return await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||""));
+      reader.onerror=()=>reject(reader.error||new Error("Image conversion failed."));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function getImageSize(dataUrl) {
+    return await new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.onload=()=>resolve({width:img.naturalWidth||1,height:img.naturalHeight||1});
+      img.onerror=()=>reject(new Error("Image could not be measured."));
+      img.src=dataUrl;
+    });
+  }
+
+  function compilePdfGraphExpression(source) {
+    const raw=String(source||"").trim().toLowerCase();
+    if(!raw) throw new Error("Graph expression is empty.");
+    let expr=raw.replace(/π/g,"pi").replace(/\^/g,"**");
+    const allowed=["sin","cos","tan","asin","acos","atan","sqrt","abs","exp","log","ln","floor","ceil","pi","e","x"];
+    const scrubbed=expr.replace(/[a-z]+/g,name=>allowed.includes(name)?"":"BAD");
+    if(/BAD|[^0-9+\-*/().,\s*]/.test(scrubbed)) throw new Error("Unsupported graph expression.");
+    expr=expr
+      .replace(/\bln\b/g,"Math.log").replace(/\blog\b/g,"Math.log10")
+      .replace(/\bsin\b/g,"Math.sin").replace(/\bcos\b/g,"Math.cos").replace(/\btan\b/g,"Math.tan")
+      .replace(/\basin\b/g,"Math.asin").replace(/\bacos\b/g,"Math.acos").replace(/\batan\b/g,"Math.atan")
+      .replace(/\bsqrt\b/g,"Math.sqrt").replace(/\babs\b/g,"Math.abs").replace(/\bexp\b/g,"Math.exp")
+      .replace(/\bfloor\b/g,"Math.floor").replace(/\bceil\b/g,"Math.ceil")
+      .replace(/\bpi\b/g,"Math.PI").replace(/\be\b/g,"Math.E");
+    const fn=new Function("x",`"use strict";return (${expr});`);
+    return x=>{const y=Number(fn(x));return Number.isFinite(y)?y:NaN;};
+  }
+
+  function graphStimulusDataUrl(payload={}) {
+    const canvas=document.createElement("canvas");
+    const width=900,height=500;canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,width,height);
+    const xmin=Number(payload.xmin),xmax=Number(payload.xmax),ymin=Number(payload.ymin),ymax=Number(payload.ymax);
+    if(!(xmax>xmin)||!(ymax>ymin)) throw new Error("Invalid graph range.");
+    const px=x=>((x-xmin)/(xmax-xmin))*width,py=y=>height-((y-ymin)/(ymax-ymin))*height;
+    ctx.strokeStyle="#e5e7eb";ctx.lineWidth=1;
+    for(let i=0;i<=10;i++){const x=i*width/10;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();}
+    for(let i=0;i<=8;i++){const y=i*height/8;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke();}
+    ctx.strokeStyle="#64748b";ctx.lineWidth=2;
+    if(xmin<=0&&xmax>=0){const x0=px(0);ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(x0,height);ctx.stroke();}
+    if(ymin<=0&&ymax>=0){const y0=py(0);ctx.beginPath();ctx.moveTo(0,y0);ctx.lineTo(width,y0);ctx.stroke();}
+    const fn=compilePdfGraphExpression(payload.expression);
+    ctx.strokeStyle="#111827";ctx.lineWidth=3;ctx.beginPath();let drawing=false;
+    for(let i=0;i<=width;i++){const x=xmin+(i/width)*(xmax-xmin),y=fn(x),sy=py(y);if(!Number.isFinite(y)||sy<-height||sy>height*2){drawing=false;continue;}if(!drawing){ctx.moveTo(i,sy);drawing=true;}else ctx.lineTo(i,sy);}
+    ctx.stroke();
+    ctx.fillStyle="#475569";ctx.font="18px sans-serif";ctx.fillText(`x: ${xmin} to ${xmax}`,14,height-14);ctx.fillText(`y: ${ymin} to ${ymax}`,width-150,height-14);
+    return canvas.toDataURL("image/png");
   }
 
   async function buildExamPdf(exam) {
@@ -595,6 +655,42 @@
       doc.text(pointText, right, y, { align: "right" });
 
       y += promptLines.length * 5 + 3;
+
+      const stimulusType=String(q.stimulus_type||"none");
+      const stimulusPayload=q.stimulus_payload&&typeof q.stimulus_payload==="object"?q.stimulus_payload:{};
+      if(stimulusType!=="none"){
+        try{
+          if(stimulusType==="image"&&stimulusPayload.url){
+            const dataUrl=await imageUrlToDataUrl(stimulusPayload.url);
+            const size=await getImageSize(dataUrl);
+            const maxW=125,maxH=68,scale=Math.min(maxW/size.width,maxH/size.height);
+            const w=Math.max(25,size.width*scale),h=Math.max(18,size.height*scale);
+            ensureSpace(h+10);
+            const format=dataUrl.startsWith("data:image/png")?"PNG":dataUrl.startsWith("data:image/webp")?"WEBP":"JPEG";
+            doc.addImage(dataUrl,format,left+4,y,w,h,undefined,"FAST");
+            y+=h+3;
+          }else if(stimulusType==="graph"){
+            const dataUrl=graphStimulusDataUrl(stimulusPayload);
+            ensureSpace(66);
+            doc.addImage(dataUrl,"PNG",left+7,y,120,66,undefined,"FAST");
+            y+=69;
+          }else if(stimulusType==="latex"&&stimulusPayload.latex){
+            const latexLines=split(String(stimulusPayload.latex),150);
+            ensureSpace(latexLines.length*4.5+8);
+            doc.setFont("courier","normal");doc.setFontSize(8.5);doc.setTextColor(35);
+            doc.text(latexLines,left+6,y);y+=latexLines.length*4.5+3;
+          }
+          if(stimulusPayload.caption){
+            const capLines=split(String(stimulusPayload.caption),145);
+            ensureSpace(capLines.length*4+4);
+            doc.setFont("times","italic");doc.setFontSize(8.5);doc.setTextColor(90);
+            doc.text(capLines,left+6,y);y+=capLines.length*4+3;
+          }
+        }catch(error){
+          const fallback=split("[Stimulus could not be rendered in the PDF.]",150);
+          ensureSpace(8);doc.setFont("times","italic");doc.setFontSize(8.5);doc.setTextColor(120);doc.text(fallback,left+6,y);y+=7;
+        }
+      }
 
       if ((q.question_type === "mcq" || q.question_type === "binary") && Array.isArray(q.choices)) {
         const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
