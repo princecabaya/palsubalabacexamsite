@@ -1318,6 +1318,7 @@
       }
 
       const rawPoints = Number(card.querySelector(".q-points")?.value);
+      const stimulus = currentStimulusFromCard(card);
       return {
         section_title: sectionTitleForCard(card),
         prompt: card.querySelector(".q-prompt")?.value || "",
@@ -1326,7 +1327,9 @@
         choices,
         correct_answer,
         rubric_type,
-        rubric_criteria
+        rubric_criteria,
+        stimulus_type: stimulus.type,
+        stimulus_payload: stimulus.payload
       };
     });
 
@@ -2706,7 +2709,9 @@
         correct_answer: q.correct_answer,
         points: q.points,
         rubric_type: q.rubric_type,
-        rubric_criteria: q.rubric_criteria
+        rubric_criteria: q.rubric_criteria,
+        stimulus_type: q.stimulus_type || "none",
+        stimulus_payload: q.stimulus_payload || {}
       }));
 
       const { error: questionUpdateError } = await db
@@ -2795,7 +2800,7 @@
     } else {
       const response = await db
         .from("questions")
-        .select("id,position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria")
+        .select("id,position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria,stimulus_type,stimulus_payload")
         .eq("exam_id", exam.id)
         .order("position", { ascending: true });
 
@@ -2947,6 +2952,20 @@
 
       if (!points || points <= 0) return fail(`Question ${i + 1} must have a positive point value.`);
 
+      const stimulus = currentStimulusFromCard(card);
+      if (stimulus.type === "image" && !stimulus.payload.url) return fail(`Question ${i + 1} image stimulus has not been uploaded.`);
+      if (stimulus.type === "graph") {
+        try {
+          compileStimulusGraphExpression(stimulus.payload.expression);
+          if (!(stimulus.payload.xmax > stimulus.payload.xmin) || !(stimulus.payload.ymax > stimulus.payload.ymin)) {
+            return fail(`Question ${i + 1} graph range is invalid.`);
+          }
+        } catch (error) {
+          return fail(`Question ${i + 1} graph stimulus: ${error.message}`);
+        }
+      }
+      if (stimulus.type === "latex" && !String(stimulus.payload.latex || "").trim()) return fail(`Question ${i + 1} LaTeX stimulus is empty.`);
+
       questions.push({
         section_title: sectionTitleForCard(card),
         prompt,
@@ -2955,7 +2974,9 @@
         choices,
         correct_answer,
         rubric_type,
-        rubric_criteria
+        rubric_criteria,
+        stimulus_type: stimulus.type,
+        stimulus_payload: stimulus.payload
       });
     }
 
@@ -3142,7 +3163,7 @@
 
     const { data: questions, error } = await db
       .from("questions")
-      .select("id,position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria")
+      .select("id,position,section_title,prompt,question_type,choices,points,rubric_type,rubric_criteria,stimulus_type,stimulus_payload")
       .eq("exam_id", exam.id)
       .order("position", { ascending: true });
 
@@ -3152,6 +3173,24 @@
     }
 
     renderExamPreviewQuestions(questionsNode, questions || []);
+  }
+
+  function buildTeacherStimulusPreview(q) {
+    const type=q?.stimulus_type || "none";
+    const payload=normalizeStimulusPayload(type,q?.stimulus_payload);
+    if(type==="none") return null;
+    const wrap=document.createElement("figure");
+    wrap.className="item-stimulus item-stimulus-preview";
+    if(type==="image" && payload.url){
+      const img=document.createElement("img"); img.src=payload.url; img.alt=payload.alt||"Question stimulus"; img.className="item-stimulus-image"; wrap.appendChild(img);
+    } else if(type==="graph"){
+      const canvas=document.createElement("canvas"); canvas.className="stimulus-graph-canvas item-stimulus-graph"; wrap.appendChild(canvas);
+      try{drawStimulusGraph(canvas,payload);}catch(error){const p=document.createElement("p");p.className="message-inline error";p.textContent=error.message;wrap.appendChild(p);}
+    } else if(type==="latex" && payload.latex){
+      const div=document.createElement("div");div.className="item-stimulus-latex math-rendered";div.textContent=payload.latex;wrap.appendChild(div);
+    }
+    if(payload.caption){const cap=document.createElement("figcaption");cap.textContent=payload.caption;wrap.appendChild(cap);}
+    return wrap;
   }
 
   function renderExamPreviewQuestions(container, questions) {
@@ -3189,6 +3228,9 @@
       prompt.className = "preview-question-prompt math-rendered";
       appendPreviewRichText(prompt, String(q.prompt || ""));
       card.appendChild(prompt);
+
+      const stimulus = buildTeacherStimulusPreview(q);
+      if (stimulus) card.appendChild(stimulus);
 
       if (q.question_type === "mcq" || q.question_type === "binary") {
         const choices = Array.isArray(q.choices) ? q.choices : [];
