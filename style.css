@@ -2130,3 +2130,38 @@ textarea{resize:vertical}
   .flex-camera-stage{width:100%;max-width:440px}
   .flex-capture-actions button,.flex-save-actions button{flex:1 1 145px}
 }
+
+
+/* =========================================================
+   Exam completion celebration
+   ========================================================= */
+.exam-completion-confetti{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  overflow:hidden;
+  pointer-events:none;
+}
+.exam-confetti-piece{
+  position:absolute;
+  top:-10vh;
+  display:block;
+  will-change:transform,opacity;
+  animation-name:examConfettiFall;
+  animation-timing-function:cubic-bezier(.16,.82,.28,1);
+  animation-fill-mode:forwards;
+}
+@keyframes examConfettiFall{
+  0%{
+    transform:translate3d(0,-8vh,0) rotate(0deg) scale(.9);
+    opacity:0;
+  }
+  8%{opacity:1}
+  100%{
+    transform:translate3d(var(--confetti-drift),115vh,0) rotate(var(--confetti-rotate)) scale(1.05);
+    opacity:.15;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .exam-confetti-piece{animation-duration:.01ms!important;animation-delay:0s!important}
+}
