@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260928-2302">
+  <link rel="stylesheet" href="style.css?v=20260928-2355">
 </head>
 <body>
   <main class="shell wide">
@@ -143,6 +143,31 @@
                 <div class="interpretation-note">
                   <strong>How to interpret:</strong> Focus and visibility changes are behavioral signals only. They cannot identify the exact app, website, or reason for the change and should not be treated alone as proof of misconduct.
                 </div>
+              </div>
+            </details>
+
+            <details id="teacherMessageSection" class="attempt-drawer-section" open>
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Message Student</strong>
+                  <span class="muted">Send a live notice to this active exam session</span>
+                </span>
+                <span id="teacherMessageBadge" class="badge">Live</span>
+              </summary>
+              <div class="attempt-drawer-body">
+                <label>Message
+                  <textarea id="teacherAttemptMessage" rows="3" maxlength="300" placeholder="e.g. Please remain on the exam page. Multiple focus/speech signals have been detected."></textarea>
+                </label>
+                <div class="row teacher-message-actions">
+                  <button id="sendAttemptMessageBtn" type="button" class="primary">Send Message</button>
+                  <span id="teacherMessageStatus" class="message-inline"></span>
+                </div>
+                <div class="teacher-message-presets">
+                  <button type="button" class="message-preset" data-message="Please remain on the exam page. Multiple focus-change signals have been detected.">Focus warning</button>
+                  <button type="button" class="message-preset" data-message="Please avoid talking during the exam. Multiple speech signals have been detected.">Speech warning</button>
+                  <button type="button" class="message-preset" data-message="Please keep your attention on the exam and follow the examination rules.">General reminder</button>
+                </div>
+                <div id="attemptMessageHistory" class="attempt-message-history"></div>
               </div>
             </details>
 
@@ -687,7 +712,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="admin.js?v=20260928-2030"></script>
+  <script src="admin.js?v=20260928-2355"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260928-2302"></script>
   <script src="admin-analysis.js?v=20260928-2302"></script>
