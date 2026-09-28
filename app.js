@@ -52,6 +52,8 @@
   let flexScoreText = "—";
   let flexExamTitle = "Exam";
   let flexStudentName = "";
+  let completionAudioContext = null;
+  let completionAudioPrimed = false;
 
   const restrictedFlagTypes = new Set([
     "copy_blocked","cut_blocked","paste_blocked","contextmenu_blocked","dragstart_blocked",
@@ -1846,9 +1848,103 @@
     timerHandle = setInterval(tick, 1000);
   }
 
+  async function primeCompletionAudio() {
+    if (completionAudioPrimed) return;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return;
+    try {
+      completionAudioContext = completionAudioContext || new AudioContextCtor();
+      if (completionAudioContext.state === "suspended") await completionAudioContext.resume();
+      const gain = completionAudioContext.createGain();
+      gain.gain.value = 0.0001;
+      gain.connect(completionAudioContext.destination);
+      const osc = completionAudioContext.createOscillator();
+      osc.frequency.value = 220;
+      osc.connect(gain);
+      osc.start();
+      osc.stop(completionAudioContext.currentTime + 0.02);
+      completionAudioPrimed = true;
+    } catch (_) {}
+  }
+
+  function playCompletionApplause() {
+    const ctx = completionAudioContext;
+    if (!ctx || ctx.state === "closed") return;
+    const now = ctx.currentTime;
+
+    function clap(at, strength = 1) {
+      const duration = 0.09;
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const decay = Math.pow(1 - i / data.length, 2.8);
+        data[i] = (Math.random() * 2 - 1) * decay;
+      }
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 1650 + Math.random() * 650;
+      filter.Q.value = 0.75;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.23 * strength, at + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      source.start(at);
+      source.stop(at + duration + 0.02);
+    }
+
+    try {
+      if (ctx.state === "suspended") ctx.resume();
+      const pattern = [0,0.11,0.23,0.38,0.53,0.69,0.86,1.05,1.25,1.48,1.72];
+      pattern.forEach((offset,index) => {
+        clap(now + offset, 0.78 + (index % 3) * 0.08);
+        if (index % 2 === 0) clap(now + offset + 0.035, 0.48);
+      });
+    } catch (_) {}
+  }
+
+  function launchCompletionConfetti() {
+    document.querySelector(".exam-completion-confetti")?.remove();
+
+    const layer = document.createElement("div");
+    layer.className = "exam-completion-confetti";
+    layer.setAttribute("aria-hidden","true");
+
+    const symbols = ["🎉","🎊","✨","⭐","💯","👏"];
+    for (let i = 0; i < 90; i++) {
+      const piece = document.createElement("span");
+      piece.className = "exam-confetti-piece";
+      piece.textContent = symbols[i % symbols.length];
+      piece.style.left = `${Math.random() * 100}%`;
+      piece.style.animationDelay = `${Math.random() * 0.45}s`;
+      piece.style.animationDuration = `${2.3 + Math.random() * 1.7}s`;
+      piece.style.setProperty("--confetti-drift", `${-90 + Math.random() * 180}px`);
+      piece.style.setProperty("--confetti-rotate", `${180 + Math.random() * 720}deg`);
+      piece.style.fontSize = `${14 + Math.random() * 20}px`;
+      layer.appendChild(piece);
+    }
+
+    document.body.appendChild(layer);
+    setTimeout(() => layer.remove(), 4600);
+  }
+
+  function celebrateExamCompletion() {
+    launchCompletionConfetti();
+    playCompletionApplause();
+  }
+
   async function submitExam(auto = false) {
     if (!attempt || submitted) return;
     if (!auto && !confirm("Submit your exam now? You will not be able to change your answers afterward.")) return;
+
+    if (!auto) await primeCompletionAudio();
 
     $("submitBtn").disabled = true;
     const originalSubmitText = $("submitBtn").textContent;
@@ -1887,6 +1983,7 @@
     examView.classList.add("hidden");
     watermark.classList.remove("active");
     doneView.classList.remove("hidden");
+    celebrateExamCompletion();
     const fixedTimer = $("fixedRemainingTime");
     if (fixedTimer) fixedTimer.textContent = "00:00";
 
