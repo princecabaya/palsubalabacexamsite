@@ -660,6 +660,8 @@
 
   async function startFlexCamera() {
     const status = $("flexStatus");
+    const panel = $("flexScorePanel");
+    if (panel && "open" in panel) panel.open = true;
     try {
       stopFlexCamera();
       flexCameraStream = await navigator.mediaDevices.getUserMedia({
@@ -706,6 +708,7 @@
     if (img) { img.src=url; img.classList.remove("hidden"); }
     vid?.classList.add("hidden");
     $("flexMediaResult")?.classList.remove("hidden");
+    stopFlexCamera();
     $("flexStatus").textContent = "Photo ready. Use Share / Save to Phone, or Download.";
   }
 
@@ -745,6 +748,7 @@
       if (vid) { vid.src=url; vid.classList.remove("hidden"); }
       img?.classList.add("hidden");
       $("flexMediaResult")?.classList.remove("hidden");
+      stopFlexCamera();
       $("flexVideoBtn")?.classList.remove("hidden");
       $("flexStopVideoBtn")?.classList.add("hidden");
       $("flexStatus").textContent = "Video ready. Use Share / Save to Phone, or Download.";
