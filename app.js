@@ -415,6 +415,42 @@
     if (node) node.textContent = text;
   }
 
+  function updateMicrophoneLevel(rms = 0, threshold = 0.025) {
+    const fill = $("microphoneLevelFill");
+    const marker = $("microphoneThresholdMarker");
+    const label = $("microphoneLevelLabel");
+    if (!fill || !marker || !label) return;
+
+    const normalized = Math.max(0, Math.min(1, rms / 0.12));
+    const thresholdNormalized = Math.max(0.04, Math.min(0.96, threshold / 0.12));
+
+    fill.style.width = `${(normalized * 100).toFixed(1)}%`;
+    marker.style.left = `${(thresholdNormalized * 100).toFixed(1)}%`;
+
+    let text = "Low";
+    if (rms >= threshold * 1.65) text = "High";
+    else if (rms >= threshold) text = "Good";
+
+    label.textContent = text;
+    label.dataset.level = text.toLowerCase();
+    fill.dataset.level = text.toLowerCase();
+  }
+
+  function resetMicrophoneLevel() {
+    const fill = $("microphoneLevelFill");
+    const marker = $("microphoneThresholdMarker");
+    const label = $("microphoneLevelLabel");
+    if (fill) {
+      fill.style.width = "0%";
+      fill.dataset.level = "idle";
+    }
+    if (marker) marker.style.left = "25%";
+    if (label) {
+      label.textContent = "Idle";
+      label.dataset.level = "idle";
+    }
+  }
+
   async function startSpeechMonitoring() {
     if (!attempt?.attempt_token || submitted || !microphoneStream?.active) return;
 
@@ -422,6 +458,7 @@
 
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) {
+      resetMicrophoneLevel();
       updateMicrophoneStatus("Analysis unsupported");
       await logEvent("microphone_analysis_unavailable");
       return;
@@ -475,6 +512,7 @@
       const threshold = iosAudio
         ? Math.max(0.011, microphoneNoiseFloor * 1.85)
         : Math.max(0.025, microphoneNoiseFloor * 2.8);
+      updateMicrophoneLevel(rms, threshold);
       const loud = rms >= threshold;
 
       if (loud) {
@@ -556,6 +594,7 @@
       try { track.stop(); } catch (_) {}
     }
     microphoneStream = null;
+    resetMicrophoneLevel();
     updateMicrophoneStatus("Stopped");
   }
 
@@ -2183,6 +2222,7 @@
       await startSpeechMonitoring();
     } catch (cameraError) {
       updateCameraStatus("Camera unavailable");
+      resetMicrophoneLevel();
       updateMicrophoneStatus("Microphone unavailable");
       warn("Your exam session was restored, but camera or microphone monitoring could not be restarted. Please allow access if prompted.");
       await logEvent("monitoring_device_unavailable_after_restore", {
