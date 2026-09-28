@@ -648,9 +648,16 @@
   });
 
   function updateFlexScoreContext({ score = null, maxScore = null, examTitle = "", studentName = "" } = {}) {
-    flexScoreText = (score === null || score === undefined || maxScore === null || maxScore === undefined)
-      ? "Score pending"
-      : `${score}/${maxScore}`;
+flexScoreText = (score === null || score === undefined || maxScore === null || maxScore === undefined)
+  ? "Score pending"
+  : `${score}/${maxScore}`;
+    const scoreNode = $("flexLiveScore");
+if (scoreNode) scoreNode.textContent = flexScoreText;
+
+const messageNode = $("flexLiveMessage");
+if (messageNode && String(score) === String(maxScore) && score !== null && maxScore !== null) {
+  messageNode.textContent = "Perfect score! 🎉";
+}
     flexExamTitle = examTitle || flexExamTitle || "Exam";
     flexStudentName = studentName || flexStudentName || "";
     const scoreNode = $("flexLiveScore");
@@ -684,7 +691,186 @@
     return { width, height };
   }
 
+    function drawRoundedRect(ctx, x, y, w, h, r, fill, stroke = null) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  }
+
+  function drawFlexEdgeConfetti(ctx, width, height) {
+    const pieces = 42;
+    const colors = [
+      "#ff4d6d", "#06d6a0", "#4cc9f0", "#f72585",
+      "#f9c74f", "#8338ec", "#fb5607", "#80ed99"
+    ];
+
+    const safeFaceLeft = width * 0.22;
+    const safeFaceRight = width * 0.78;
+    const safeFaceTop = height * 0.18;
+    const safeFaceBottom = height * 0.78;
+
+    const t = performance.now() / 1000;
+
+    for (let i = 0; i < pieces; i++) {
+      let x, y;
+      const edgeZone = i % 4;
+
+      if (edgeZone === 0) {
+        x = Math.random() * width;
+        y = Math.random() * safeFaceTop;
+      } else if (edgeZone === 1) {
+        x = Math.random() * safeFaceLeft;
+        y = Math.random() * height;
+      } else if (edgeZone === 2) {
+        x = safeFaceRight + Math.random() * (width - safeFaceRight);
+        y = Math.random() * height;
+      } else {
+        x = Math.random() * width;
+        y = safeFaceBottom + Math.random() * (height - safeFaceBottom);
+      }
+
+      ctx.save();
+      ctx.translate(x, y + Math.sin(t + i) * 4);
+      ctx.rotate((t * 0.8 + i) % Math.PI);
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillRect(-4, -8, 8, 16);
+      ctx.restore();
+    }
+  }
+
+  function drawFlexVignette(ctx, width, height) {
+    const g = ctx.createRadialGradient(
+      width / 2, height / 2, width * 0.18,
+      width / 2, height / 2, width * 0.78
+    );
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.18)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+  }
+
   function drawFlexFrame() {
+    const video = $("flexCameraVideo");
+    const canvas = $("flexCameraCanvas");
+    if (!video || !canvas || !flexCameraStream?.active) return;
+
+    if (video.readyState >= 2) {
+      const { width, height } = flexCanvasSize(video);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw selfie with mild enhancement
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      ctx.filter = "brightness(1.08) contrast(1.06) saturate(1.04)";
+      ctx.drawImage(video, 0, 0, width, height);
+      ctx.restore();
+      ctx.filter = "none";
+
+      // Slight dark overlay to reduce distracting background
+      const shade = ctx.createLinearGradient(0, 0, 0, height);
+      shade.addColorStop(0, "rgba(0,0,0,0.08)");
+      shade.addColorStop(1, "rgba(0,0,0,0.18)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, 0, width, height);
+
+      // Decorative confetti at edges only
+      drawFlexEdgeConfetti(ctx, width, height);
+
+      const message = $("flexMessageSelect")?.value || "I made it! 🎉";
+      const scoreText = flexScoreText || "—";
+      const subtitle =
+        scoreText.includes("/") && !scoreText.includes("pending")
+          ? "Great job!"
+          : "Exam complete";
+
+      // Safe top spacing for notch/edge
+      const topInset = Math.max(22, height * 0.045);
+
+      // Badge sizes
+      const messageFont = Math.max(28, Math.round(width * 0.055));
+      const scoreFont = Math.max(46, Math.round(width * 0.09));
+      const subFont = Math.max(18, Math.round(width * 0.032));
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Message badge
+      ctx.font = `800 ${messageFont}px system-ui, sans-serif`;
+      const msgWidth = ctx.measureText(message).width;
+      const msgBoxW = msgWidth + 42;
+      const msgBoxH = messageFont + 20;
+      const msgBoxX = (width - msgBoxW) / 2;
+      const msgBoxY = topInset;
+
+      drawRoundedRect(ctx, msgBoxX, msgBoxY, msgBoxW, msgBoxH, 18, "rgba(0,0,0,0.34)");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(message, width / 2, msgBoxY + msgBoxH / 2 + 1);
+
+      // Score badge
+      ctx.font = `900 ${scoreFont}px system-ui, sans-serif`;
+      const scoreWidth = ctx.measureText(scoreText).width;
+      ctx.font = `700 ${subFont}px system-ui, sans-serif`;
+      const subWidth = ctx.measureText(subtitle).width;
+
+      const scoreBoxW = Math.max(scoreWidth, subWidth) + 54;
+      const scoreBoxH = scoreFont + subFont + 36;
+      const scoreBoxX = (width - scoreBoxW) / 2;
+      const scoreBoxY = msgBoxY + msgBoxH + 14;
+
+      drawRoundedRect(ctx, scoreBoxX, scoreBoxY, scoreBoxW, scoreBoxH, 22, "rgba(255,255,255,0.18)", "rgba(255,255,255,0.32)");
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `900 ${scoreFont}px system-ui, sans-serif`;
+      ctx.fillText(scoreText, width / 2, scoreBoxY + scoreFont * 0.6);
+
+      ctx.font = `700 ${subFont}px system-ui, sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillText(subtitle, width / 2, scoreBoxY + scoreFont + 16);
+
+      // Framing guide near bottom
+      ctx.font = `600 ${Math.max(16, Math.round(width * 0.025))}px system-ui, sans-serif`;
+      drawRoundedRect(
+        ctx,
+        width * 0.17,
+        height - Math.max(54, height * 0.1),
+        width * 0.66,
+        34,
+        16,
+        "rgba(0,0,0,0.26)"
+      );
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fillText(
+        "Center your face below the score badge",
+        width / 2,
+        height - Math.max(37, height * 0.082)
+      );
+
+      // Soft vignette
+      drawFlexVignette(ctx, width, height);
+    }
+
+    flexRenderFrame = requestAnimationFrame(drawFlexFrame);
+  }
     const video = $("flexCameraVideo");
     const canvas = $("flexCameraCanvas");
     if (!video || !canvas || !flexCameraStream?.active) return;
