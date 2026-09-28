@@ -2167,6 +2167,8 @@
     attempt = resumeData[0];
     submitted = false;
     loadExamFlagCounts();
+    updateMobileMonitoringCapabilityNote();
+    startAttemptMessagePolling();
     msg.textContent = "";
 
     await loadExam({
