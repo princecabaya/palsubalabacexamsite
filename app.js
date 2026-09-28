@@ -1067,22 +1067,80 @@
     keyboard.className = "math-virtual-keyboard hidden";
 
     const tabBar = document.createElement("div");
-    tabBar.className = "math-keyboard-tabs";
+    tabBar.className = "math-keyboard-tabs math-keyboard-tabs-reference";
 
     const keyArea = document.createElement("div");
-    keyArea.className = "math-keyboard-keys";
-
-    const utilityBar = document.createElement("div");
-    utilityBar.className = "math-keyboard-utility";
+    keyArea.className = "math-keyboard-layout";
 
     let activeInput = solution;
+    let alphabetShift = false;
+    let alphabetGreek = false;
+    let activeKeyboardTab = "123";
 
-    const tabs = [
-      { name:"123", keys:["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","=","+","(",")","<",">","≤","≥",","] },
-      { name:"ABC", keys:["q","w","e","r","t","y","u","i","o","p","a","s","d","f","g","h","j","k","l","z","x","c","v","b","n","m"] },
-      { name:"αβγ", keys:["α","β","γ","δ","θ","λ","μ","ρ","σ","φ","ω","Δ","Σ","π"] },
-      { name:"ƒ()", keys:["x²","x^□","√□","frac","|□|","sin","cos","tan","log","ln","e","∞"] }
+    const keyboardTabs = [
+      { id:"123", label:"123" },
+      { id:"fx", label:"f(x)" },
+      { id:"abc", label:"ABC" },
+      { id:"symbols", label:"#&¬" }
     ];
+
+    const layouts = {
+      "123": [
+        [
+          {label:"x",token:"x"},{label:"y",token:"y"},{label:"π",token:"π"},{label:"e",token:"e"},
+          {label:"7",token:"7"},{label:"8",token:"8"},{label:"9",token:"9"},{label:"×",token:"×"},{label:"÷",token:"÷"}
+        ],
+        [
+          {label:"□²",token:"square"},{label:"□^□",token:"power"},{label:"√□",token:"sqrt"},{label:"|□|",token:"abs"},
+          {label:"4",token:"4"},{label:"5",token:"5"},{label:"6",token:"6"},{label:"+",token:"+"},{label:"−",token:"−"}
+        ],
+        [
+          {label:"<",token:"<"},{label:">",token:">"},{label:"□/□",token:"frac"},{label:"a⁄b",token:"frac"},
+          {label:"1",token:"1"},{label:"2",token:"2"},{label:"3",token:"3"},{label:"=",token:"="},{label:"⌫",action:"backspace",utility:true}
+        ],
+        [
+          {label:"ans",token:"ans",utility:true},{label:",",token:","},{label:"(",token:"("},{label:")",token:")"},
+          {label:"0",token:"0"},{label:".",token:"."},{label:"‹",action:"left",utility:true},{label:"›",action:"right",utility:true},{label:"↵",action:"enter",utility:true}
+        ]
+      ],
+      fx: [
+        [
+          {label:"sin",token:"sin"},{label:"cos",token:"cos"},{label:"tan",token:"tan"},
+          {label:"%",token:"%"},{label:"!",token:"!"},{label:"$",token:"$"},{label:"°",token:"degree"}
+        ],
+        [
+          {label:"sin⁻¹",token:"asin"},{label:"cos⁻¹",token:"acos"},{label:"tan⁻¹",token:"atan"},
+          {label:"{",token:"{"},{label:"}",token:"}"},{label:"≤",token:"≤"},{label:"≥",token:"≥"}
+        ],
+        [
+          {label:"ln",token:"ln"},{label:"log₁₀",token:"log10"},{label:"logₐ",token:"logbase"},
+          {label:"d/dx",token:"derivative"},{label:"∫",token:"integral"},{label:"i",token:"i"},{label:"⌫",action:"backspace",utility:true}
+        ],
+        [
+          {label:"e^□",token:"epower"},{label:"10^□",token:"tenpower"},{label:"ⁿ√□",token:"nthroot"},
+          {label:"□₍□₎",token:"subscript"},{label:"‹",action:"left",utility:true},{label:"›",action:"right",utility:true},{label:"↵",action:"enter",utility:true}
+        ]
+      ],
+      abc: [],
+      symbols: [
+        [
+          {label:"∞",token:"∞"},{label:"≟",token:"neq"},{label:"≠",token:"neq"},{label:"∧",token:"and"},{label:"∨",token:"or"},
+          {label:"¬",token:"not"},{label:"⊗",token:"otimes"},{label:"[",token:"["},{label:"]",token:"]"}
+        ],
+        [
+          {label:"∥",token:"parallel"},{label:"⊥",token:"perp"},{label:"∈",token:"in"},{label:"⊂",token:"subset"},{label:"⊆",token:"subseteq"},
+          {label:"∠",token:"angle"},{label:"→",token:"to"},{label:"⌈□⌉",token:"ceil"},{label:"⌊□⌋",token:"floor"}
+        ],
+        [
+          {label:"(•)",token:"bulletparen"},{label:"(:)",token:"colonparen"},{label:"(⋮)",token:"vdotsparen"},{label:"\\",token:"backslash"},
+          {label:"&",token:"&"},{label:"@",token:"@"},{label:"#",token:"#"},{label:"$",token:"$"},{label:"⌫",action:"backspace",utility:true}
+        ],
+        [
+          {label:";",token:";"},{label:":",token:":"},{label:"'",token:"'"},{label:'"',token:'"'},{label:"′",token:"prime"},{label:"″",token:"doubleprime"},
+          {label:"‹",action:"left",utility:true},{label:"›",action:"right",utility:true},{label:"↵",action:"enter",utility:true}
+        ]
+      ]
+    };
 
     const undoStack = [];
     const redoStack = [];
@@ -1122,17 +1180,28 @@
       afterEdit();
     }
 
-    function latexForKey(key) {
-      return ({
+    function tokenTemplate(token) {
+      const map = {
         "÷":"\\div ","×":"\\times ","−":"-","≤":"\\le ","≥":"\\ge ",
-        "α":"\\alpha ","β":"\\beta ","γ":"\\gamma ","δ":"\\delta ",
-        "θ":"\\theta ","λ":"\\lambda ","μ":"\\mu ","ρ":"\\rho ",
-        "σ":"\\sigma ","φ":"\\phi ","ω":"\\omega ","Δ":"\\Delta ",
-        "Σ":"\\Sigma ","π":"\\pi ","∞":"\\infty ",
-        "x²":"x^2","x^□":"x^{}","√□":"\\sqrt{}","|□|":"\\left| \\right|",
-        "frac":"\\frac{}{}","sin":"\\sin ","cos":"\\cos ","tan":"\\tan ",
-        "log":"\\log ","ln":"\\ln ","newline":"\n"
-      })[key] ?? key;
+        "π":"\\pi ","∞":"\\infty ","degree":"^{\\circ}",
+        "square":"^{2}","power":"^{__CARET__}","sqrt":"\\sqrt{__CARET__}",
+        "abs":"\\left|__CARET__\\right|","frac":"\\frac{__CARET__}{}",
+        "sin":"\\sin\left(__CARET__\\right)","cos":"\\cos\left(__CARET__\\right)","tan":"\\tan\left(__CARET__\\right)",
+        "asin":"\\sin^{-1}\left(__CARET__\\right)","acos":"\\cos^{-1}\left(__CARET__\\right)","atan":"\\tan^{-1}\left(__CARET__\\right)",
+        "ln":"\\ln\left(__CARET__\\right)","log10":"\\log_{10}\left(__CARET__\\right)",
+        "logbase":"\\log_{__CARET__}\left(\\right)",
+        "derivative":"\\frac{d}{dx}\left(__CARET__\\right)",
+        "integral":"\\int __CARET__ \\, dx","epower":"e^{__CARET__}","tenpower":"10^{__CARET__}",
+        "nthroot":"\\sqrt[__CARET__]{}","subscript":"_{__CARET__}",
+        "neq":"\\ne ","and":"\\land ","or":"\\lor ","not":"\\neg ","otimes":"\\otimes ",
+        "parallel":"\\parallel ","perp":"\\perp ","in":"\\in ","subset":"\\subset ","subseteq":"\\subseteq ",
+        "angle":"\\angle ","to":"\\to ","ceil":"\\left\\lceil __CARET__ \\right\\rceil",
+        "floor":"\\left\\lfloor __CARET__ \\right\\rfloor",
+        "bulletparen":"(\\bullet)","colonparen":"(:)","vdotsparen":"(\\vdots)",
+        "backslash":"\\backslash ","prime":"^{\\prime}","doubleprime":"^{\\prime\\prime}",
+        "ans":"\\mathrm{ans}","newline":"\n"
+      };
+      return map[token] ?? token;
     }
 
     function afterEdit() {
@@ -1150,9 +1219,13 @@
       snapshot();
       const start = activeInput.selectionStart ?? activeInput.value.length;
       const end = activeInput.selectionEnd ?? start;
-      const value = latexForKey(token);
+      const template = tokenTemplate(token);
+      const marker = "__CARET__";
+      const markerIndex = template.indexOf(marker);
+      const value = markerIndex >= 0 ? template.replace(marker, "") : template;
+
       activeInput.value = activeInput.value.slice(0,start) + value + activeInput.value.slice(end);
-      const next = start + value.length;
+      const next = markerIndex >= 0 ? start + markerIndex : start + value.length;
       activeInput.focus({ preventScroll:true });
       activeInput.setSelectionRange(next,next);
       afterEdit();
@@ -1170,15 +1243,6 @@
       }
       activeInput.focus({ preventScroll:true });
       activeInput.setSelectionRange(start,start);
-      afterEdit();
-    }
-
-    function clearActive() {
-      if (!activeInput.value) return;
-      snapshot();
-      activeInput.value = "";
-      activeInput.focus({ preventScroll:true });
-      activeInput.setSelectionRange(0,0);
       afterEdit();
     }
 
@@ -1223,48 +1287,108 @@
       stateNode.textContent = "Saved";
     }
 
-    function makeUtility(label,title,handler,extraClass="") {
-      const button=document.createElement("button");
-      button.type="button";
-      button.className=`math-utility-key ${extraClass}`.trim();
-      button.textContent=label;
-      button.title=title;
-      button.addEventListener("mousedown",event=>event.preventDefault());
-      button.addEventListener("click",handler);
-      utilityBar.appendChild(button);
+    function alphabetRows() {
+      const latin = alphabetShift
+        ? ["Q","W","E","R","T","Y","U","I","O","P","A","S","D","F","G","H","J","K","L","Z","X","C","V","B","N","M"]
+        : ["q","w","e","r","t","y","u","i","o","p","a","s","d","f","g","h","j","k","l","z","x","c","v","b","n","m"];
+      const greek = ["α","β","γ","δ","ε","ζ","η","θ","ι","κ","λ","μ","ν","ξ","ο","π","ρ","σ","τ","υ","φ","χ","ψ","ω"];
+      const letters = alphabetGreek ? greek : latin;
+
+      return [
+        letters.slice(0,10).map(ch=>({label:ch,token:ch})),
+        letters.slice(10,19).map(ch=>({label:ch,token:ch})),
+        [
+          {label:"⇧",action:"shift",utility:true},
+          ...letters.slice(19).map(ch=>({label:ch,token:ch})),
+          {label:"⌫",action:"backspace",utility:true}
+        ],
+        [
+          {label:alphabetGreek ? "ABC" : "αβγ",action:"alphabet",utility:true},
+          {label:",",token:","},{label:"(",token:"("},{label:")",token:")"},
+          {label:"space",token:" ",wide:true,blank:true},
+          {label:"‹",action:"left",utility:true},{label:"›",action:"right",utility:true},{label:"↵",action:"enter",utility:true}
+        ]
+      ];
     }
 
-    makeUtility("↶","Undo",undo);
-    makeUtility("↷","Redo",redo);
-    makeUtility("◀","Move cursor left",()=>moveCursor(-1));
-    makeUtility("▶","Move cursor right",()=>moveCursor(1));
-    makeUtility("↵ Enter","Start a new solution line",()=>insertToken("newline"),"enter-key");
-    makeUtility("⌫","Backspace",backspace,"delete-key");
-    makeUtility("Clear","Clear active box",clearActive,"clear-key");
-    makeUtility("ⓧ","Close keyboard",closeKeyboard,"close-key");
+    function performKeyAction(key) {
+      if (key.action === "backspace") return backspace();
+      if (key.action === "left") return moveCursor(-1);
+      if (key.action === "right") return moveCursor(1);
+      if (key.action === "enter") return insertToken("newline");
+      if (key.action === "undo") return undo();
+      if (key.action === "redo") return redo();
+      if (key.action === "close") return closeKeyboard();
+      if (key.action === "shift") {
+        alphabetShift = !alphabetShift;
+        return renderKeyboard("abc");
+      }
+      if (key.action === "alphabet") {
+        alphabetGreek = !alphabetGreek;
+        alphabetShift = false;
+        return renderKeyboard("abc");
+      }
+      insertToken(key.token ?? key.label);
+    }
 
-    function renderKeys(index) {
-      [...tabBar.children].forEach((button,i)=>button.classList.toggle("active",i===index));
-      keyArea.innerHTML="";
-      tabs[index].keys.forEach(key=>{
-        const button=document.createElement("button");
-        button.type="button";
-        button.className="math-key";
-        button.textContent=key;
-        button.addEventListener("mousedown",event=>event.preventDefault());
-        button.addEventListener("click",()=>insertToken(key));
-        keyArea.appendChild(button);
+    function renderKeyboard(tabId = activeKeyboardTab) {
+      activeKeyboardTab = tabId;
+      [...tabBar.querySelectorAll(".math-keyboard-tab")].forEach(button => {
+        button.classList.toggle("active", button.dataset.tab === tabId);
+      });
+
+      keyArea.innerHTML = "";
+      const rows = tabId === "abc" ? alphabetRows() : layouts[tabId];
+
+      rows.forEach((row, rowIndex) => {
+        const rowNode = document.createElement("div");
+        rowNode.className = `math-keyboard-row math-keyboard-row-${tabId} math-keyboard-row-index-${rowIndex}`;
+
+        row.forEach(key => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "math-key";
+          if (key.utility) button.classList.add("math-key-utility");
+          if (key.wide) button.classList.add("math-key-wide");
+          if (key.blank) button.classList.add("math-key-space");
+          button.textContent = key.blank ? "" : key.label;
+          button.title = key.label === "⌫" ? "Backspace"
+            : key.label === "‹" ? "Move cursor left"
+            : key.label === "›" ? "Move cursor right"
+            : key.label === "↵" ? "New solution line"
+            : key.label;
+          button.addEventListener("mousedown", event => event.preventDefault());
+          button.addEventListener("click", () => performKeyAction(key));
+          rowNode.appendChild(button);
+        });
+
+        keyArea.appendChild(rowNode);
       });
     }
 
-    tabs.forEach((tab,index)=>{
-      const button=document.createElement("button");
-      button.type="button";
-      button.textContent=tab.name;
-      button.addEventListener("mousedown",event=>event.preventDefault());
-      button.addEventListener("click",()=>renderKeys(index));
+    keyboardTabs.forEach(tab => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "math-keyboard-tab";
+      button.dataset.tab = tab.id;
+      button.textContent = tab.label;
+      button.addEventListener("mousedown", event => event.preventDefault());
+      button.addEventListener("click", () => renderKeyboard(tab.id));
       tabBar.appendChild(button);
     });
+
+    const menuButton = document.createElement("button");
+    menuButton.type = "button";
+    menuButton.className = "math-keyboard-menu";
+    menuButton.textContent = "•••";
+    menuButton.title = "Keyboard actions";
+    menuButton.addEventListener("mousedown", event => event.preventDefault());
+    menuButton.addEventListener("click", () => {
+      const shouldUndo = confirm("Keyboard actions:\nOK = Undo last edit\nCancel = Close keyboard");
+      if (shouldUndo) undo();
+      else closeKeyboard();
+    });
+    tabBar.appendChild(menuButton);
 
     function autosize() {
       solution.style.height="auto";
@@ -1310,9 +1434,9 @@
       });
     });
 
-    keyboard.append(tabBar,keyArea,utilityBar);
+    keyboard.append(tabBar,keyArea);
     container.append(solutionLabel,solution,finalLabel,finalAnswer,preview,keyboard);
-    renderKeys(0);
+    renderKeyboard("123");
     autosize();
     updatePreview();
 
