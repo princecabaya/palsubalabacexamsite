@@ -2359,3 +2359,176 @@ textarea{resize:vertical}
   }
   .teacher-message-presets button{width:100%}
 }
+
+
+/* =========================================================
+   Compact mobile student login
+   ========================================================= */
+@media(max-width:640px){
+  body{
+    padding:8px;
+  }
+
+  .shell{
+    width:100%;
+    max-width:none;
+  }
+
+  #loginView.login-card{
+    width:100%;
+    max-width:none;
+    margin:8px auto;
+    padding:14px;
+    border-radius:14px;
+    box-shadow:0 4px 18px rgba(20,35,70,.05);
+  }
+
+  #loginView .brand{
+    gap:10px;
+    margin-bottom:12px;
+  }
+
+  #loginView .logo{
+    width:42px;
+    height:42px;
+    border-radius:12px;
+    flex:0 0 42px;
+    font-size:.9rem;
+  }
+
+  #loginView .brand h1{
+    font-size:1.28rem;
+    line-height:1.08;
+    letter-spacing:-.01em;
+  }
+
+  #loginView .brand .muted{
+    margin-top:2px;
+    font-size:.82rem;
+    line-height:1.25;
+  }
+
+  #loginView .notice{
+    margin:10px 0 12px;
+    padding:10px 11px;
+    border-radius:10px;
+    font-size:.78rem;
+    line-height:1.38;
+  }
+
+  #loginView label{
+    margin:10px 0 5px;
+    font-size:.88rem;
+    line-height:1.25;
+  }
+
+  #loginView input[type="text"],
+  #loginView input:not([type]),
+  #loginView #examCode,
+  #loginView #studentNo{
+    min-height:44px;
+    padding:10px 11px;
+    font-size:16px;
+    border-radius:9px;
+  }
+
+  #loginView .check{
+    display:grid;
+    grid-template-columns:22px minmax(0,1fr);
+    gap:9px;
+    align-items:start;
+    margin:12px 0 4px;
+    font-size:.76rem;
+    line-height:1.35;
+    font-weight:500;
+  }
+
+  #loginView .check input[type="checkbox"]{
+    width:20px;
+    height:20px;
+    margin:1px 0 0;
+    padding:0;
+    accent-color:var(--primary);
+  }
+
+  #loginView .check span{
+    min-width:0;
+  }
+
+  #loginView .student-login-actions{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+    margin-top:12px;
+  }
+
+  #loginView .student-login-actions button{
+    width:100%;
+    min-height:48px;
+    height:auto;
+    flex:none;
+    padding:11px 14px;
+    border-radius:10px;
+    font-size:.92rem;
+    line-height:1.2;
+  }
+
+  #loginView #startBtn{
+    font-weight:800;
+  }
+
+  #loginView #viewResultBtn{
+    background:#fff;
+    color:var(--primary);
+    border-color:#cfd8ee;
+    font-weight:700;
+  }
+
+  #loginView .message{
+    min-height:0;
+    margin:8px 0 0;
+    font-size:.8rem;
+    line-height:1.3;
+  }
+
+  #loginView .student-site-tools{
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--line);
+  }
+
+  #loginView .student-site-tools .teacher-link,
+  #loginView .student-site-tools .link-button{
+    width:auto;
+    margin:0;
+    min-height:auto;
+    padding:2px 0;
+    font-size:.74rem;
+    line-height:1.2;
+    text-align:left;
+  }
+
+  #loginView .student-site-tools .link-button{
+    text-align:right;
+  }
+}
+
+@media(max-width:380px){
+  #loginView.login-card{
+    padding:12px;
+  }
+
+  #loginView .student-site-tools{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  #loginView .student-site-tools .link-button{
+    text-align:left;
+  }
+}
