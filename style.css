@@ -1903,3 +1903,78 @@ textarea{resize:vertical}
     padding-inline:4%;
   }
 }
+
+
+/* =========================================================
+   Question item stimuli: images, graphs, and LaTeX displays
+   ========================================================= */
+.question-stimulus-builder{
+  margin:14px 0;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#f8fafc;
+}
+.question-stimulus-builder .detail-head{align-items:center}
+.stimulus-type{min-width:180px}
+.stimulus-panel{display:grid;gap:10px;margin-top:12px}
+.stimulus-upload-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stimulus-upload-row input[type="file"]{flex:1;min-width:220px}
+.stimulus-preview{
+  margin-top:12px;
+  min-height:0;
+  text-align:center;
+}
+.stimulus-preview:empty{display:none}
+.stimulus-preview-image,
+.item-stimulus-image{
+  display:block;
+  max-width:min(100%,760px);
+  max-height:520px;
+  width:auto;
+  height:auto;
+  margin:0 auto;
+  object-fit:contain;
+  border-radius:8px;
+}
+.stimulus-graph-canvas,
+.item-stimulus-graph{
+  display:block;
+  width:min(100%,760px);
+  height:auto;
+  margin:0 auto;
+  border:1px solid #d7dce3;
+  border-radius:8px;
+  background:#fff;
+}
+.stimulus-latex-render,
+.item-stimulus-latex{
+  padding:14px;
+  overflow-x:auto;
+  text-align:center;
+  font-size:1.05rem;
+}
+.stimulus-caption,
+.item-stimulus figcaption{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:.88rem;
+  font-style:italic;
+  text-align:center;
+}
+.item-stimulus{
+  margin:14px auto 18px;
+  padding:12px;
+  border:1px solid #e0e5eb;
+  border-radius:12px;
+  background:#fff;
+  text-align:center;
+}
+.item-stimulus-preview{background:#fbfdff}
+@media(max-width:720px){
+  .question-stimulus-builder .detail-head{align-items:stretch;flex-direction:column}
+  .stimulus-type{width:100%}
+  .stimulus-upload-row{align-items:stretch;flex-direction:column}
+  .stimulus-upload-row input[type="file"],.stimulus-upload-row button{width:100%}
+  .item-stimulus{padding:8px}
+}
