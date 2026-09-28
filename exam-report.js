@@ -336,10 +336,10 @@
       const answer = item.student_answer || "No answer";
       const correctAnswer = item.correct_answer == null ? "Not auto-scored" : item.correct_answer;
       tr.innerHTML = `
-        <td><strong>${escapeHtml(item.position ?? "")}</strong></td>
-        <td><span class="result-status ${cssClass}">${escapeHtml(resultLabel(item))}</span></td>
-        <td>${escapeHtml(answer)}</td>
-        <td>${escapeHtml(correctAnswer)}</td>
+        <td data-label="Item"><strong>${escapeHtml(item.position ?? "")}</strong></td>
+        <td data-label="Result"><span class="result-status ${cssClass}">${escapeHtml(resultLabel(item))}</span></td>
+        <td data-label="Your Answer">${escapeHtml(answer)}</td>
+        <td data-label="Correct Answer">${escapeHtml(correctAnswer)}</td>
       `;
       rowsNode.appendChild(tr);
     }
