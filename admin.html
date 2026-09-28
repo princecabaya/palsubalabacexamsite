@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260928-2138">
+  <link rel="stylesheet" href="style.css?v=20260928-2245">
 </head>
 <body>
   <main class="shell wide">
@@ -365,6 +365,86 @@
                   </table>
                 </div>
                 <p class="muted result-note">Ranking is based only on approved final percentages. Attempts awaiting teacher review are not ranked yet.</p>
+
+                <div class="row test-analysis-actions">
+                  <button id="openTestAnalysisBtn" type="button" class="primary">Test Analysis</button>
+                  <span id="testAnalysisStatus" class="message-inline"></span>
+                </div>
+
+                <section id="testAnalysisPanel" class="test-analysis-panel hidden">
+                  <div class="detail-head">
+                    <div>
+                      <h3>Exam Validity, Reliability & Statistical Report</h3>
+                      <p class="muted">Classical test statistics and item-level evidence from finalized submitted attempts.</p>
+                    </div>
+                    <div class="row">
+                      <button id="downloadTestAnalysisCsvBtn" type="button">Download CSV</button>
+                      <button id="printTestAnalysisBtn" type="button">Print Report</button>
+                      <button id="closeTestAnalysisBtn" type="button">Close</button>
+                    </div>
+                  </div>
+
+                  <div id="testAnalysisCautions" class="analysis-cautions"></div>
+
+                  <div class="analysis-section">
+                    <h4>Descriptive Statistics</h4>
+                    <div class="result-summary analysis-metrics">
+                      <div class="metric-card"><span>Analyzed N</span><strong id="analysisN">—</strong></div>
+                      <div class="metric-card"><span>Mean</span><strong id="analysisMean">—</strong></div>
+                      <div class="metric-card"><span>Median</span><strong id="analysisMedian">—</strong></div>
+                      <div class="metric-card"><span>SD</span><strong id="analysisSd">—</strong></div>
+                      <div class="metric-card"><span>Minimum</span><strong id="analysisMin">—</strong></div>
+                      <div class="metric-card"><span>Maximum</span><strong id="analysisMax">—</strong></div>
+                    </div>
+                  </div>
+
+                  <div class="analysis-section">
+                    <h4>Reliability</h4>
+                    <div class="result-summary analysis-metrics">
+                      <div class="metric-card"><span>Cronbach's α</span><strong id="analysisAlpha">—</strong></div>
+                      <div class="metric-card"><span>KR-20</span><strong id="analysisKr20">—</strong></div>
+                      <div class="metric-card"><span>SEM</span><strong id="analysisSem">—</strong></div>
+                      <div class="metric-card"><span>Split-half</span><strong id="analysisSplitHalf">—</strong></div>
+                    </div>
+                    <p id="analysisReliabilityNote" class="muted"></p>
+                  </div>
+
+                  <div class="analysis-section">
+                    <h4>Validity-Related Evidence</h4>
+                    <p class="muted">These are item-functioning and internal-structure indicators. They do not by themselves prove content, criterion, or construct validity.</p>
+                    <div class="result-summary analysis-metrics">
+                      <div class="metric-card"><span>Positive Item-Total</span><strong id="analysisPositiveDiscrimination">—</strong></div>
+                      <div class="metric-card"><span>Negative Item-Total</span><strong id="analysisNegativeDiscrimination">—</strong></div>
+                      <div class="metric-card"><span>Mean Item Difficulty</span><strong id="analysisMeanDifficulty">—</strong></div>
+                      <div class="metric-card"><span>Flagged Items</span><strong id="analysisFlaggedItems">—</strong></div>
+                    </div>
+                  </div>
+
+                  <div class="analysis-section">
+                    <h4>Item Analysis</h4>
+                    <div class="table-wrap">
+                      <table class="analysis-item-table">
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Type</th>
+                            <th>Max</th>
+                            <th>Difficulty / Mean Fraction</th>
+                            <th>Corrected Item-Total r</th>
+                            <th>Alpha if Deleted</th>
+                            <th>Flag</th>
+                          </tr>
+                        </thead>
+                        <tbody id="analysisItemRows"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="analysis-section">
+                    <h4>Distractor Analysis</h4>
+                    <div id="analysisDistractorReport"></div>
+                  </div>
+                </section>
               </section>
             </div>
 
@@ -609,7 +689,7 @@
   <script src="exam-report.js?v=20260928-2030"></script>
   <script src="admin.js?v=20260928-2030"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
-  <script src="admin-results.js?v=20260924-2230"></script>
+  <script src="admin-results.js?v=20260928-2245"></script>
   <script src="admin-students.js?v=20260921-1235"></script>
 </body>
 </html>
