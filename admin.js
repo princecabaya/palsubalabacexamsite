@@ -1545,6 +1545,165 @@
     }).filter(item => item.criterion || item.levels?.length);
   }
 
+  function normalizeStimulusPayload(type, payload = {}) {
+    const p = payload && typeof payload === "object" ? payload : {};
+    if (type === "image") return {
+      url: String(p.url || ""),
+      path: String(p.path || ""),
+      caption: String(p.caption || ""),
+      alt: String(p.alt || "")
+    };
+    if (type === "graph") return {
+      expression: String(p.expression || "x"),
+      xmin: Number.isFinite(Number(p.xmin)) ? Number(p.xmin) : -5,
+      xmax: Number.isFinite(Number(p.xmax)) ? Number(p.xmax) : 5,
+      ymin: Number.isFinite(Number(p.ymin)) ? Number(p.ymin) : -5,
+      ymax: Number.isFinite(Number(p.ymax)) ? Number(p.ymax) : 5,
+      caption: String(p.caption || "")
+    };
+    if (type === "latex") return {
+      latex: String(p.latex || ""),
+      caption: String(p.caption || "")
+    };
+    return {};
+  }
+
+  function compileStimulusGraphExpression(source) {
+    const raw = String(source || "").trim().toLowerCase();
+    if (!raw) throw new Error("Enter a function.");
+    let expr = raw.replace(/π/g,"pi").replace(/\^/g,"**");
+    const allowedNames = ["sin","cos","tan","asin","acos","atan","sqrt","abs","exp","log","ln","floor","ceil","pi","e","x"];
+    const scrubbed = expr.replace(/[a-z]+/g, name => allowedNames.includes(name) ? "" : "BAD");
+    if (/BAD|[^0-9+\-*/().,\s*]/.test(scrubbed)) throw new Error("Use x, numbers, + − × ÷, powers, parentheses, and standard functions only.");
+    expr = expr
+      .replace(/\bln\b/g,"Math.log")
+      .replace(/\blog\b/g,"Math.log10")
+      .replace(/\bsin\b/g,"Math.sin").replace(/\bcos\b/g,"Math.cos").replace(/\btan\b/g,"Math.tan")
+      .replace(/\basin\b/g,"Math.asin").replace(/\bacos\b/g,"Math.acos").replace(/\batan\b/g,"Math.atan")
+      .replace(/\bsqrt\b/g,"Math.sqrt").replace(/\babs\b/g,"Math.abs").replace(/\bexp\b/g,"Math.exp")
+      .replace(/\bfloor\b/g,"Math.floor").replace(/\bceil\b/g,"Math.ceil")
+      .replace(/\bpi\b/g,"Math.PI").replace(/\be\b/g,"Math.E");
+    const fn = new Function("x", `"use strict"; return (${expr});`);
+    return x => {
+      const y = Number(fn(x));
+      return Number.isFinite(y) ? y : NaN;
+    };
+  }
+
+  function drawStimulusGraph(canvas, payload) {
+    const width = 640, height = 360, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = width*dpr; canvas.height = height*dpr;
+    canvas.style.aspectRatio = "16 / 9";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,width,height);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0,0,width,height);
+
+    const xmin=Number(payload.xmin), xmax=Number(payload.xmax), ymin=Number(payload.ymin), ymax=Number(payload.ymax);
+    if (!(xmax>xmin) || !(ymax>ymin)) throw new Error("Graph maximums must be greater than minimums.");
+    const px=x=>((x-xmin)/(xmax-xmin))*width;
+    const py=y=>height-((y-ymin)/(ymax-ymin))*height;
+
+    ctx.strokeStyle="#e5e7eb"; ctx.lineWidth=1;
+    for(let i=0;i<=10;i++){ const x=i*width/10; ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke(); }
+    for(let i=0;i<=8;i++){ const y=i*height/8; ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke(); }
+
+    ctx.strokeStyle="#64748b"; ctx.lineWidth=1.5;
+    if(xmin<=0&&xmax>=0){ const x0=px(0);ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(x0,height);ctx.stroke(); }
+    if(ymin<=0&&ymax>=0){ const y0=py(0);ctx.beginPath();ctx.moveTo(0,y0);ctx.lineTo(width,y0);ctx.stroke(); }
+
+    const fn=compileStimulusGraphExpression(payload.expression);
+    ctx.strokeStyle="#111827"; ctx.lineWidth=2.2; ctx.beginPath();
+    let drawing=false;
+    for(let i=0;i<=width;i++){
+      const x=xmin+(i/width)*(xmax-xmin), y=fn(x), sy=py(y);
+      if(!Number.isFinite(y)||sy<-height||sy>height*2){drawing=false;continue;}
+      if(!drawing){ctx.moveTo(i,sy);drawing=true;} else ctx.lineTo(i,sy);
+    }
+    ctx.stroke();
+    ctx.fillStyle="#475569"; ctx.font="13px sans-serif";
+    ctx.fillText(`x: ${xmin} to ${xmax}`,10,height-10);
+    ctx.fillText(`y: ${ymin} to ${ymax}`,width-105,height-10);
+  }
+
+  function currentStimulusFromCard(card) {
+    const type = card.querySelector(".stimulus-type")?.value || "none";
+    if (type === "image") return {
+      type,
+      payload: {
+        url: card.dataset.stimulusImageUrl || "",
+        path: card.dataset.stimulusImagePath || "",
+        caption: card.querySelector(".stimulus-image-caption")?.value?.trim() || "",
+        alt: card.querySelector(".stimulus-image-alt")?.value?.trim() || ""
+      }
+    };
+    if (type === "graph") return {
+      type,
+      payload: {
+        expression: card.querySelector(".stimulus-graph-expression")?.value?.trim() || "",
+        xmin: Number(card.querySelector(".stimulus-xmin")?.value),
+        xmax: Number(card.querySelector(".stimulus-xmax")?.value),
+        ymin: Number(card.querySelector(".stimulus-ymin")?.value),
+        ymax: Number(card.querySelector(".stimulus-ymax")?.value),
+        caption: card.querySelector(".stimulus-graph-caption")?.value?.trim() || ""
+      }
+    };
+    if (type === "latex") return {
+      type,
+      payload: {
+        latex: card.querySelector(".stimulus-latex-source")?.value || "",
+        caption: card.querySelector(".stimulus-latex-caption")?.value?.trim() || ""
+      }
+    };
+    return { type:"none", payload:{} };
+  }
+
+  function refreshStimulusPreview(card) {
+    const type = card.querySelector(".stimulus-type")?.value || "none";
+    card.querySelectorAll(".stimulus-panel").forEach(node=>node.classList.add("hidden"));
+    card.querySelector(`.stimulus-${type}-panel`)?.classList.remove("hidden");
+    const preview=card.querySelector(".stimulus-preview");
+    preview.innerHTML="";
+    if(type==="none") return;
+
+    const {payload}=currentStimulusFromCard(card);
+    if(type==="image"){
+      if(!payload.url){ preview.innerHTML='<p class="muted">Upload an image to preview the stimulus.</p>'; return; }
+      const img=document.createElement("img"); img.src=payload.url; img.alt=payload.alt||"Question stimulus"; img.className="stimulus-preview-image";
+      preview.appendChild(img);
+    } else if(type==="graph"){
+      const canvas=document.createElement("canvas"); canvas.className="stimulus-graph-canvas"; preview.appendChild(canvas);
+      try { drawStimulusGraph(canvas,payload); } catch(error){ preview.innerHTML=`<p class="message-inline error">${escapeHtml(error.message)}</p>`; return; }
+    } else if(type==="latex"){
+      const div=document.createElement("div"); div.className="stimulus-latex-render math-rendered"; div.textContent=payload.latex||"Enter LaTeX above."; preview.appendChild(div);
+      if(window.MathJax?.typesetPromise){ window.MathJax.typesetClear?.([div]); window.MathJax.typesetPromise([div]).catch(()=>{}); }
+    }
+    if(payload.caption){
+      const cap=document.createElement("div"); cap.className="stimulus-caption"; cap.textContent=payload.caption; preview.appendChild(cap);
+    }
+  }
+
+  async function uploadStimulusImage(card) {
+    const file=card.querySelector(".stimulus-image-file")?.files?.[0];
+    const status=card.querySelector(".stimulus-image-status");
+    if(!file){ status.textContent="Choose a PNG, JPG, or WebP image first."; return; }
+    if(file.size>5000000){ status.textContent="Image must be 5 MB or smaller."; return; }
+    if(!["image/png","image/jpeg","image/webp"].includes(file.type)){ status.textContent="Use PNG, JPG, or WebP."; return; }
+    const owner=getActiveWorkspaceOwnerId();
+    if(!owner){ status.textContent="Teacher workspace is unavailable."; return; }
+    const ext=file.type==="image/png"?"png":file.type==="image/webp"?"webp":"jpg";
+    const path=`${owner}/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${ext}`;
+    status.textContent="Uploading image…";
+    const {error}=await db.storage.from("exam-stimuli").upload(path,file,{contentType:file.type,upsert:false});
+    if(error){ status.textContent=`Upload failed: ${error.message}. Run supabase-upgrade-question-stimuli.sql if needed.`; return; }
+    const {data}=db.storage.from("exam-stimuli").getPublicUrl(path);
+    card.dataset.stimulusImageUrl=data.publicUrl||"";
+    card.dataset.stimulusImagePath=path;
+    status.textContent="Image uploaded.";
+    refreshStimulusPreview(card);
+    scheduleExamDraftAutosave();
+  }
+
   function addQuestionCard(prefill = null) {
     questionCounter += 1;
     const idx = questionCounter;
@@ -1555,13 +1714,21 @@
       choices: ["", "", "", ""],
       correct_answer: "",
       rubric_type: "analytic",
-      rubric_criteria: []
+      rubric_criteria: [],
+      stimulus_type: "none",
+      stimulus_payload: {}
     };
 
     const card = document.createElement("section");
     card.className = "question-card";
     card.dataset.qid = String(idx);
     card.dataset.sectionTitle = q.section_title || "";
+    const initialStimulusType = q.stimulus_type || "none";
+    const initialStimulusPayload = normalizeStimulusPayload(initialStimulusType, q.stimulus_payload);
+    if (initialStimulusType === "image") {
+      card.dataset.stimulusImageUrl = initialStimulusPayload.url || "";
+      card.dataset.stimulusImagePath = initialStimulusPayload.path || "";
+    }
     card.innerHTML = `
       <div class="detail-head">
         <div>
@@ -1575,6 +1742,62 @@
         <textarea class="q-prompt" rows="4" placeholder="Enter the question here">${escapeAttr(q.prompt)}</textarea>
       </label>
       <div class="math-preview" aria-label="Question math preview"></div>
+
+      <section class="question-stimulus-builder">
+        <div class="detail-head">
+          <div>
+            <h4>Item Stimulus <span class="muted">(optional)</span></h4>
+            <p class="muted">Attach an image, generate a function graph, or show a separate LaTeX display before the answer area.</p>
+          </div>
+          <select class="stimulus-type" aria-label="Stimulus type">
+            <option value="none">None</option>
+            <option value="image">Image / Illustration</option>
+            <option value="graph">Function Graph</option>
+            <option value="latex">LaTeX Display</option>
+          </select>
+        </div>
+
+        <div class="stimulus-panel stimulus-image-panel hidden">
+          <div class="stimulus-upload-row">
+            <input class="stimulus-image-file" type="file" accept="image/png,image/jpeg,image/webp">
+            <button type="button" class="stimulus-upload-btn">Upload Image</button>
+            <button type="button" class="stimulus-remove-image-btn">Remove</button>
+          </div>
+          <label>Caption
+            <input class="stimulus-image-caption" placeholder="Optional figure caption">
+          </label>
+          <label>Alt text
+            <input class="stimulus-image-alt" placeholder="Brief description of the image">
+          </label>
+          <div class="stimulus-image-status muted"></div>
+        </div>
+
+        <div class="stimulus-panel stimulus-graph-panel hidden">
+          <div class="form-grid compact">
+            <label>Function (y=f(x))
+              <input class="stimulus-graph-expression" placeholder="e.g. x^2 - 4">
+            </label>
+            <label>x-min <input class="stimulus-xmin" type="number" step="any" value="-5"></label>
+            <label>x-max <input class="stimulus-xmax" type="number" step="any" value="5"></label>
+            <label>y-min <input class="stimulus-ymin" type="number" step="any" value="-5"></label>
+            <label>y-max <input class="stimulus-ymax" type="number" step="any" value="5"></label>
+          </div>
+          <label>Caption
+            <input class="stimulus-graph-caption" placeholder="Optional graph caption">
+          </label>
+        </div>
+
+        <div class="stimulus-panel stimulus-latex-panel hidden">
+          <label>LaTeX stimulus
+            <textarea class="stimulus-latex-source" rows="4" placeholder="e.g. \\[\\begin{array}{c|ccc}x&1&2&3\\\\f(x)&2&4&6\\end{array}\\]"></textarea>
+          </label>
+          <label>Caption
+            <input class="stimulus-latex-caption" placeholder="Optional caption">
+          </label>
+        </div>
+
+        <div class="stimulus-preview"></div>
+      </section>
 
       <div class="form-grid compact">
         <label>Question type
@@ -1685,6 +1908,31 @@
 
     $("questionBuilder").appendChild(card);
 
+    const stimulusTypeSelect = card.querySelector(".stimulus-type");
+    stimulusTypeSelect.value = initialStimulusType;
+    card.querySelector(".stimulus-image-caption").value = initialStimulusPayload.caption || "";
+    card.querySelector(".stimulus-image-alt").value = initialStimulusPayload.alt || "";
+    card.querySelector(".stimulus-graph-expression").value = initialStimulusPayload.expression || "x";
+    card.querySelector(".stimulus-xmin").value = initialStimulusPayload.xmin ?? -5;
+    card.querySelector(".stimulus-xmax").value = initialStimulusPayload.xmax ?? 5;
+    card.querySelector(".stimulus-ymin").value = initialStimulusPayload.ymin ?? -5;
+    card.querySelector(".stimulus-ymax").value = initialStimulusPayload.ymax ?? 5;
+    card.querySelector(".stimulus-graph-caption").value = initialStimulusPayload.caption || "";
+    card.querySelector(".stimulus-latex-source").value = initialStimulusPayload.latex || "";
+    card.querySelector(".stimulus-latex-caption").value = initialStimulusPayload.caption || "";
+
+    stimulusTypeSelect.addEventListener("change",()=>{ refreshStimulusPreview(card); scheduleExamDraftAutosave(); });
+    card.querySelector(".stimulus-upload-btn").addEventListener("click",()=>uploadStimulusImage(card));
+    card.querySelector(".stimulus-remove-image-btn").addEventListener("click",()=>{
+      card.dataset.stimulusImageUrl=""; card.dataset.stimulusImagePath="";
+      card.querySelector(".stimulus-image-file").value="";
+      card.querySelector(".stimulus-image-status").textContent="Image removed from this question.";
+      refreshStimulusPreview(card); scheduleExamDraftAutosave();
+    });
+    card.querySelectorAll(".stimulus-panel input,.stimulus-panel textarea").forEach(input=>{
+      input.addEventListener("input",()=>{ clearTimeout(card._stimulusTimer); card._stimulusTimer=setTimeout(()=>refreshStimulusPreview(card),180); });
+    });
+
     const promptInput = card.querySelector(".q-prompt");
     let mathPreviewTimer = null;
     promptInput.addEventListener("input", () => {
@@ -1739,6 +1987,7 @@
     refreshCorrectAnswerOptions(card, q.correct_answer);
     refreshBinaryAnswerOptions(card, q.correct_answer);
     renderMathPreview(card);
+    refreshStimulusPreview(card);
     renumberQuestionCards();
   }
 
