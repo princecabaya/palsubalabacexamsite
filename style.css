@@ -3000,3 +3000,75 @@ textarea{resize:vertical}
     font-size:.68rem;
   }
 }
+
+
+/* =========================================================
+   Live microphone sensitivity meter
+   ========================================================= */
+.microphone-monitor-content{
+  display:grid!important;
+  grid-template-columns:1fr;
+  gap:3px;
+  min-width:0;
+  flex:1;
+}
+.microphone-monitor-heading{
+  display:flex!important;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-width:0;
+}
+.microphone-monitor-heading span{
+  min-width:0;
+}
+#microphoneLevelLabel{
+  font-size:.66rem;
+  font-weight:800;
+  color:var(--muted);
+  white-space:nowrap;
+}
+#microphoneLevelLabel[data-level="good"]{color:#047857}
+#microphoneLevelLabel[data-level="high"]{color:#b45309}
+.microphone-level-track{
+  position:relative;
+  width:100%;
+  height:7px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#e5e7eb;
+}
+.microphone-level-fill{
+  position:absolute;
+  inset:0 auto 0 0;
+  width:0%;
+  border-radius:inherit;
+  background:#64748b;
+  transition:width .08s linear;
+}
+.microphone-level-fill[data-level="good"]{background:#10b981}
+.microphone-level-fill[data-level="high"]{background:#f59e0b}
+.microphone-threshold-marker{
+  position:absolute;
+  top:-2px;
+  bottom:-2px;
+  width:2px;
+  left:25%;
+  background:#111827;
+  opacity:.65;
+  transform:translateX(-1px);
+}
+@media(max-width:620px){
+  .microphone-monitor-box{
+    align-items:center;
+  }
+  .microphone-monitor-content{
+    gap:2px;
+  }
+  .microphone-level-track{
+    height:6px;
+  }
+  #microphoneLevelLabel{
+    font-size:.62rem;
+  }
+}
