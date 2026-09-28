@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260928-2230">
+  <link rel="stylesheet" href="style.css?v=20260929-0005">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -118,6 +118,15 @@
           <span>Time</span>
           <strong id="fixedRemainingTime">--:--</strong>
         </div>
+      </div>
+
+      <div id="teacherLiveMessage" class="teacher-live-message hidden" role="status" aria-live="polite">
+        <div class="teacher-live-message-head">
+          <span>Teacher message</span>
+          <button id="dismissTeacherMessageBtn" type="button" aria-label="Dismiss teacher message">×</button>
+        </div>
+        <div id="teacherLiveMessageText" class="teacher-live-message-text"></div>
+        <div id="teacherLiveMessageTime" class="teacher-live-message-time"></div>
       </div>
 
       <div id="warningBar" class="warning hidden" role="alert"></div>
@@ -253,7 +262,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="app.js?v=20260928-2230"></script>
+  <script src="app.js?v=20260929-0005"></script>
   <script src="student-feedback.js?v=20260924-1905"></script>
 </body>
 </html>
