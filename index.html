@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260929-0025">
+  <link rel="stylesheet" href="style.css?v=20260929-0038">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -161,21 +161,24 @@
           <div class="metric-card"><span>Wrong Items</span><strong id="studentWrongCount">—</strong></div>
         </div>
 
-        <div class="table-wrap result-review-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Result</th>
-                <th>Your Answer</th>
-                <th>Correct Answer</th>
-              </tr>
-            </thead>
-            <tbody id="studentResultRows">
-              <tr><td colspan="4">Loading result review…</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <details class="student-result-details">
+          <summary>Review Answers</summary>
+          <div class="table-wrap result-review-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Result</th>
+                  <th>Your Answer</th>
+                  <th>Correct Answer</th>
+                </tr>
+              </thead>
+              <tbody id="studentResultRows">
+                <tr><td colspan="4">Loading result review…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
 
         <div class="row result-pdf-actions">
           <button id="resultPdfBtn" class="primary" type="button" disabled>Download Result PDF</button>
@@ -183,13 +186,16 @@
         </div>
       </section>
 
-      <section id="flexScorePanel" class="flex-score-panel hidden">
-        <div class="feedback-head">
-          <div>
-            <h2>Flex Your Score 🎉</h2>
-            <p class="muted">Take a celebratory selfie or short video with your exam score. Your media stays on this device unless you choose to share or save it.</p>
-          </div>
-        </div>
+      <details id="flexScorePanel" class="flex-score-panel hidden">
+        <summary class="flex-score-summary">
+          <span>
+            <strong>Flex Your Score 🎉</strong>
+            <small>Celebrate your result with a photo or short video.</small>
+          </span>
+        </summary>
+
+        <div class="flex-score-content">
+          <p class="muted flex-score-privacy">Your media stays on this device unless you choose to share or save it.</p>
 
         <div class="flex-score-controls">
           <label>Celebration message
@@ -230,18 +236,22 @@
           </div>
           <p id="flexStatus" class="message-inline"></p>
         </div>
-      </section>
-
-      <section id="aiFeedbackPanel" class="ai-feedback-panel hidden">
-        <div class="feedback-head">
-          <div>
-            <h2>Feedback on Incorrect Answers</h2>
-            <p class="muted">AI-generated learning feedback. Use it as guidance and verify with your instructor when needed.</p>
-          </div>
         </div>
+      </details>
+
+      <details id="aiFeedbackPanel" class="ai-feedback-panel hidden">
+        <summary class="ai-feedback-summary">
+          <span>
+            <strong>Feedback on Incorrect Answers</strong>
+            <small>Open learning feedback</small>
+          </span>
+        </summary>
+        <div class="ai-feedback-content">
+        <p class="muted">AI-generated learning feedback. Use it as guidance and verify with your instructor when needed.</p>
         <p id="aiFeedbackStatus" class="muted"></p>
         <div id="aiFeedbackItems" class="feedback-list"></div>
-      </section>
+        </div>
+      </details>
     </section>
   </main>
 
@@ -261,8 +271,8 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
-  <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="app.js?v=20260929-0015"></script>
+  <script src="exam-report.js?v=20260929-0038"></script>
+  <script src="app.js?v=20260929-0038"></script>
   <script src="student-feedback.js?v=20260924-1905"></script>
 </body>
 </html>
