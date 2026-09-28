@@ -243,6 +243,9 @@
 
 
   async function openExamResults(exam, { noScroll = false } = {}) {
+    panel.dataset.examId = exam.id || "";
+    panel.dataset.examCode = exam.code || "";
+    panel.dataset.examTitle = exam.title || "Exam";
     panel.classList.remove("hidden");
     $("examResultsTitle").textContent = exam.title;
     $("examResultsMeta").textContent = `${exam.code} • Loading student results…`;
