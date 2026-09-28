@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260929-0118">
+  <link rel="stylesheet" href="style.css?v=20260929-0135">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -85,9 +85,16 @@
           </div>
           <div class="microphone-monitor-box" aria-label="Microphone speech-event detection is active">
             <div class="microphone-indicator" aria-hidden="true">●</div>
-            <div>
-              <span>Microphone</span>
+            <div class="microphone-monitor-content">
+              <div class="microphone-monitor-heading">
+                <span>Microphone</span>
+                <strong id="microphoneLevelLabel">Idle</strong>
+              </div>
               <strong id="microphoneStatus">Waiting…</strong>
+              <div class="microphone-level-track" aria-label="Live microphone sensitivity">
+                <div id="microphoneLevelFill" class="microphone-level-fill"></div>
+                <div id="microphoneThresholdMarker" class="microphone-threshold-marker" aria-hidden="true"></div>
+              </div>
             </div>
           </div>
           <div class="timer-box">
@@ -275,7 +282,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20260929-0118"></script>
+  <script src="app.js?v=20260929-0135"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
