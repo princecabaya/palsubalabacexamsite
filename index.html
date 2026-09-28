@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260929-0050">
+  <link rel="stylesheet" href="style.css?v=20260929-0118">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -100,25 +100,28 @@
       <div id="examFlagBar" class="exam-flag-bar" aria-label="Live exam monitoring flags">
         <div class="flag-chip flag-chip-red" title="Restricted actions">
           <span class="flag-icon">⚑</span>
-          <span>Restricted</span>
+          <span class="flag-label flag-label-long">Restricted</span>
+          <span class="flag-label flag-label-short">Rules</span>
           <strong id="restrictedFlagCount">0</strong>
         </div>
         <div class="flag-chip flag-chip-yellow" title="Window blur or fullscreen exit">
           <span class="flag-icon">●</span>
-          <span>Focus</span>
+          <span class="flag-label">Focus</span>
           <strong id="focusFlagCount">0</strong>
         </div>
         <div id="speechFlagChip" class="flag-chip flag-chip-orange" title="Possible speech detected">
           <span class="flag-icon">●</span>
-          <span id="speechFlagLabel">Speech</span>
+          <span id="speechFlagLabel" class="flag-label">Speech</span>
           <strong id="speechFlagCount">0</strong>
         </div>
         <div class="flag-chip flag-chip-time" title="Remaining examination time">
           <span class="flag-icon">⏱</span>
-          <span>Time</span>
+          <span class="flag-label">Time</span>
           <strong id="fixedRemainingTime">--:--</strong>
         </div>
       </div>
+
+      <div id="mobileMonitoringNote" class="mobile-monitoring-note hidden" aria-live="polite"></div>
 
       <div id="teacherLiveMessage" class="teacher-live-message hidden" role="status" aria-live="polite">
         <div class="teacher-live-message-head">
@@ -272,7 +275,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20260929-0050"></script>
+  <script src="app.js?v=20260929-0118"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
