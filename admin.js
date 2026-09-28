@@ -1926,11 +1926,16 @@
 
     stimulusTypeSelect.addEventListener("change",()=>{ refreshStimulusPreview(card); scheduleExamDraftAutosave(); });
     card.querySelector(".stimulus-upload-btn").addEventListener("click",()=>uploadStimulusImage(card));
-    card.querySelector(".stimulus-remove-image-btn").addEventListener("click",()=>{
+    card.querySelector(".stimulus-remove-image-btn").addEventListener("click",async()=>{
+      const oldPath=card.dataset.stimulusImagePath||"";
       card.dataset.stimulusImageUrl=""; card.dataset.stimulusImagePath="";
       card.querySelector(".stimulus-image-file").value="";
       card.querySelector(".stimulus-image-status").textContent="Image removed from this question.";
       refreshStimulusPreview(card); scheduleExamDraftAutosave();
+      if(oldPath){
+        const {error}=await db.storage.from("exam-stimuli").remove([oldPath]);
+        if(error) console.warn("Stimulus image cleanup failed:",error);
+      }
     });
     card.querySelectorAll(".stimulus-panel input,.stimulus-panel textarea").forEach(input=>{
       input.addEventListener("input",()=>{ clearTimeout(card._stimulusTimer); card._stimulusTimer=setTimeout(()=>refreshStimulusPreview(card),180); });
@@ -3160,6 +3165,16 @@
     workspace?.classList.remove("review-mode");
     workspace?.classList.add("preview-mode", "split-active");
     panel.classList.remove("hidden");
+
+    if (exam.status === "draft" && Array.isArray(exam.draft_payload?.questions)) {
+      const draftQuestions = exam.draft_payload.questions.map((q,index)=>({
+        ...q,
+        position: index + 1,
+        section_title: q.section_title || "Part 1"
+      }));
+      renderExamPreviewQuestions(questionsNode, draftQuestions);
+      return;
+    }
 
     const { data: questions, error } = await db
       .from("questions")
