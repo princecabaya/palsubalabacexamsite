@@ -2007,252 +2007,688 @@ textarea{resize:vertical}
 /* =========================================================
    Post-exam Flex Your Score camera
    ========================================================= */
+
 .flex-score-panel{
   border-top:1px solid var(--line);
   margin-top:22px;
   padding-top:20px;
 }
+
+/* Controls */
 .flex-score-controls{
   display:flex;
   gap:10px;
-  align-items:end;
+  align-items:flex-end;
   flex-wrap:wrap;
   margin-top:14px;
 }
+
 .flex-score-controls label{
   flex:1 1 260px;
+  margin:0;
 }
+
+.flex-score-controls select{
+  min-height:44px;
+}
+
+
+/* =========================================================
+   Celebration camera stage
+   ========================================================= */
+
 .flex-camera-stage{
   position:relative;
-  width:min(100%,520px);
+  width:min(100%,440px);
   margin:16px auto 0;
-  aspect-ratio:9/16;
+
+  /*
+    A slightly shorter portrait card is more flattering
+    and prevents the camera from taking over the whole page.
+  */
+  aspect-ratio:4 / 5;
+
   overflow:hidden;
-  border-radius:20px;
-  background:#111;
-  box-shadow:0 10px 30px rgba(15,23,42,.14);
+  border-radius:22px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.04),
+      rgba(0,0,0,.12)
+    ),
+    #111;
+
+  border:1px solid rgba(255,255,255,.12);
+
+  box-shadow:
+    0 14px 36px rgba(15,23,42,.18),
+    0 2px 8px rgba(15,23,42,.10);
+
+  isolation:isolate;
 }
+
+
+/* Raw camera element is hidden because the canvas is the
+   visible rendered celebration image. */
 #flexCameraVideo{
   position:absolute;
   inset:0;
+
   width:100%;
   height:100%;
+
   object-fit:cover;
   transform:scaleX(-1);
+
   opacity:0;
   pointer-events:none;
 }
+
+
+/* Main rendered camera/capture canvas */
 .flex-camera-canvas{
   position:absolute;
   inset:0;
+
+  display:block;
   width:100%;
   height:100%;
+
   object-fit:cover;
+
+  border-radius:inherit;
+
+  z-index:1;
 }
+
+
+/*
+  IMPORTANT:
+  The JavaScript canvas already draws:
+  - celebration message
+  - score
+  - confetti
+
+  Therefore these HTML overlays must remain hidden.
+  Otherwise text such as "I made it!" and "2/2" appears twice.
+*/
+.flex-live-overlay,
+.flex-confetti{
+  display:none !important;
+}
+
+
+/* =========================================================
+   Legacy overlay fallback
+   Kept styled in case canvas rendering is ever disabled.
+   ========================================================= */
+
 .flex-live-overlay{
   position:absolute;
-  top:5.5%;
+
+  top:max(
+    22px,
+    calc(env(safe-area-inset-top, 0px) + 14px)
+  );
+
   left:50%;
   transform:translateX(-50%);
-  width:92%;
+
+  width:min(88%,380px);
+
+  padding:10px 14px;
+
+  border-radius:18px;
+
+  background:rgba(15,23,42,.38);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+
   text-align:center;
   color:#fff;
-  text-shadow:
-    -2px -2px 0 rgba(0,0,0,.55),
-    2px -2px 0 rgba(0,0,0,.55),
-    -2px 2px 0 rgba(0,0,0,.55),
-    2px 2px 0 rgba(0,0,0,.55);
+
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+
   pointer-events:none;
+
+  z-index:3;
 }
+
 .flex-live-message{
-  font-size:clamp(1.15rem,4vw,1.7rem);
-  font-weight:800;
+  font-size:clamp(1rem,3.8vw,1.45rem);
+  line-height:1.15;
+
+  font-weight:850;
+
+  text-shadow:0 2px 6px rgba(0,0,0,.45);
 }
+
 .flex-live-score{
-  margin-top:3px;
-  font-size:clamp(2rem,8vw,3.2rem);
+  margin-top:5px;
+
+  font-size:clamp(1.65rem,7vw,2.6rem);
   line-height:1;
+
   font-weight:900;
+
+  text-shadow:0 3px 8px rgba(0,0,0,.5);
 }
+
+
+/* =========================================================
+   Confetti fallback
+   ========================================================= */
+
 .flex-confetti{
   position:absolute;
   inset:0;
+
   overflow:hidden;
+
   pointer-events:none;
+
+  z-index:2;
 }
+
+/*
+  Keep decorative confetti nearer the edges,
+  rather than laying many symbols across the face.
+*/
 .flex-confetti::before,
 .flex-confetti::after{
-  content:"🎉 ✨ 🎊 ⭐ 🎉 ✨";
+  content:"🎉  ✨  🎊  ⭐";
+
   position:absolute;
-  left:3%;
-  right:3%;
-  top:16%;
-  font-size:1.25rem;
-  letter-spacing:14px;
-  opacity:.88;
-  animation:flexConfettiFloat 2.8s linear infinite;
+
+  left:1%;
+  right:1%;
+
+  font-size:1rem;
+  letter-spacing:18px;
+
+  opacity:.7;
+
+  white-space:nowrap;
+
+  animation:flexConfettiFloat 3.2s ease-in-out infinite;
 }
+
+.flex-confetti::before{
+  top:22%;
+  text-align:left;
+}
+
 .flex-confetti::after{
-  top:54%;
-  animation-delay:-1.4s;
-  transform:rotate(8deg);
+  top:68%;
+  text-align:right;
+
+  animation-delay:-1.6s;
 }
+
+
 @keyframes flexConfettiFloat{
-  0%{transform:translateY(-18px) rotate(-3deg)}
-  50%{transform:translateY(16px) rotate(3deg)}
-  100%{transform:translateY(-18px) rotate(-3deg)}
+  0%{
+    transform:translateY(-8px) rotate(-2deg);
+  }
+
+  50%{
+    transform:translateY(10px) rotate(2deg);
+  }
+
+  100%{
+    transform:translateY(-8px) rotate(-2deg);
+  }
 }
+
+
+/* =========================================================
+   Camera actions
+   ========================================================= */
+
 .flex-capture-actions,
 .flex-save-actions{
   display:flex;
+
   gap:8px;
+
   justify-content:center;
+
   flex-wrap:wrap;
+
   margin-top:12px;
 }
+
+.flex-capture-actions button,
+.flex-save-actions button{
+  min-height:44px;
+}
+
+
+/* =========================================================
+   Captured photo / video result
+   ========================================================= */
+
 .flex-media-result{
   margin-top:16px;
+
   text-align:center;
 }
+
 .flex-media-result img,
 .flex-media-result video{
   display:block;
-  width:min(100%,520px);
-  max-height:720px;
+
+  width:min(100%,440px);
+
+  max-height:72vh;
+
   margin:0 auto;
+
   object-fit:contain;
-  border-radius:16px;
+
+  border-radius:20px;
+
   background:#111;
+
+  border:1px solid rgba(15,23,42,.08);
+
+  box-shadow:
+    0 14px 34px rgba(15,23,42,.18),
+    0 3px 8px rgba(15,23,42,.08);
 }
+
+
+/* Message under saved media */
+#flexStatus{
+  margin-top:10px;
+
+  font-size:.84rem;
+  line-height:1.4;
+
+  color:var(--muted);
+}
+
+
+/* =========================================================
+   Mobile / iPhone
+   ========================================================= */
+
 @media(max-width:600px){
-  .flex-score-controls{align-items:stretch;flex-direction:column}
-  .flex-score-controls label,.flex-score-controls button{width:100%}
-  .flex-camera-stage{width:100%;max-width:440px}
-  .flex-capture-actions button,.flex-save-actions button{flex:1 1 145px}
+
+  .flex-score-panel{
+    margin-top:14px;
+    padding-top:14px;
+  }
+
+  .flex-score-controls{
+    align-items:stretch;
+    flex-direction:column;
+
+    gap:8px;
+
+    margin-top:10px;
+  }
+
+  .flex-score-controls label,
+  .flex-score-controls button{
+    width:100%;
+  }
+
+  .flex-score-controls button{
+    min-height:46px;
+  }
+
+
+  /* Keep the camera comfortably inside the iPhone viewport. */
+  .flex-camera-stage{
+    width:min(100%,360px);
+    max-width:360px;
+
+    aspect-ratio:4 / 5;
+
+    max-height:
+      calc(
+        100dvh
+        - env(safe-area-inset-top, 0px)
+        - env(safe-area-inset-bottom, 0px)
+        - 170px
+      );
+
+    margin-top:12px;
+
+    border-radius:18px;
+  }
+
+
+  /* Photo + video side by side */
+  .flex-capture-actions{
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:8px;
+  }
+
+  .flex-capture-actions button{
+    width:100%;
+    min-height:46px;
+
+    flex:none;
+  }
+
+
+  /*
+    Close/stop should span the whole row.
+  */
+  #flexCloseCameraBtn,
+  #flexStopVideoBtn{
+    grid-column:1 / -1;
+  }
+
+
+  /* Captured result should not occupy the entire screen. */
+  .flex-media-result img,
+  .flex-media-result video{
+    width:min(100%,360px);
+
+    max-height:62vh;
+
+    border-radius:16px;
+  }
+
+
+  /* Save/share layout */
+  .flex-save-actions{
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:8px;
+  }
+
+  .flex-save-actions button{
+    width:100%;
+    min-height:44px;
+
+    flex:none;
+  }
+
+
+  /* Main action gets its own row. */
+  #flexShareBtn{
+    grid-column:1 / -1;
+  }
+
+
+  #flexStatus{
+    font-size:.76rem;
+  }
+}
+
+
+/* Very narrow phones */
+@media(max-width:380px){
+
+  .flex-camera-stage{
+    width:100%;
+
+    border-radius:16px;
+  }
+
+  .flex-capture-actions{
+    grid-template-columns:1fr;
+  }
+
+  .flex-capture-actions button,
+  #flexCloseCameraBtn,
+  #flexStopVideoBtn{
+    grid-column:1;
+  }
+
+  .flex-save-actions{
+    grid-template-columns:1fr;
+  }
+
+  #flexShareBtn{
+    grid-column:1;
+  }
 }
 
 
 /* =========================================================
    Exam completion celebration
    ========================================================= */
+
 .exam-completion-confetti{
   position:fixed;
+
   inset:0;
+
   z-index:9999;
+
   overflow:hidden;
+
   pointer-events:none;
 }
+
 .exam-confetti-piece{
   position:absolute;
+
   top:-10vh;
+
   display:block;
+
   will-change:transform,opacity;
+
   animation-name:examConfettiFall;
+
   animation-timing-function:cubic-bezier(.16,.82,.28,1);
+
   animation-fill-mode:forwards;
 }
+
+
 @keyframes examConfettiFall{
+
   0%{
-    transform:translate3d(0,-8vh,0) rotate(0deg) scale(.9);
+    transform:
+      translate3d(0,-8vh,0)
+      rotate(0deg)
+      scale(.9);
+
     opacity:0;
   }
-  8%{opacity:1}
+
+  8%{
+    opacity:1;
+  }
+
   100%{
-    transform:translate3d(var(--confetti-drift),115vh,0) rotate(var(--confetti-rotate)) scale(1.05);
-    opacity:.15;
+    transform:
+      translate3d(
+        var(--confetti-drift),
+        115vh,
+        0
+      )
+      rotate(var(--confetti-rotate))
+      scale(1.05);
+
+    opacity:.12;
   }
 }
+
+
+/* Accessibility */
 @media(prefers-reduced-motion:reduce){
-  .exam-confetti-piece{animation-duration:.01ms!important;animation-delay:0s!important}
+
+  .exam-confetti-piece{
+    animation-duration:.01ms !important;
+    animation-delay:0s !important;
+  }
+
+  .flex-confetti::before,
+  .flex-confetti::after{
+    animation:none;
+  }
 }
 
 
 /* =========================================================
-   Teacher Test Analysis: validity, reliability, statistics
+   Teacher Test Analysis:
+   validity, reliability, statistics
    ========================================================= */
+
 .test-analysis-actions{
   margin-top:14px;
+
   align-items:center;
+
   flex-wrap:wrap;
 }
+
 .test-analysis-panel{
   margin-top:18px;
+
   padding-top:18px;
+
   border-top:1px solid var(--line);
 }
+
 .analysis-section{
   margin-top:18px;
+
   padding:14px;
+
   border:1px solid var(--line);
+
   border-radius:12px;
+
   background:#fbfdff;
 }
+
 .analysis-section h4{
   margin:0 0 10px;
 }
+
 .analysis-metrics{
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0,1fr)
+    );
 }
+
 .analysis-cautions{
   display:grid;
+
   gap:8px;
+
   margin:12px 0;
 }
+
 .analysis-caution{
   margin:0;
+
   padding:10px 12px;
+
   border-left:4px solid #d97706;
+
   border-radius:8px;
+
   background:#fff7ed;
+
   color:#7c2d12;
 }
+
 .analysis-item-table td,
 .analysis-item-table th{
   vertical-align:top;
 }
+
 .analysis-negative{
   color:#b91c1c;
+
   font-weight:800;
 }
+
 .analysis-flag{
   display:inline-block;
+
   margin:2px 4px 2px 0;
+
   padding:3px 7px;
+
   border-radius:999px;
+
   background:#fff1f2;
+
   color:#9f1239;
+
   font-size:.78rem;
+
   font-weight:800;
 }
+
 .distractor-item{
   margin-top:12px;
+
   padding:12px;
+
   border:1px solid var(--line);
+
   border-radius:10px;
+
   background:#fff;
 }
+
 .distractor-head{
   display:flex;
+
   align-items:center;
+
   justify-content:space-between;
+
   gap:10px;
+
   margin-bottom:8px;
 }
+
+
 @media(max-width:760px){
+
   .analysis-metrics{
     grid-template-columns:1fr 1fr;
   }
+
   .test-analysis-panel>.detail-head{
     align-items:stretch;
+
     flex-direction:column;
   }
 }
+
+
 @media(max-width:480px){
+
   .analysis-metrics{
     grid-template-columns:1fr;
   }
-}
 
+  .analysis-section{
+    padding:11px;
+  }
+
+  .test-analysis-actions{
+    align-items:stretch;
+
+    flex-direction:column;
+  }
+
+  .test-analysis-actions button{
+    width:100%;
+  }
+}
 
 /* =========================================================
    Live teacher-to-student attempt messaging
