@@ -42,6 +42,17 @@
   let speechFlagTimer = null;
   const pendingAnswerSaves = new Map();
 
+  let flexCameraStream = null;
+  let flexRenderFrame = null;
+  let flexRecorder = null;
+  let flexRecordedChunks = [];
+  let flexRecordingTimer = null;
+  let flexMediaBlob = null;
+  let flexMediaFileName = "";
+  let flexScoreText = "—";
+  let flexExamTitle = "Exam";
+  let flexStudentName = "";
+
   const restrictedFlagTypes = new Set([
     "copy_blocked","cut_blocked","paste_blocked","contextmenu_blocked","dragstart_blocked",
     "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
@@ -547,7 +558,262 @@
       : "Your latest submitted result is shown below. Some constructed-response scores may still be awaiting teacher review.";
     $("aiFeedbackPanel")?.classList.add("hidden");
     window.ExamReport?.showStudentReport?.(data);
+    updateFlexScoreContext({
+      score: data.score ?? null,
+      maxScore: data.max_score ?? null,
+      examTitle: data.exam_title || "",
+      studentName: data.student_name || ""
+    });
   });
+
+  function updateFlexScoreContext({ score = null, maxScore = null, examTitle = "", studentName = "" } = {}) {
+    flexScoreText = (score === null || score === undefined || maxScore === null || maxScore === undefined)
+      ? "Score pending"
+      : `${score}/${maxScore}`;
+    flexExamTitle = examTitle || flexExamTitle || "Exam";
+    flexStudentName = studentName || flexStudentName || "";
+    const scoreNode = $("flexLiveScore");
+    if (scoreNode) scoreNode.textContent = flexScoreText;
+    const panel = $("flexScorePanel");
+    if (panel) panel.classList.remove("hidden");
+  }
+
+  function stopFlexCamera() {
+    if (flexRenderFrame) cancelAnimationFrame(flexRenderFrame);
+    flexRenderFrame = null;
+    clearTimeout(flexRecordingTimer);
+    flexRecordingTimer = null;
+    if (flexRecorder && flexRecorder.state !== "inactive") {
+      try { flexRecorder.stop(); } catch (_) {}
+    }
+    flexRecorder = null;
+    for (const track of flexCameraStream?.getTracks?.() || []) {
+      try { track.stop(); } catch (_) {}
+    }
+    flexCameraStream = null;
+    const video = $("flexCameraVideo");
+    if (video) video.srcObject = null;
+    $("flexCameraStage")?.classList.add("hidden");
+    $("flexCaptureActions")?.classList.add("hidden");
+  }
+
+  function flexCanvasSize(video) {
+    const width = video.videoWidth || 720;
+    const height = video.videoHeight || 1280;
+    return { width, height };
+  }
+
+  function drawFlexFrame() {
+    const video = $("flexCameraVideo");
+    const canvas = $("flexCameraCanvas");
+    if (!video || !canvas || !flexCameraStream?.active) return;
+    if (video.readyState >= 2) {
+      const { width, height } = flexCanvasSize(video);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.save();
+      ctx.clearRect(0,0,width,height);
+      ctx.translate(width,0);
+      ctx.scale(-1,1);
+      ctx.drawImage(video,0,0,width,height);
+      ctx.restore();
+
+      const bannerY = Math.max(36, height * 0.08);
+      const scoreY = bannerY + Math.max(54, height * 0.055);
+      const message = $("flexMessageSelect")?.value || "I made it! 🎉";
+
+      ctx.textAlign = "center";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,.55)";
+      ctx.fillStyle = "#fff";
+      ctx.lineWidth = Math.max(5, width * 0.006);
+      ctx.font = `700 ${Math.max(28, Math.round(width * 0.05))}px system-ui,sans-serif`;
+      ctx.strokeText(message, width/2, bannerY);
+      ctx.fillText(message, width/2, bannerY);
+
+      ctx.font = `800 ${Math.max(46, Math.round(width * 0.085))}px system-ui,sans-serif`;
+      ctx.strokeText(flexScoreText, width/2, scoreY);
+      ctx.fillText(flexScoreText, width/2, scoreY);
+
+      const confettiCount = 36;
+      const t = performance.now() / 900;
+      for (let i=0;i<confettiCount;i++) {
+        const x = ((i * 73.7) % width);
+        const y = ((i * 121.3 + t * (38 + (i%5)*10)) % (height+80)) - 40;
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.rotate((i+t)*0.7);
+        ctx.fillStyle = `hsl(${(i*47)%360} 85% 58%)`;
+        ctx.fillRect(-5,-9,10,18);
+        ctx.restore();
+      }
+    }
+    flexRenderFrame = requestAnimationFrame(drawFlexFrame);
+  }
+
+  async function startFlexCamera() {
+    const status = $("flexStatus");
+    try {
+      stopFlexCamera();
+      flexCameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "user" }, width: { ideal: 720 }, height: { ideal: 1280 } },
+        audio: false
+      });
+      const video = $("flexCameraVideo");
+      video.srcObject = flexCameraStream;
+      await video.play();
+      $("flexCameraStage")?.classList.remove("hidden");
+      $("flexCaptureActions")?.classList.remove("hidden");
+      $("flexMediaResult")?.classList.add("hidden");
+      $("flexPhotoPreview")?.classList.add("hidden");
+      $("flexVideoPreview")?.classList.add("hidden");
+      if (status) status.textContent = "";
+      drawFlexFrame();
+    } catch (error) {
+      if (status) status.textContent = `Could not open the front camera: ${error?.message || error}`;
+      $("flexMediaResult")?.classList.remove("hidden");
+    }
+  }
+
+  function makeFlexFileName(ext) {
+    const exam = String(flexExamTitle || "Exam").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").slice(0,40) || "Exam";
+    return `Flex-Score-${exam}-${Date.now()}.${ext}`;
+  }
+
+  function canvasToBlob(canvas, type = "image/png", quality = 0.95) {
+    return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+  }
+
+  async function captureFlexPhoto() {
+    const canvas = $("flexCameraCanvas");
+    if (!canvas) return;
+    const blob = await canvasToBlob(canvas, "image/png");
+    if (!blob) return;
+    flexMediaBlob = blob;
+    flexMediaFileName = makeFlexFileName("png");
+    const url = URL.createObjectURL(blob);
+    const img = $("flexPhotoPreview");
+    const vid = $("flexVideoPreview");
+    if (vid?.src) URL.revokeObjectURL(vid.src);
+    if (img?.src) URL.revokeObjectURL(img.src);
+    if (img) { img.src=url; img.classList.remove("hidden"); }
+    vid?.classList.add("hidden");
+    $("flexMediaResult")?.classList.remove("hidden");
+    $("flexStatus").textContent = "Photo ready. Use Share / Save to Phone, or Download.";
+  }
+
+  function bestVideoMimeType() {
+    const types = ["video/mp4;codecs=h264","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+    return types.find(type => window.MediaRecorder?.isTypeSupported?.(type)) || "";
+  }
+
+  async function startFlexVideo() {
+    const canvas = $("flexCameraCanvas");
+    if (!canvas || !window.MediaRecorder || !canvas.captureStream) {
+      $("flexStatus").textContent = "Video capture is not supported by this browser. You can still take a photo.";
+      $("flexMediaResult")?.classList.remove("hidden");
+      return;
+    }
+    flexRecordedChunks = [];
+    const stream = canvas.captureStream(30);
+    const mimeType = bestVideoMimeType();
+    try {
+      flexRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    } catch (error) {
+      $("flexStatus").textContent = "Video recording could not start on this device.";
+      $("flexMediaResult")?.classList.remove("hidden");
+      return;
+    }
+    flexRecorder.ondataavailable = event => { if (event.data?.size) flexRecordedChunks.push(event.data); };
+    flexRecorder.onstop = () => {
+      const type = flexRecorder?.mimeType || mimeType || "video/webm";
+      flexMediaBlob = new Blob(flexRecordedChunks,{type});
+      const ext = type.includes("mp4") ? "mp4" : "webm";
+      flexMediaFileName = makeFlexFileName(ext);
+      const url = URL.createObjectURL(flexMediaBlob);
+      const vid = $("flexVideoPreview");
+      const img = $("flexPhotoPreview");
+      if (vid?.src) URL.revokeObjectURL(vid.src);
+      if (img?.src) URL.revokeObjectURL(img.src);
+      if (vid) { vid.src=url; vid.classList.remove("hidden"); }
+      img?.classList.add("hidden");
+      $("flexMediaResult")?.classList.remove("hidden");
+      $("flexVideoBtn")?.classList.remove("hidden");
+      $("flexStopVideoBtn")?.classList.add("hidden");
+      $("flexStatus").textContent = "Video ready. Use Share / Save to Phone, or Download.";
+    };
+    flexRecorder.start(250);
+    $("flexVideoBtn")?.classList.add("hidden");
+    $("flexStopVideoBtn")?.classList.remove("hidden");
+    $("flexStatus").textContent = "Recording…";
+    $("flexMediaResult")?.classList.remove("hidden");
+    flexRecordingTimer = setTimeout(()=>stopFlexVideo(),10000);
+  }
+
+  function stopFlexVideo() {
+    clearTimeout(flexRecordingTimer);
+    flexRecordingTimer = null;
+    if (flexRecorder && flexRecorder.state !== "inactive") {
+      flexRecorder.stop();
+    }
+  }
+
+  async function shareFlexMedia() {
+    if (!flexMediaBlob) return;
+    const file = new File([flexMediaBlob], flexMediaFileName, {type:flexMediaBlob.type});
+    const status = $("flexStatus");
+    if (navigator.canShare?.({files:[file]}) && navigator.share) {
+      try {
+        await navigator.share({
+          files:[file],
+          title:"My exam score",
+          text:`${$("flexMessageSelect")?.value || "I made it!"} ${flexScoreText}`
+        });
+        status.textContent = "Share sheet opened. Choose Photos/Gallery, Files, or another app.";
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    downloadFlexMedia();
+    status.textContent = "Your browser cannot share files directly, so the media was downloaded instead.";
+  }
+
+  function downloadFlexMedia() {
+    if (!flexMediaBlob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(flexMediaBlob);
+    a.download = flexMediaFileName || "Flex-Score";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  }
+
+  function bindFlexScoreControls() {
+    $("flexStartCameraBtn")?.addEventListener("click", startFlexCamera);
+    $("flexCloseCameraBtn")?.addEventListener("click", stopFlexCamera);
+    $("flexPhotoBtn")?.addEventListener("click", captureFlexPhoto);
+    $("flexVideoBtn")?.addEventListener("click", startFlexVideo);
+    $("flexStopVideoBtn")?.addEventListener("click", stopFlexVideo);
+    $("flexShareBtn")?.addEventListener("click", shareFlexMedia);
+    $("flexDownloadBtn")?.addEventListener("click", downloadFlexMedia);
+    $("flexRetakeBtn")?.addEventListener("click", ()=>{
+      $("flexMediaResult")?.classList.add("hidden");
+      $("flexPhotoPreview")?.classList.add("hidden");
+      $("flexVideoPreview")?.classList.add("hidden");
+      if (!flexCameraStream?.active) startFlexCamera();
+    });
+    $("flexMessageSelect")?.addEventListener("change",()=>{
+      const msg=$("flexLiveMessage");
+      if(msg) msg.textContent=$("flexMessageSelect").value;
+    });
+  }
+
+  bindFlexScoreControls();
 
   $("clearSiteDataBtn")?.addEventListener("click", async () => {
     const ok = confirm(
@@ -1641,6 +1907,13 @@
           "Your responses have been recorded. Free local checks were completed. Any unresolved Essay, Short Response, or Math Solver items will be reviewed by your teacher before the final result is approved.";
       }
     }
+
+    updateFlexScoreContext({
+      score: provisional?.provisional_score ?? row?.score ?? null,
+      maxScore: provisional?.provisional_max_score ?? row?.max_score ?? null,
+      examTitle: attempt?.exam_title || "",
+      studentName: attempt?.student_name || ""
+    });
 
     // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
     // The feedback helper fails gracefully if the Edge Function has not been deployed yet.
