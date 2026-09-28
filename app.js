@@ -809,6 +809,67 @@
     }
   }
 
+  function compileStudentGraphExpression(source) {
+    const raw=String(source||"").trim().toLowerCase();
+    if(!raw) throw new Error("Graph expression is empty.");
+    let expr=raw.replace(/π/g,"pi").replace(/\^/g,"**");
+    const allowed=["sin","cos","tan","asin","acos","atan","sqrt","abs","exp","log","ln","floor","ceil","pi","e","x"];
+    const scrubbed=expr.replace(/[a-z]+/g,name=>allowed.includes(name)?"":"BAD");
+    if(/BAD|[^0-9+\-*/().,\s*]/.test(scrubbed)) throw new Error("Unsupported graph expression.");
+    expr=expr
+      .replace(/\bln\b/g,"Math.log").replace(/\blog\b/g,"Math.log10")
+      .replace(/\bsin\b/g,"Math.sin").replace(/\bcos\b/g,"Math.cos").replace(/\btan\b/g,"Math.tan")
+      .replace(/\basin\b/g,"Math.asin").replace(/\bacos\b/g,"Math.acos").replace(/\batan\b/g,"Math.atan")
+      .replace(/\bsqrt\b/g,"Math.sqrt").replace(/\babs\b/g,"Math.abs").replace(/\bexp\b/g,"Math.exp")
+      .replace(/\bfloor\b/g,"Math.floor").replace(/\bceil\b/g,"Math.ceil")
+      .replace(/\bpi\b/g,"Math.PI").replace(/\be\b/g,"Math.E");
+    const fn=new Function("x",`"use strict";return (${expr});`);
+    return x=>{const y=Number(fn(x));return Number.isFinite(y)?y:NaN;};
+  }
+
+  function drawStudentStimulusGraph(canvas,payload={}) {
+    const width=640,height=360,dpr=Math.min(window.devicePixelRatio||1,2);
+    canvas.width=width*dpr;canvas.height=height*dpr;canvas.style.aspectRatio="16 / 9";
+    const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,width,height);
+    const xmin=Number(payload.xmin),xmax=Number(payload.xmax),ymin=Number(payload.ymin),ymax=Number(payload.ymax);
+    if(!(xmax>xmin)||!(ymax>ymin)) throw new Error("Invalid graph range.");
+    const px=x=>((x-xmin)/(xmax-xmin))*width,py=y=>height-((y-ymin)/(ymax-ymin))*height;
+    ctx.strokeStyle="#e5e7eb";ctx.lineWidth=1;
+    for(let i=0;i<=10;i++){const x=i*width/10;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();}
+    for(let i=0;i<=8;i++){const y=i*height/8;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke();}
+    ctx.strokeStyle="#64748b";ctx.lineWidth=1.5;
+    if(xmin<=0&&xmax>=0){const x0=px(0);ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(x0,height);ctx.stroke();}
+    if(ymin<=0&&ymax>=0){const y0=py(0);ctx.beginPath();ctx.moveTo(0,y0);ctx.lineTo(width,y0);ctx.stroke();}
+    const fn=compileStudentGraphExpression(payload.expression);
+    ctx.strokeStyle="#111827";ctx.lineWidth=2.2;ctx.beginPath();let drawing=false;
+    for(let i=0;i<=width;i++){const x=xmin+(i/width)*(xmax-xmin),y=fn(x),sy=py(y);if(!Number.isFinite(y)||sy<-height||sy>height*2){drawing=false;continue;}if(!drawing){ctx.moveTo(i,sy);drawing=true;}else ctx.lineTo(i,sy);}
+    ctx.stroke();
+    ctx.fillStyle="#475569";ctx.font="13px sans-serif";
+    ctx.fillText(`x: ${xmin} to ${xmax}`,10,height-10);
+    ctx.fillText(`y: ${ymin} to ${ymax}`,width-105,height-10);
+  }
+
+  function buildQuestionStimulus(q) {
+    const type=String(q?.stimulus_type||"none");
+    const payload=q?.stimulus_payload&&typeof q.stimulus_payload==="object"?q.stimulus_payload:{};
+    if(type==="none") return null;
+    const figure=document.createElement("figure");figure.className="item-stimulus";
+    if(type==="image"&&payload.url){
+      const img=document.createElement("img");img.src=payload.url;img.alt=String(payload.alt||"Question stimulus");img.className="item-stimulus-image";figure.appendChild(img);
+    }else if(type==="graph"){
+      const canvas=document.createElement("canvas");canvas.className="item-stimulus-graph stimulus-graph-canvas";figure.appendChild(canvas);
+      try{drawStudentStimulusGraph(canvas,payload);}catch(error){const p=document.createElement("p");p.className="message-inline error";p.textContent="Graph stimulus could not be displayed.";figure.appendChild(p);}
+    }else if(type==="latex"&&payload.latex){
+      const div=document.createElement("div");div.className="item-stimulus-latex math-rendered";div.textContent=String(payload.latex);figure.appendChild(div);
+      if(window.MathJax?.typesetPromise){window.MathJax.typesetClear?.([div]);window.MathJax.typesetPromise([div]).catch(()=>{});}
+    }else{
+      return null;
+    }
+    if(payload.caption){const cap=document.createElement("figcaption");cap.textContent=String(payload.caption);figure.appendChild(cap);}
+    return figure;
+  }
+
   function renderQuestions(savedResponses = []) {
     examForm.innerHTML = "";
     const savedByQuestion = new Map(
@@ -843,6 +904,9 @@
       prompt.className = "prompt";
       renderMathContent(prompt, q.prompt);
       wrap.appendChild(prompt);
+
+      const stimulus = buildQuestionStimulus(q);
+      if (stimulus) wrap.appendChild(stimulus);
 
       const state = document.createElement("div");
       state.className = "save-state";
