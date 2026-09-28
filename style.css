@@ -1706,3 +1706,200 @@ textarea{resize:vertical}
     white-space:normal;
   }
 }
+
+
+/* =========================================================
+   Screenshot-style four-tab mathematics keyboard
+   ========================================================= */
+.math-virtual-keyboard{
+  padding:6px 8px 8px;
+  background:#ececf2;
+  border-top:1px solid #d8d9df;
+  border-radius:0 0 14px 14px;
+}
+
+.math-keyboard-tabs-reference{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 7px;
+  padding:0 4px;
+  min-height:38px;
+  overflow:visible;
+}
+
+.math-keyboard-tabs-reference .math-keyboard-tab{
+  min-width:auto;
+  min-height:34px;
+  padding:4px 11px;
+  border:0;
+  border-radius:18px;
+  background:transparent;
+  color:#202124;
+  font-size:1.06rem;
+  font-weight:500;
+  line-height:1;
+}
+
+.math-keyboard-tabs-reference .math-keyboard-tab.active{
+  background:#9888ff;
+  color:#1d1b20;
+  border:0;
+}
+
+.math-keyboard-menu{
+  margin-left:auto;
+  min-width:42px;
+  min-height:32px;
+  padding:0 6px;
+  border:0;
+  background:transparent;
+  color:#6b6b70;
+  font-size:1.25rem;
+  font-weight:800;
+  letter-spacing:2px;
+}
+
+.math-keyboard-layout{
+  display:grid;
+  gap:6px;
+}
+
+.math-keyboard-row{
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);
+  gap:6px;
+}
+
+.math-keyboard-row-fx{
+  grid-auto-columns:minmax(0,1fr);
+}
+
+.math-key{
+  min-width:0;
+  min-height:49px;
+  padding:5px 6px;
+  border:0;
+  border-radius:10px;
+  background:#fff;
+  color:#202124;
+  box-shadow:none;
+  font-family:inherit;
+  font-size:1.12rem;
+  font-weight:500;
+  line-height:1.05;
+  white-space:nowrap;
+}
+
+.math-key:hover{
+  background:#f8f8fb;
+}
+
+.math-key:active{
+  transform:none;
+  background:#e3e3e8;
+  box-shadow:none;
+}
+
+.math-key-utility{
+  background:#cfd0d6;
+}
+
+.math-key-utility:hover{
+  background:#c5c6cc;
+}
+
+.math-key-space{
+  grid-column:span 3;
+}
+
+.math-key-wide{
+  grid-column:span 3;
+}
+
+/* ABC row proportions, matching a phone keyboard more closely. */
+.math-keyboard-row-abc.math-keyboard-row-index-1{
+  padding-inline:5%;
+}
+
+.math-keyboard-row-abc.math-keyboard-row-index-2{
+  grid-template-columns:1.15fr repeat(7,minmax(0,1fr)) 1.15fr;
+  grid-auto-flow:initial;
+  grid-auto-columns:initial;
+  padding-inline:0;
+}
+
+.math-keyboard-row-abc.math-keyboard-row-index-3{
+  grid-template-columns:1.2fr .9fr .9fr .9fr 3.3fr .9fr .9fr 1.15fr;
+  grid-auto-flow:initial;
+  grid-auto-columns:initial;
+}
+
+/* 123 and symbol tabs use nine balanced columns like the reference. */
+.math-keyboard-row-123,
+.math-keyboard-row-symbols{
+  grid-template-columns:repeat(9,minmax(0,1fr));
+  grid-auto-flow:initial;
+  grid-auto-columns:initial;
+}
+
+/* f(x) reference is seven columns. */
+.math-keyboard-row-fx{
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  grid-auto-flow:initial;
+  grid-auto-columns:initial;
+}
+
+@media(max-width:720px){
+  .math-virtual-keyboard{
+    padding:5px 6px 7px;
+    margin-left:-1px;
+    margin-right:-1px;
+  }
+
+  .math-keyboard-tabs-reference{
+    gap:4px;
+    padding:0 2px;
+  }
+
+  .math-keyboard-tabs-reference .math-keyboard-tab{
+    padding:4px 10px;
+    font-size:1rem;
+  }
+
+  .math-keyboard-layout{
+    gap:5px;
+  }
+
+  .math-keyboard-row{
+    gap:5px;
+  }
+
+  .math-key{
+    min-height:47px;
+    padding:4px 3px;
+    border-radius:9px;
+    font-size:1rem;
+  }
+}
+
+@media(max-width:430px){
+  .math-keyboard-tabs-reference .math-keyboard-tab{
+    padding:4px 9px;
+    font-size:.98rem;
+  }
+
+  .math-key{
+    min-height:45px;
+    font-size:.95rem;
+  }
+
+  .math-keyboard-row{
+    gap:4px;
+  }
+
+  .math-keyboard-row-abc.math-keyboard-row-index-1{
+    padding-inline:4%;
+  }
+}
