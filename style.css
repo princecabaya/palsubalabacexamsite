@@ -2165,3 +2165,90 @@ textarea{resize:vertical}
 @media(prefers-reduced-motion:reduce){
   .exam-confetti-piece{animation-duration:.01ms!important;animation-delay:0s!important}
 }
+
+
+/* =========================================================
+   Teacher Test Analysis: validity, reliability, statistics
+   ========================================================= */
+.test-analysis-actions{
+  margin-top:14px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.test-analysis-panel{
+  margin-top:18px;
+  padding-top:18px;
+  border-top:1px solid var(--line);
+}
+.analysis-section{
+  margin-top:18px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fbfdff;
+}
+.analysis-section h4{
+  margin:0 0 10px;
+}
+.analysis-metrics{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.analysis-cautions{
+  display:grid;
+  gap:8px;
+  margin:12px 0;
+}
+.analysis-caution{
+  margin:0;
+  padding:10px 12px;
+  border-left:4px solid #d97706;
+  border-radius:8px;
+  background:#fff7ed;
+  color:#7c2d12;
+}
+.analysis-item-table td,
+.analysis-item-table th{
+  vertical-align:top;
+}
+.analysis-negative{
+  color:#b91c1c;
+  font-weight:800;
+}
+.analysis-flag{
+  display:inline-block;
+  margin:2px 4px 2px 0;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#fff1f2;
+  color:#9f1239;
+  font-size:.78rem;
+  font-weight:800;
+}
+.distractor-item{
+  margin-top:12px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fff;
+}
+.distractor-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+@media(max-width:760px){
+  .analysis-metrics{
+    grid-template-columns:1fr 1fr;
+  }
+  .test-analysis-panel>.detail-head{
+    align-items:stretch;
+    flex-direction:column;
+  }
+}
+@media(max-width:480px){
+  .analysis-metrics{
+    grid-template-columns:1fr;
+  }
+}
