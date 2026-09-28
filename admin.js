@@ -855,9 +855,29 @@
 
     $("proctorPhotoEvidenceActions")?.classList.toggle("hidden", proctorOnly);
 
+    const messageSection = $("teacherMessageSection");
+    if (messageSection && "open" in messageSection) messageSection.open = a.status === "active";
+    const messageInput = $("teacherAttemptMessage");
+    const messageButton = $("sendAttemptMessageBtn");
+    const messageBadge = $("teacherMessageBadge");
+    if (messageInput) {
+      messageInput.disabled = a.status !== "active";
+      messageInput.value = "";
+      messageInput.placeholder = a.status === "active"
+        ? "e.g. Please remain on the exam page. Multiple focus/speech signals have been detected."
+        : "Messaging is available only while the student has an active exam attempt.";
+    }
+    if (messageButton) messageButton.disabled = a.status !== "active";
+    if (messageBadge) {
+      messageBadge.className = "badge " + (a.status === "active" ? "ok" : "");
+      messageBadge.textContent = a.status === "active" ? "Live" : "Closed";
+    }
+    if ($("teacherMessageStatus")) $("teacherMessageStatus").textContent = "";
+
     await Promise.all([
       loadSavedResponses(a),
-      loadProctorPhotos(a)
+      loadProctorPhotos(a),
+      loadAttemptMessageHistory(a)
     ]);
 
     const { data, error } = await db
@@ -887,6 +907,98 @@
         <td class="event-json">${escapeHtml(JSON.stringify(e.details || {}, null, 2))}</td>`;
       rows.appendChild(tr);
     }
+  }
+
+  async function loadAttemptMessageHistory(attempt) {
+    const node = $("attemptMessageHistory");
+    if (!node || !attempt?.id) return;
+
+    node.innerHTML = '<p class="muted">Loading message history…</p>';
+
+    const { data, error } = await db
+      .from("attempt_messages")
+      .select("id,message,created_at,sender_user_id")
+      .eq("attempt_id", attempt.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      const missing = /attempt_messages|relation.*does not exist/i.test(String(error.message || ""));
+      node.innerHTML = `<p class="muted">${escapeHtml(missing
+        ? "Messaging is not installed yet. Run supabase-upgrade-attempt-messages.sql."
+        : error.message)}</p>`;
+      return;
+    }
+
+    if (!(data || []).length) {
+      node.innerHTML = '<p class="muted">No teacher messages have been sent for this attempt.</p>';
+      return;
+    }
+
+    node.innerHTML = "";
+    (data || []).forEach(item => {
+      const row = document.createElement("div");
+      row.className = "attempt-message-history-item";
+      row.innerHTML = `
+        <div class="attempt-message-history-meta">${escapeHtml(fmt(item.created_at))}</div>
+        <div>${escapeHtml(item.message || "")}</div>
+      `;
+      node.appendChild(row);
+    });
+  }
+
+  async function sendCurrentAttemptMessage() {
+    const attempt = currentDetailAttempt;
+    const input = $("teacherAttemptMessage");
+    const button = $("sendAttemptMessageBtn");
+    const status = $("teacherMessageStatus");
+    if (!attempt || !input || !button || !status) return;
+
+    const message = input.value.trim();
+    if (!message) {
+      status.textContent = "Enter a message first.";
+      status.classList.add("error");
+      return;
+    }
+    if (message.length > 300) {
+      status.textContent = "Message must be 300 characters or fewer.";
+      status.classList.add("error");
+      return;
+    }
+
+    button.disabled = true;
+    status.classList.remove("error","success");
+    status.textContent = "Sending…";
+
+    const { data, error } = await db.rpc("admin_send_attempt_message", {
+      p_attempt_id: attempt.id,
+      p_message: message
+    });
+
+    button.disabled = attempt.status !== "active";
+
+    if (error) {
+      const missing = /admin_send_attempt_message|function.*does not exist|schema cache/i.test(String(error.message || ""));
+      status.textContent = missing
+        ? "Messaging is not installed yet. Run supabase-upgrade-attempt-messages.sql in Supabase SQL Editor."
+        : error.message;
+      status.classList.add("error");
+      return;
+    }
+
+    input.value = "";
+    status.textContent = "Message sent to the student's exam header.";
+    status.classList.add("success");
+    await loadAttemptMessageHistory(attempt);
+  }
+
+  function applyAttemptMessagePreset(event) {
+    const button = event.target.closest(".message-preset");
+    if (!button) return;
+    const input = $("teacherAttemptMessage");
+    if (!input || input.disabled) return;
+    input.value = button.dataset.message || "";
+    input.focus();
   }
 
   async function loadProctorPhotos(attempt) {
@@ -3729,6 +3841,9 @@
   $("reloadProctorsBtn")?.addEventListener("click", loadProctorManagement);
 
   $("searchBox").addEventListener("input", renderAttempts);
+  $("sendAttemptMessageBtn")?.addEventListener("click", sendCurrentAttemptMessage);
+  $("teacherMessageSection")?.addEventListener("click", applyAttemptMessagePreset);
+
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
   $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
