@@ -83,24 +83,8 @@
         console.warn("AI feedback unavailable:", err);
 
         const detail = await readFunctionError(err);
-        if (/missing_gemini_api_key|GEMINI_API_KEY is missing from this Edge Function environment/i.test(detail)) {
-          status.textContent = "AI feedback is not configured yet: GEMINI_API_KEY is missing from Supabase Edge Function Secrets.";
-        } else if (/not found|404/i.test(detail) && /function|generate-feedback/i.test(detail)) {
-          status.textContent = "AI feedback is not configured yet: the Supabase Edge Function generate-feedback was not found.";
-        } else if (/feedback_generated_at|ai_feedback|column/i.test(detail)) {
-          status.textContent = "AI feedback database storage is not configured yet. Run the AI feedback Supabase upgrade SQL.";
-        } else if (/gemini_api_error|Gemini rejected/i.test(detail)) {
-          const reason = extractServerReason(detail);
-          status.textContent = "Gemini could not generate feedback" + (reason ? `: ${reason}` : ". Check the API key and model.");
-        } else if (/Invalid JWT|JWT/i.test(detail)) {
-          status.textContent = "The Edge Function authorization settings rejected the browser request. Check the generate-feedback function authentication setting.";
-        } else {
-          const reason = extractServerReason(detail);
-          const statusCode = err?.context?.status || err?.status || "";
-          status.textContent = reason
-            ? `AI feedback is unavailable${statusCode ? ` (HTTP ${statusCode})` : ""}: ${reason}`
-            : `AI feedback is unavailable right now${statusCode ? ` (HTTP ${statusCode})` : ""}. Your exam submission was still recorded successfully.`;
-        }
+        status.textContent =
+          "Learning feedback is temporarily unavailable. Your score and submitted answers are unaffected. You may check again later or review the item with your instructor.";
       }
 
       function extractServerReason(detail) {
