@@ -21,6 +21,8 @@
   let questions = [];
   let timerHandle = null;
   let submitted = false;
+  let attemptMessagePollHandle = null;
+  let lastAttemptMessageAt = null;
   let suppressBlurUntil = 0;
   const queuedEvents = [];
   let pendingIdentity = null;
@@ -928,6 +930,67 @@
     $("loginMsg").textContent = "Please enter your own Student ID.";
   });
 
+  function hideTeacherLiveMessage() {
+    $("teacherLiveMessage")?.classList.add("hidden");
+  }
+
+  function showTeacherLiveMessage(item) {
+    if (!item?.message) return;
+    const banner = $("teacherLiveMessage");
+    if (!banner) return;
+    $("teacherLiveMessageText").textContent = item.message;
+    $("teacherLiveMessageTime").textContent = item.created_at
+      ? "Sent " + new Date(item.created_at).toLocaleTimeString()
+      : "Just now";
+    banner.classList.remove("hidden");
+    banner.classList.remove("teacher-message-arrive");
+    void banner.offsetWidth;
+    banner.classList.add("teacher-message-arrive");
+    if (navigator.vibrate) {
+      try { navigator.vibrate([100,60,100]); } catch (_) {}
+    }
+  }
+
+  async function pollAttemptMessages({ initial = false } = {}) {
+    if (!attempt?.attempt_token || submitted) return;
+
+    const { data, error } = await db.rpc("get_attempt_messages", {
+      p_attempt_token: attempt.attempt_token,
+      p_after: initial ? null : lastAttemptMessageAt
+    });
+
+    if (error) {
+      if (/get_attempt_messages|function.*does not exist|schema cache/i.test(String(error.message || ""))) {
+        clearInterval(attemptMessagePollHandle);
+        attemptMessagePollHandle = null;
+      }
+      return;
+    }
+
+    const messages = Array.isArray(data) ? data : [];
+    if (!messages.length) return;
+
+    const latest = messages[messages.length - 1];
+    lastAttemptMessageAt = latest.created_at || lastAttemptMessageAt;
+    showTeacherLiveMessage(latest);
+  }
+
+  function startAttemptMessagePolling() {
+    clearInterval(attemptMessagePollHandle);
+    lastAttemptMessageAt = null;
+    hideTeacherLiveMessage();
+    if (!attempt?.attempt_token || submitted) return;
+    pollAttemptMessages({ initial: true });
+    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 3000);
+  }
+
+  function stopAttemptMessagePolling() {
+    clearInterval(attemptMessagePollHandle);
+    attemptMessagePollHandle = null;
+  }
+
+  $("dismissTeacherMessageBtn")?.addEventListener("click", hideTeacherLiveMessage);
+
   $("identityYesBtn").addEventListener("click", async () => {
     if (!pendingIdentity) return;
 
@@ -993,6 +1056,7 @@
     clearExamBrowserState();
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     resetExamFlagCounts();
+    startAttemptMessagePolling();
 
     let existingResponses = [];
     const { data: savedOnStart, error: savedOnStartError } = await db.rpc("get_saved_exam_responses", {
@@ -1977,6 +2041,7 @@
 
     await stopMicrophoneMonitoring();
     submitted = true;
+    stopAttemptMessagePolling();
     clearInterval(timerHandle);
     stopCameraMonitoring();
     clearExamBrowserState();
