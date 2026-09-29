@@ -19,6 +19,8 @@
   let activeWorkspaceOwnerId = null;
   let teacherManagementBound = false;
   const expandedAttemptExams = new Set();
+  const expandedExamStatusGroups = new Set(["published","draft"]);
+  const expandedAttemptStatusGroups = new Set(["active"]);
   let currentDetailAttempt = null;
   let currentProctorPhotos = [];
   let proctorAssignments = [];
@@ -523,69 +525,121 @@
       groups.get(examKey).attempts.push(attempt);
     }
 
+    const statusBuckets = {
+      active: [],
+      submitted: [],
+      other: []
+    };
+
     for (const group of groups.values()) {
-      const submittedCount = group.attempts.filter(a => a.status === "submitted").length;
       const activeCount = group.attempts.filter(a => a.status === "active").length;
-      const totalSignals = group.attempts.reduce((sum, a) => sum + signalCount(a.id), 0);
+      const submittedCount = group.attempts.filter(a => a.status === "submitted").length;
+      group.activeCount = activeCount;
+      group.submittedCount = submittedCount;
+      group.totalSignals = group.attempts.reduce((sum, a) => sum + signalCount(a.id), 0);
 
-      if (q) expandedAttemptExams.add(group.key);
-      const expanded = expandedAttemptExams.has(group.key);
+      if (activeCount > 0) statusBuckets.active.push(group);
+      else if (submittedCount === group.attempts.length && group.attempts.length > 0) statusBuckets.submitted.push(group);
+      else statusBuckets.other.push(group);
+    }
 
-      const header = document.createElement("tr");
-      header.className = "attempt-exam-group";
-      header.innerHTML = `
+    const statusOrder = [
+      { key:"active", label:"Active Exams", tone:"active", note:"Exams with at least one student currently taking the test" },
+      { key:"submitted", label:"Fully Submitted", tone:"submitted", note:"All recorded attempts have been submitted" },
+      { key:"other", label:"Other / Incomplete", tone:"other", note:"Expired, mixed, or other attempt states" }
+    ];
+
+    for (const status of statusOrder) {
+      const bucket = statusBuckets[status.key];
+      if (!bucket.length) continue;
+
+      if (q) expandedAttemptStatusGroups.add(status.key);
+      const statusExpanded = expandedAttemptStatusGroups.has(status.key);
+      const totalAttempts = bucket.reduce((sum,g)=>sum+g.attempts.length,0);
+
+      const statusRow = document.createElement("tr");
+      statusRow.className = `status-group-row attempt-status-group ${status.tone}`;
+      statusRow.innerHTML = `
         <td colspan="7">
-          <div class="attempt-group-bar">
-            <button type="button" class="attempt-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
-              <span class="attempt-group-chevron">${expanded ? "▾" : "▸"}</span>
-              <span class="attempt-group-title">
-                <strong>${escapeHtml(group.title)}</strong>
-                <span class="muted">${escapeHtml(group.code)}</span>
-              </span>
-              <span class="attempt-group-summary">
-                ${group.attempts.length} attempt${group.attempts.length === 1 ? "" : "s"}
-                • ${submittedCount} submitted
-                ${activeCount ? ` • ${activeCount} active` : ""}
-                • ${totalSignals} signal${totalSignals === 1 ? "" : "s"}
-              </span>
-            </button>
-            <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
-          </div>
+          <button type="button" class="status-group-toggle" aria-expanded="${statusExpanded ? "true" : "false"}">
+            <span class="status-group-chevron">${statusExpanded ? "▾" : "▸"}</span>
+            <span class="status-group-label">
+              <strong>${escapeHtml(status.label)}</strong>
+              <small>${escapeHtml(status.note)}</small>
+            </span>
+            <span class="status-group-count">${bucket.length} exam${bucket.length===1?"":"s"} • ${totalAttempts} attempt${totalAttempts===1?"":"s"}</span>
+          </button>
         </td>
       `;
-
-      header.querySelector(".attempt-group-toggle").addEventListener("click", () => {
-        if (expandedAttemptExams.has(group.key)) expandedAttemptExams.delete(group.key);
-        else expandedAttemptExams.add(group.key);
+      statusRow.querySelector(".status-group-toggle").addEventListener("click",()=>{
+        if (expandedAttemptStatusGroups.has(status.key)) expandedAttemptStatusGroups.delete(status.key);
+        else expandedAttemptStatusGroups.add(status.key);
         renderAttempts();
       });
+      rows.appendChild(statusRow);
 
-      header.querySelector(".exam-excel-btn").addEventListener("click", async (event) => {
-        event.stopPropagation();
-        await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
-      });
+      if (!statusExpanded) continue;
 
-      rows.appendChild(header);
+      for (const group of bucket) {
+        if (q) expandedAttemptExams.add(group.key);
+        const expanded = expandedAttemptExams.has(group.key);
 
-      if (!expanded) continue;
-
-      for (const a of group.attempts) {
-        const tr = document.createElement("tr");
-        tr.className = "clickable attempt-student-row";
-        tr.dataset.attemptId = a.id;
-        const signals = signalCount(a.id);
-        const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
-        tr.innerHTML = `
-          <td data-label="Student"><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
-          <td data-label="Exam"><span class="muted">Student attempt</span></td>
-          <td data-label="Status"><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
-          <td data-label="Started">${fmt(a.started_at)}</td>
-          <td data-label="Submitted">${fmt(a.submitted_at)}</td>
-          <td data-label="Score">${escapeHtml(score)}</td>
-          <td data-label="Signals"><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>
+        const header = document.createElement("tr");
+        header.className = "attempt-exam-group";
+        header.innerHTML = `
+          <td colspan="7">
+            <div class="attempt-group-bar">
+              <button type="button" class="attempt-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
+                <span class="attempt-group-chevron">${expanded ? "▾" : "▸"}</span>
+                <span class="attempt-group-title">
+                  <strong>${escapeHtml(group.title)}</strong>
+                  <span class="muted">${escapeHtml(group.code)}</span>
+                </span>
+                <span class="attempt-group-summary">
+                  ${group.attempts.length} attempt${group.attempts.length === 1 ? "" : "s"}
+                  • ${group.submittedCount} submitted
+                  ${group.activeCount ? ` • ${group.activeCount} active` : ""}
+                  • ${group.totalSignals} signal${group.totalSignals === 1 ? "" : "s"}
+                </span>
+              </button>
+              <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
+            </div>
+          </td>
         `;
-        tr.addEventListener("click", () => openDetail(a));
-        rows.appendChild(tr);
+
+        header.querySelector(".attempt-group-toggle").addEventListener("click", () => {
+          if (expandedAttemptExams.has(group.key)) expandedAttemptExams.delete(group.key);
+          else expandedAttemptExams.add(group.key);
+          renderAttempts();
+        });
+
+        header.querySelector(".exam-excel-btn").addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
+        });
+
+        rows.appendChild(header);
+
+        if (!expanded) continue;
+
+        for (const a of group.attempts) {
+          const tr = document.createElement("tr");
+          tr.className = "clickable attempt-student-row";
+          tr.dataset.attemptId = a.id;
+          const signals = signalCount(a.id);
+          const score = a.score == null ? "—" : `${a.score}/${a.max_score}`;
+          tr.innerHTML = `
+            <td data-label="Student"><strong>${escapeHtml(a.students?.full_name || "Unknown")}</strong><br><span class="muted">${escapeHtml(a.students?.student_no || "")}</span></td>
+            <td data-label="Exam"><span class="muted">Student attempt</span></td>
+            <td data-label="Status"><span class="badge ${a.status === "submitted" ? "ok" : "warn"}">${escapeHtml(a.status)}</span></td>
+            <td data-label="Started">${fmt(a.started_at)}</td>
+            <td data-label="Submitted">${fmt(a.submitted_at)}</td>
+            <td data-label="Score">${escapeHtml(score)}</td>
+            <td data-label="Signals"><span class="badge ${signals ? "warn" : "ok"}">${signals}</span></td>
+          `;
+          tr.addEventListener("click", () => openDetail(a));
+          rows.appendChild(tr);
+        }
       }
     }
   }
@@ -3184,78 +3238,128 @@
       return;
     }
 
+    const buckets = {
+      published: [],
+      draft: [],
+      closed: [],
+      archived: []
+    };
+
     for (const exam of examsCache) {
-      const tr = document.createElement("tr");
-      const draftQuestionCount = Array.isArray(exam.draft_payload?.questions) ? exam.draft_payload.questions.length : 0;
-      const qCount = Math.max(counts[exam.id] || 0, draftQuestionCount);
-      const archived = Boolean(exam.archived);
-      tr.classList.toggle("archived-row", archived);
-      tr.innerHTML = `
-        <td data-label="Title">
-          <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
-          ${archived ? '<br><span class="badge archived">Archived</span>' : ''}
-          ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? '<br><span class="badge proctor">Proctor</span>' : ''}
-        </td>
-        <td data-label="Code">${escapeHtml(exam.code)}</td>
-        <td data-label="Status"><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
-        <td data-label="Duration">${escapeHtml(String(exam.duration_minutes))} min</td>
-        <td data-label="Questions">${qCount}</td>
-        <td data-label="Start">${fmt(exam.start_at)}</td>
-        <td data-label="End">${fmt(exam.end_at)}</td>
-        <td data-label="Actions" class="action-cell">
-          ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
-            <button type="button" data-exam-action="preview">Preview Exam</button>
-            <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
-            <span class="badge proctor">Proctor access</span>
-          ` : archived ? `
-            <button type="button" data-exam-action="preview">Preview Exam</button>
-            <button type="button" data-exam-action="retake">Retake Exam</button>
-            <button type="button" data-exam-action="restore">Restore</button>
-          ` : `
-            <button type="button" data-exam-action="preview">Preview Exam</button>
-            <button type="button" data-exam-action="edit" ${exam.status === "published" ? "disabled title=\"Published examinations cannot be edited\"" : ""}>Edit Exam</button>
-            ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
-            <button type="button" data-action="draft">Draft</button>
-            <button type="button" data-action="published">Publish</button>
-            <button type="button" data-action="closed">Close</button>
-            <button type="button" data-exam-action="retake">Retake Exam</button>
-            <button type="button" data-exam-action="archive">Move to Trash</button>
-          `}
-        </td>
-      `;
+      if (exam.archived) buckets.archived.push(exam);
+      else if (exam.status === "published") buckets.published.push(exam);
+      else if (exam.status === "draft") buckets.draft.push(exam);
+      else buckets.closed.push(exam);
+    }
 
-      tr.querySelectorAll("button[data-action]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          await updateExamStatus(exam.id, btn.dataset.action);
-        });
-      });
+    const order = [
+      { key:"published", label:"Published Exams", note:"Currently available or scheduled for students", tone:"published" },
+      { key:"draft", label:"Draft Exams", note:"Still being prepared or awaiting publication", tone:"draft" },
+      { key:"closed", label:"Closed Exams", note:"No longer accepting new exam attempts", tone:"closed" },
+      { key:"archived", label:"Archived / Trash", note:"Kept for recovery; student data is preserved", tone:"archived" }
+    ];
 
-      tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const action = btn.dataset.examAction;
-          if (action === "preview") await previewExam(exam);
-          if (action === "edit") await editExam(exam);
-          if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
-          if (action === "archive") await archiveExam(exam);
-          if (action === "restore") await restoreExam(exam);
-          if (action === "retake") await createRetakeExam(exam);
-          if (action === "delete") await deleteExam(exam);
-        });
-      });
+    for (const group of order) {
+      const items = buckets[group.key];
+      if (!items.length) continue;
 
-      body.appendChild(tr);
-
-      const takerRow = document.createElement("tr");
-      takerRow.className = "exam-takers-row hidden";
-      takerRow.dataset.examTakersFor = exam.id;
-      takerRow.innerHTML = `
+      const expanded = expandedExamStatusGroups.has(group.key);
+      const groupRow = document.createElement("tr");
+      groupRow.className = `status-group-row exam-status-group ${group.tone}`;
+      groupRow.innerHTML = `
         <td colspan="8">
-          <div class="exam-takers-dropdown" id="examTakers-${escapeAttr(exam.id)}">
-            <p class="muted">Click the exam title to load student takers.</p>
-          </div>
+          <button type="button" class="status-group-toggle" aria-expanded="${expanded ? "true" : "false"}">
+            <span class="status-group-chevron">${expanded ? "▾" : "▸"}</span>
+            <span class="status-group-label">
+              <strong>${escapeHtml(group.label)}</strong>
+              <small>${escapeHtml(group.note)}</small>
+            </span>
+            <span class="status-group-count">${items.length} exam${items.length===1?"":"s"}</span>
+          </button>
         </td>
       `;
-      body.appendChild(takerRow);
+      groupRow.querySelector(".status-group-toggle").addEventListener("click",()=>{
+        if (expandedExamStatusGroups.has(group.key)) expandedExamStatusGroups.delete(group.key);
+        else expandedExamStatusGroups.add(group.key);
+        renderExamRows(counts);
+      });
+      body.appendChild(groupRow);
+
+      if (!expanded) continue;
+
+      for (const exam of items) {
+        const tr = document.createElement("tr");
+        const draftQuestionCount = Array.isArray(exam.draft_payload?.questions) ? exam.draft_payload.questions.length : 0;
+        const qCount = Math.max(counts[exam.id] || 0, draftQuestionCount);
+        const archived = Boolean(exam.archived);
+        tr.classList.toggle("archived-row", archived);
+        tr.innerHTML = `
+          <td data-label="Title">
+            <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
+            ${archived ? '<br><span class="badge archived">Archived</span>' : ''}
+            ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? '<br><span class="badge proctor">Proctor</span>' : ''}
+          </td>
+          <td data-label="Code">${escapeHtml(exam.code)}</td>
+          <td data-label="Status"><span class="badge ${exam.status === "published" ? "ok" : "warn"}">${escapeHtml(exam.status)}</span></td>
+          <td data-label="Duration">${escapeHtml(String(exam.duration_minutes))} min</td>
+          <td data-label="Questions">${qCount}</td>
+          <td data-label="Start">${fmt(exam.start_at)}</td>
+          <td data-label="End">${fmt(exam.end_at)}</td>
+          <td data-label="Actions" class="action-cell">
+            ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+              <span class="badge proctor">Proctor access</span>
+            ` : archived ? `
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="retake">Retake Exam</button>
+              <button type="button" data-exam-action="restore">Restore</button>
+            ` : `
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="edit" ${exam.status === "published" ? 'disabled title="Published examinations cannot be edited"' : ""}>Edit Exam</button>
+              ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
+              <button type="button" data-action="draft">Draft</button>
+              <button type="button" data-action="published">Publish</button>
+              <button type="button" data-action="closed">Close</button>
+              <button type="button" data-exam-action="retake">Retake Exam</button>
+              <button type="button" data-exam-action="archive">Move to Trash</button>
+            `}
+          </td>
+        `;
+
+        tr.querySelectorAll("button[data-action]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            await updateExamStatus(exam.id, btn.dataset.action);
+          });
+        });
+
+        tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const action = btn.dataset.examAction;
+            if (action === "preview") await previewExam(exam);
+            if (action === "edit") await editExam(exam);
+            if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
+            if (action === "archive") await archiveExam(exam);
+            if (action === "restore") await restoreExam(exam);
+            if (action === "retake") await createRetakeExam(exam);
+            if (action === "delete") await deleteExam(exam);
+          });
+        });
+
+        body.appendChild(tr);
+
+        const takerRow = document.createElement("tr");
+        takerRow.className = "exam-takers-row hidden";
+        takerRow.dataset.examTakersFor = exam.id;
+        takerRow.innerHTML = `
+          <td colspan="8">
+            <div class="exam-takers-dropdown" id="examTakers-${escapeAttr(exam.id)}">
+              <p class="muted">Click the exam title to load student takers.</p>
+            </div>
+          </td>
+        `;
+        body.appendChild(takerRow);
+      }
     }
   }
 
