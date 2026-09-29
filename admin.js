@@ -3209,6 +3209,7 @@
             <span class="badge proctor">Proctor access</span>
           ` : archived ? `
             <button type="button" data-exam-action="preview">Preview Exam</button>
+            <button type="button" data-exam-action="retake">Retake Exam</button>
             <button type="button" data-exam-action="restore">Restore</button>
           ` : `
             <button type="button" data-exam-action="preview">Preview Exam</button>
@@ -3217,6 +3218,7 @@
             <button type="button" data-action="draft">Draft</button>
             <button type="button" data-action="published">Publish</button>
             <button type="button" data-action="closed">Close</button>
+            <button type="button" data-exam-action="retake">Retake Exam</button>
             <button type="button" data-exam-action="archive">Move to Trash</button>
           `}
         </td>
@@ -3236,6 +3238,7 @@
           if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
           if (action === "archive") await archiveExam(exam);
           if (action === "restore") await restoreExam(exam);
+          if (action === "retake") await createRetakeExam(exam);
           if (action === "delete") await deleteExam(exam);
         });
       });
@@ -3617,6 +3620,155 @@
       return;
     }
     await loadExams();
+  }
+
+  function nextRetakeIdentity(exam) {
+    const originalCode = String(exam?.code || "EXAM").trim().toUpperCase();
+    const rootCode = originalCode.replace(/-R\d+$/i, "");
+    const existingCodes = new Set((examsCache || []).map(item => String(item.code || "").toUpperCase()));
+
+    let number = 2;
+    let code = `${rootCode}-R${number}`;
+    while (existingCodes.has(code)) {
+      number += 1;
+      code = `${rootCode}-R${number}`;
+    }
+
+    const originalTitle = String(exam?.title || "Examination").trim();
+    const rootTitle = originalTitle.replace(/\s*\(Retake\s+\d+\)$/i, "");
+    return {
+      number,
+      code,
+      title: `${rootTitle} (Retake ${number})`
+    };
+  }
+
+  async function createRetakeExam(exam) {
+    if (!exam?.id) return;
+
+    const identity = nextRetakeIdentity(exam);
+    const ok = confirm(
+      `Create a new retake copy of "${exam.title}"?\n\n` +
+      `New title: ${identity.title}\n` +
+      `New code: ${identity.code}\n\n` +
+      "The original exam, student takers, answers, scores, and proctoring records will NOT be changed or deleted. " +
+      "The copy will be created as a Draft with no opening or closing schedule."
+    );
+    if (!ok) return;
+
+    let sourceQuestions = null;
+
+    // Draft exams may contain newer unsaved/autosaved question content in draft_payload.
+    if (exam.status === "draft" && Array.isArray(exam.draft_payload?.questions)) {
+      sourceQuestions = exam.draft_payload.questions.map((q, index) => ({
+        position: index + 1,
+        section_title: q.section_title || "Part 1",
+        prompt: q.prompt || "",
+        question_type: q.question_type || "mcq",
+        choices: Array.isArray(q.choices) ? q.choices : (q.choices || null),
+        correct_answer: q.correct_answer ?? null,
+        points: Number(q.points) || 1,
+        rubric_type: q.rubric_type || "analytic",
+        rubric_criteria: Array.isArray(q.rubric_criteria) ? q.rubric_criteria : [],
+        stimulus_type: q.stimulus_type || "none",
+        stimulus_payload: q.stimulus_payload || {}
+      }));
+    } else {
+      const { data, error } = await db
+        .from("questions")
+        .select("position,section_title,prompt,question_type,choices,correct_answer,points,rubric_type,rubric_criteria,stimulus_type,stimulus_payload")
+        .eq("exam_id", exam.id)
+        .order("position", { ascending: true });
+
+      if (error) {
+        alert(`Could not copy the exam questions: ${error.message}`);
+        return;
+      }
+      sourceQuestions = data || [];
+    }
+
+    if (!sourceQuestions.length) {
+      const continueEmpty = confirm(
+        "This examination currently has no questions. Create an empty retake draft anyway?"
+      );
+      if (!continueEmpty) return;
+    }
+
+    const newExamRow = {
+      code: identity.code,
+      title: identity.title,
+      owner_id: exam.owner_id || getActiveWorkspaceOwnerId(),
+      duration_minutes: Number(exam.duration_minutes) || 60,
+      status: "draft",
+      start_at: null,
+      end_at: null,
+      archived: false,
+      archived_at: null
+    };
+
+    const { data: createdRows, error: createError } = await db
+      .from("exams")
+      .insert([newExamRow])
+      .select("id,code,title,owner_id")
+      .limit(1);
+
+    if (createError) {
+      const raw = String(createError.message || "");
+      alert(
+        /duplicate key|unique.*code/i.test(raw)
+          ? "That retake code already exists. Refresh Manage Exams and try again so a new retake number can be generated."
+          : `Could not create the retake exam: ${raw}`
+      );
+      return;
+    }
+
+    const created = createdRows?.[0];
+    if (!created?.id) {
+      alert("The retake exam could not be created.");
+      return;
+    }
+
+    if (sourceQuestions.length) {
+      const copiedQuestions = sourceQuestions.map((q, index) => ({
+        exam_id: created.id,
+        position: index + 1,
+        section_title: q.section_title || "Part 1",
+        prompt: q.prompt || "",
+        question_type: q.question_type || "mcq",
+        choices: q.choices ?? null,
+        correct_answer: q.correct_answer ?? null,
+        points: Number(q.points) || 1,
+        rubric_type: q.rubric_type || "analytic",
+        rubric_criteria: q.rubric_criteria || [],
+        stimulus_type: q.stimulus_type || "none",
+        stimulus_payload: q.stimulus_payload || {}
+      }));
+
+      const { error: questionError } = await db
+        .from("questions")
+        .insert(copiedQuestions);
+
+      if (questionError) {
+        // Do not silently leave a broken partial copy.
+        await db.from("exams").delete().eq("id", created.id);
+        alert(`The retake exam could not copy its questions, so the partial copy was removed.\n\n${questionError.message}`);
+        return;
+      }
+    }
+
+    await loadExams();
+
+    const createdExam = examsCache.find(item => item.id === created.id);
+    alert(
+      `Retake exam created successfully.\n\n` +
+      `Title: ${identity.title}\n` +
+      `Code: ${identity.code}\n\n` +
+      "It is saved as a Draft. The original exam and all previous student results remain unchanged."
+    );
+
+    if (createdExam) {
+      await editExam(createdExam);
+    }
   }
 
   async function archiveExam(exam) {
