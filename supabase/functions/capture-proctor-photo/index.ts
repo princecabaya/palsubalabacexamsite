@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     if (uploadError) throw uploadError;
 
     const capturedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const { error: metaError } = await admin
       .from("proctor_photos")
