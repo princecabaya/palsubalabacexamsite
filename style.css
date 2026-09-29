@@ -3608,3 +3608,97 @@ textarea{resize:vertical}
     font-size:.7rem;
   }
 }
+
+
+/* =========================================================
+   Collapsible status groups: Manage Exams + Attempts
+   ========================================================= */
+.status-group-row>td{
+  padding:0!important;
+  border-top:10px solid transparent;
+  background:transparent!important;
+}
+.status-group-toggle{
+  width:100%;
+  display:grid;
+  grid-template-columns:22px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#f8fafc;
+  text-align:left;
+  cursor:pointer;
+}
+.status-group-toggle:hover{background:#f1f5f9}
+.status-group-chevron{
+  font-size:1rem;
+  line-height:1;
+  color:#475569;
+}
+.status-group-label{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.status-group-label strong{
+  font-size:.9rem;
+  color:var(--text);
+}
+.status-group-label small{
+  font-size:.72rem;
+  color:var(--muted);
+  font-weight:500;
+}
+.status-group-count{
+  padding:4px 8px;
+  border-radius:999px;
+  background:#fff;
+  border:1px solid var(--line);
+  font-size:.72rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+.exam-status-group.published .status-group-toggle{
+  background:#ecfdf5;
+  border-color:#bbf7d0;
+}
+.exam-status-group.draft .status-group-toggle{
+  background:#fffbeb;
+  border-color:#fde68a;
+}
+.exam-status-group.closed .status-group-toggle{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+}
+.exam-status-group.archived .status-group-toggle{
+  background:#fef2f2;
+  border-color:#fecaca;
+}
+.attempt-status-group.active .status-group-toggle{
+  background:#eff6ff;
+  border-color:#bfdbfe;
+}
+.attempt-status-group.submitted .status-group-toggle{
+  background:#ecfdf5;
+  border-color:#bbf7d0;
+}
+.attempt-status-group.other .status-group-toggle{
+  background:#fff7ed;
+  border-color:#fed7aa;
+}
+@media(max-width:760px){
+  .status-group-toggle{
+    grid-template-columns:20px minmax(0,1fr);
+    gap:8px;
+    padding:10px 11px;
+  }
+  .status-group-count{
+    grid-column:2;
+    justify-self:start;
+  }
+  .status-group-label small{
+    font-size:.68rem;
+  }
+}
