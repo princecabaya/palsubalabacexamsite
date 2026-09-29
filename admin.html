@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260930-0748">
+  <link rel="stylesheet" href="style.css?v=20260930-0815">
 </head>
 <body>
   <main class="shell wide">
@@ -118,6 +118,7 @@
                   <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
                   <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
                   <div class="summary-card"><span>Speech Signals</span><strong id="summarySpeech">0</strong></div>
+                  <div class="summary-card"><span>Camera Proctoring</span><strong id="summaryCameraStatus">—</strong></div>
                 </div>
 
                 <div id="summaryNarrative" class="summary-narrative"></div>
@@ -195,7 +196,7 @@
               <summary class="attempt-drawer-summary">
                 <span>
                   <strong>Proctoring Photos</strong>
-                  <span id="proctorPhotosNote" class="muted">Front-camera images are retained for up to 24 hours.</span>
+                  <span id="proctorPhotosNote" class="muted">Front-camera images are retained for up to 7 days.</span>
                 </span>
                 <span id="proctorPhotosCount" class="badge">0 photos</span>
               </summary>
@@ -207,7 +208,7 @@
                     <button id="releaseSelectedEvidenceBtn" type="button" disabled>Release Selected Evidence</button>
                   </div>
                 </div>
-                <p class="muted evidence-note">Preserved photos are excluded from the normal 24-hour cleanup until released. A photo is a review record and should be considered together with other exam evidence.</p>
+                <p class="muted evidence-note">Preserved photos are excluded from the normal 7-day cleanup until released. A photo is a review record and should be considered together with other exam evidence.</p>
                 <div id="proctorPhotoGrid" class="proctor-photo-grid"></div>
               </div>
             </details>
@@ -712,7 +713,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="admin.js?v=20260930-0748"></script>
+  <script src="admin.js?v=20260930-0815"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260928-2302"></script>
   <script src="admin-analysis.js?v=20260928-2302"></script>
