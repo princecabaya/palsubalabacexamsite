@@ -702,20 +702,21 @@
   });
 
   function updateFlexScoreContext({ score = null, maxScore = null, examTitle = "", studentName = "" } = {}) {
-flexScoreText = (score === null || score === undefined || maxScore === null || maxScore === undefined)
-  ? "Score pending"
-  : `${score}/${maxScore}`;
-    const scoreNode = $("flexLiveScore");
-if (scoreNode) scoreNode.textContent = flexScoreText;
+    flexScoreText = (score === null || score === undefined || maxScore === null || maxScore === undefined)
+      ? "Score pending"
+      : `${score}/${maxScore}`;
 
-const messageNode = $("flexLiveMessage");
-if (messageNode && String(score) === String(maxScore) && score !== null && maxScore !== null) {
-  messageNode.textContent = "Perfect score! 🎉";
-}
     flexExamTitle = examTitle || flexExamTitle || "Exam";
     flexStudentName = studentName || flexStudentName || "";
+
     const scoreNode = $("flexLiveScore");
     if (scoreNode) scoreNode.textContent = flexScoreText;
+
+    const messageNode = $("flexLiveMessage");
+    if (messageNode && score !== null && maxScore !== null && Number(score) === Number(maxScore)) {
+      messageNode.textContent = "Perfect score! 🎉";
+    }
+
     const panel = $("flexScorePanel");
     if (panel) panel.classList.remove("hidden");
   }
@@ -925,55 +926,7 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     flexRenderFrame = requestAnimationFrame(drawFlexFrame);
   }
-    const video = $("flexCameraVideo");
-    const canvas = $("flexCameraCanvas");
-    if (!video || !canvas || !flexCameraStream?.active) return;
-    if (video.readyState >= 2) {
-      const { width, height } = flexCanvasSize(video);
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
-      const ctx = canvas.getContext("2d");
-      ctx.save();
-      ctx.clearRect(0,0,width,height);
-      ctx.translate(width,0);
-      ctx.scale(-1,1);
-      ctx.drawImage(video,0,0,width,height);
-      ctx.restore();
 
-      const bannerY = Math.max(36, height * 0.08);
-      const scoreY = bannerY + Math.max(54, height * 0.055);
-      const message = $("flexMessageSelect")?.value || "I made it! 🎉";
-
-      ctx.textAlign = "center";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,.55)";
-      ctx.fillStyle = "#fff";
-      ctx.lineWidth = Math.max(5, width * 0.006);
-      ctx.font = `700 ${Math.max(28, Math.round(width * 0.05))}px system-ui,sans-serif`;
-      ctx.strokeText(message, width/2, bannerY);
-      ctx.fillText(message, width/2, bannerY);
-
-      ctx.font = `800 ${Math.max(46, Math.round(width * 0.085))}px system-ui,sans-serif`;
-      ctx.strokeText(flexScoreText, width/2, scoreY);
-      ctx.fillText(flexScoreText, width/2, scoreY);
-
-      const confettiCount = 36;
-      const t = performance.now() / 900;
-      for (let i=0;i<confettiCount;i++) {
-        const x = ((i * 73.7) % width);
-        const y = ((i * 121.3 + t * (38 + (i%5)*10)) % (height+80)) - 40;
-        ctx.save();
-        ctx.translate(x,y);
-        ctx.rotate((i+t)*0.7);
-        ctx.fillStyle = `hsl(${(i*47)%360} 85% 58%)`;
-        ctx.fillRect(-5,-9,10,18);
-        ctx.restore();
-      }
-    }
-    flexRenderFrame = requestAnimationFrame(drawFlexFrame);
-  }
 
   async function startFlexCamera() {
     const status = $("flexStatus");
