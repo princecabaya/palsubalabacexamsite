@@ -3210,7 +3210,6 @@
           ` : archived ? `
             <button type="button" data-exam-action="preview">Preview Exam</button>
             <button type="button" data-exam-action="restore">Restore</button>
-            <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
           ` : `
             <button type="button" data-exam-action="preview">Preview Exam</button>
             <button type="button" data-exam-action="edit" ${exam.status === "published" ? "disabled title=\"Published examinations cannot be edited\"" : ""}>Edit Exam</button>
@@ -3218,8 +3217,7 @@
             <button type="button" data-action="draft">Draft</button>
             <button type="button" data-action="published">Publish</button>
             <button type="button" data-action="closed">Close</button>
-            <button type="button" data-exam-action="archive">Archive</button>
-            <button type="button" class="danger-outline" data-exam-action="delete">Delete</button>
+            <button type="button" data-exam-action="archive">Move to Trash</button>
           `}
         </td>
       `;
@@ -3668,35 +3666,29 @@
   }
 
   async function deleteExam(exam) {
+    // Safety fallback for older cached dashboard builds:
+    // "Delete" now performs a recoverable soft delete by archiving the exam.
     const ok = confirm(
-      `PERMANENTLY DELETE "${exam.title}"?\n\nThis will also delete its questions, every student's attempt, saved answers, AI feedback, and proctoring events. This cannot be undone.`
+      `Move "${exam.title}" to Trash?\n\nThe exam, questions, student attempts, responses, scores, AI feedback, and proctoring records will all be kept. You can restore it later.`
     );
     if (!ok) return;
 
-    const second = confirm(
-      `Final confirmation: delete exam code "${exam.code}" and all associated records?`
-    );
-    if (!second) return;
-
-    const { data, error } = await db.rpc("admin_delete_exam", {
-      p_exam_id: exam.id
-    });
+    const { error } = await db
+      .from("exams")
+      .update({
+        archived: true,
+        archived_at: new Date().toISOString(),
+        status: "closed"
+      })
+      .eq("id", exam.id);
 
     if (error) {
-      alert(
-        `Could not delete exam: ${error.message}\n\nRun supabase-fix-admin-delete.sql in Supabase SQL Editor, then refresh this page.`
-      );
+      alert(`Could not move exam to Trash: ${error.message}`);
       return;
     }
 
-    if (data !== true) {
-      alert("No exam was deleted. It may already have been removed.");
-      return;
-    }
-
-    alert(`Exam "${exam.title}" was deleted successfully.`);
-    $("examResultsPanel")?.classList.add("hidden");
-    await Promise.all([loadExams(), refreshAttempts()]);
+    alert("Exam moved to Trash. No student data was deleted.");
+    await loadExams();
   }
 
   async function reopenCurrentAttempt() {
