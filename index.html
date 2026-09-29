@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260929-0135">
+  <link rel="stylesheet" href="style.css?v=20260929-0205">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -38,6 +38,40 @@
         <input type="checkbox" id="consentBox">
         <span>I understand that exam-behavior events will be recorded, the front camera will take a proctoring photo, and the microphone will be used only to detect possible speech events. Microphone audio is not recorded or uploaded. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
       </label>
+
+      <section class="exam-preflight" aria-label="Exam entry readiness">
+        <div class="exam-preflight-head">
+          <strong>Entry readiness</strong>
+          <span class="muted">All checks must be ready before the exam opens.</span>
+        </div>
+        <div class="preflight-grid">
+          <div class="preflight-row" data-preflight="exam" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Exam</span>
+            <span class="preflight-detail">Waiting</span>
+          </div>
+          <div class="preflight-row" data-preflight="student" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Student ID</span>
+            <span class="preflight-detail">Waiting</span>
+          </div>
+          <div class="preflight-row" data-preflight="camera" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Camera</span>
+            <span class="preflight-detail">Not checked</span>
+          </div>
+          <div class="preflight-row" data-preflight="microphone" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Microphone</span>
+            <span class="preflight-detail">Not checked</span>
+          </div>
+          <div class="preflight-row" data-preflight="session" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Session</span>
+            <span class="preflight-detail">Not checked</span>
+          </div>
+        </div>
+      </section>
 
       <div class="student-login-actions">
         <button id="startBtn" class="primary">Enter Fullscreen & Start Exam</button>
@@ -282,7 +316,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20260929-0135"></script>
+  <script src="app.js?v=20260929-0205"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
