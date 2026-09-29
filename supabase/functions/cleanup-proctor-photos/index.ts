@@ -23,10 +23,10 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     // Query Storage metadata so cleanup also removes orphaned objects if an
-    // attempt was deleted before its 24-hour photo-retention period elapsed.
+    // attempt was deleted before its 7-day photo-retention period elapsed.
     const { data: expiredObjects, error: objectError } = await admin
       .schema("storage")
       .from("objects")
