@@ -3370,3 +3370,13 @@ $student_messages$;
 
 revoke all on function public.get_attempt_messages(uuid,timestamptz) from public;
 grant execute on function public.get_attempt_messages(uuid,timestamptz) to anon, authenticated;
+
+
+-- ---------- 7-day proctor-photo retention upgrade ----------
+alter table public.proctor_photos
+  alter column expires_at
+  set default (now() + interval '7 days');
+
+update public.proctor_photos
+set expires_at = greatest(expires_at, captured_at + interval '7 days')
+where expires_at > now();
