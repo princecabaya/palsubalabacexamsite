@@ -1150,7 +1150,7 @@
       const evidenceCount = photos.filter(p => p.evidence_saved).length;
       note.textContent = evidenceCount
         ? `${evidenceCount} preserved as evidence. Other photos follow the normal 24-hour retention.`
-        : "Front-camera photos are private and normally expire after 24 hours.";
+        : "Front-camera photos are private and normally expire after 7 days.";
 
       grid.innerHTML = "";
 
@@ -1244,7 +1244,7 @@
 
     const action = saved ? "preserve" : "release";
     const message = saved
-      ? `Preserve ${targetIds.length} selected photo${targetIds.length === 1 ? "" : "s"} as examination evidence? These photos will no longer be deleted by the normal 24-hour cleanup until you release them.`
+      ? `Preserve ${targetIds.length} selected photo${targetIds.length === 1 ? "" : "s"} as examination evidence? These photos will no longer be deleted by the normal 7-day cleanup until you release them.`
       : `Release ${targetIds.length} preserved photo${targetIds.length === 1 ? "" : "s"}? They will return to the normal retention policy and may be deleted by the next cleanup if already older than 24 hours.`;
 
     if (!confirm(message)) return;
@@ -1405,6 +1405,37 @@
       "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
     ]);
     const speechSignals = count("possible_speech_detected");
+    const cameraSaved = count("camera_photo_saved");
+    const cameraFailed = count("camera_photo_failed");
+    const cameraNotReady = count("camera_photo_not_ready");
+    const cameraUnavailable = countAny([
+      "camera_monitoring_unavailable_at_start",
+      "camera_monitoring_unavailable_after_restore",
+      "camera_initial_photo_unavailable"
+    ]);
+
+    const cameraStatusNode = $("summaryCameraStatus");
+    if (cameraStatusNode) {
+      let cameraText = "No photo event";
+      let cameraTitle = "No successful or failed camera-photo event was recorded.";
+
+      if (cameraSaved > 0) {
+        cameraText = `${cameraSaved} saved`;
+        cameraTitle = `${cameraSaved} proctoring photo${cameraSaved === 1 ? " was" : "s were"} successfully saved.`;
+      } else if (cameraUnavailable > 0) {
+        cameraText = "Unavailable";
+        cameraTitle = "Camera monitoring was unavailable for this attempt.";
+      } else if (cameraFailed > 0) {
+        cameraText = "Upload failed";
+        cameraTitle = `${cameraFailed} camera upload failure${cameraFailed === 1 ? " was" : "s were"} recorded.`;
+      } else if (cameraNotReady > 0) {
+        cameraText = "Camera not ready";
+        cameraTitle = `${cameraNotReady} capture attempt${cameraNotReady === 1 ? " occurred" : "s occurred"} before the camera video was ready.`;
+      }
+
+      cameraStatusNode.textContent = cameraText;
+      cameraStatusNode.title = cameraTitle;
+    }
 
     $("summaryTabHidden").textContent = String(tabHidden);
     $("summaryBlur").textContent = String(blur);
@@ -1428,6 +1459,18 @@
 
     if (percent !== null) {
       narrative.push(`The auto-scored result is ${trimNumber(score)} out of ${trimNumber(maxScore)} (${formatPercent(percent)}%).`);
+    }
+
+    if (cameraSaved > 0) {
+      narrative.push(`${cameraSaved} proctoring photo${cameraSaved === 1 ? " was" : "s were"} successfully saved for this attempt.`);
+    } else if (cameraUnavailable > 0) {
+      narrative.push("No proctoring photo was saved because camera monitoring was unavailable during this attempt.");
+    } else if (cameraFailed > 0) {
+      narrative.push(`No proctoring photo is currently available; ${cameraFailed} camera photo upload failure${cameraFailed === 1 ? " was" : "s were"} recorded.`);
+    } else if (cameraNotReady > 0) {
+      narrative.push("The camera capture scheduler ran, but the video was not ready during the recorded capture attempts.");
+    } else {
+      narrative.push("No camera-photo event was recorded for this attempt. Review the Proctoring Photos section and event log for additional context.");
     }
 
     if (speechSignals > 0) {
