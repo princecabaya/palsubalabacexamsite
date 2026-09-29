@@ -142,8 +142,20 @@
 
   function getExamDeviceSessionId() {
     const key = "exam_device_session_id";
-    let value = sessionStorage.getItem(key);
-    if (value && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    // Device identity should survive tab closure/reopening in the same browser.
+    // Prefer localStorage, but migrate an older sessionStorage value when present.
+    let value = null;
+    try {
+      value = localStorage.getItem(key) || sessionStorage.getItem(key);
+    } catch (_) {
+      value = sessionStorage.getItem(key);
+    }
+
+    if (value && uuidPattern.test(value)) {
+      try { localStorage.setItem(key, value); } catch (_) {}
+      try { sessionStorage.setItem(key, value); } catch (_) {}
       return value;
     }
 
@@ -158,7 +170,8 @@
       value = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
     }
 
-    sessionStorage.setItem(key, value);
+    try { localStorage.setItem(key, value); } catch (_) {}
+    try { sessionStorage.setItem(key, value); } catch (_) {}
     return value;
   }
 
