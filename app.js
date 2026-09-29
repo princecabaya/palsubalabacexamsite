@@ -1432,7 +1432,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     });
     if (!savedOnStartError) existingResponses = savedOnStart || [];
 
-    await loadExam({ restored: existingResponses.length > 0, savedResponses: existingResponses });
+    const examLoaded = await loadExam({ restored: existingResponses.length > 0, savedResponses: existingResponses });
+    if (!examLoaded) return;
     if (cameraStream?.active) startCameraCaptureSchedule();
     if (microphoneStream?.active) await startSpeechMonitoring();
   });
@@ -1442,8 +1443,15 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
       p_attempt_token: attempt.attempt_token
     });
     if (error) {
-      $("loginMsg").textContent = error.message;
-      return;
+      const detail = String(error?.message || error?.details || error?.hint || "");
+      if (/get_exam_questions|function.*does not exist|schema cache|PGRST202/i.test(detail)) {
+        $("loginMsg").textContent = "Your exam session started, but the live Supabase question API is not compatible with this site version. Your attempt is preserved. Please inform the teacher/admin.";
+      } else {
+        $("loginMsg").textContent = `Your exam session started, but the questions could not be loaded: ${error.message || "Unknown error"}. Refresh this page once to restore the same attempt.`;
+      }
+      setPreflightStatus("session","warning","Session started • question loading failed");
+      $("startBtn").disabled = false;
+      return false;
     }
 
     questions = data || [];
@@ -1470,6 +1478,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
         screen: `${screen.width}x${screen.height}`
       });
     }
+
+    return true;
   }
 
   function renderMathContent(element, text) {
@@ -2496,10 +2506,15 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     startAttemptMessagePolling();
     msg.textContent = "";
 
-    await loadExam({
+    const restoredLoaded = await loadExam({
       restored: true,
       savedResponses: savedResponses || []
     });
+
+    if (!restoredLoaded) {
+      $("startBtn").disabled = false;
+      return;
+    }
 
     try {
       await requestFrontCamera();
