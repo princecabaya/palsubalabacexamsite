@@ -29,6 +29,43 @@
       note.textContent = "";
     }
   }
+  function setPreflightStatus(key, state, detail = "") {
+    const row = document.querySelector(`[data-preflight="${key}"]`);
+    if (!row) return;
+    row.dataset.state = state;
+    const icon = row.querySelector(".preflight-icon");
+    const detailNode = row.querySelector(".preflight-detail");
+    const iconMap = { ready:"✓", checking:"…", warning:"!", error:"×", idle:"○" };
+    if (icon) icon.textContent = iconMap[state] || "○";
+    if (detailNode) detailNode.textContent = detail || "";
+  }
+
+  function resetPreflightStatus() {
+    [
+      ["exam","idle","Waiting"],
+      ["student","idle","Waiting"],
+      ["camera","idle","Not checked"],
+      ["microphone","idle","Not checked"],
+      ["session","idle","Not checked"]
+    ].forEach(([key,state,detail]) => setPreflightStatus(key,state,detail));
+  }
+
+  function explainStartError(message = "") {
+    const text = String(message || "");
+    if (/not published|invalid.*exam code/i.test(text)) {
+      return "The exam code is invalid, archived, or not yet published by the teacher.";
+    }
+    if (/not opened yet/i.test(text)) return "The exam exists, but its opening time has not started yet.";
+    if (/already closed/i.test(text)) return "The exam closing time has already passed.";
+    if (/active student record|student id/i.test(text)) return "This Student ID is not currently active in the exam roster.";
+    if (/another browser|another device|locked/i.test(text)) {
+      return "This Student ID already has an active session lock. Ask the teacher to use Unlock Active Session, then try again.";
+    }
+    if (/expired/i.test(text)) return "The previous attempt has expired. Ask the teacher to reset the attempt if a retake is intended.";
+    if (/already submitted/i.test(text)) return "This student has already submitted this exam. A teacher reset is required for a retake.";
+    return text || "The exam could not be started.";
+  }
+
   const loginView = $("loginView");
   const examView = $("examView");
   const doneView = $("doneView");
@@ -82,8 +119,9 @@
     "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
   ]);
 
-  function clearExamBrowserState({ keepCurrentToken = false } = {}) {
+  function clearExamBrowserState({ keepCurrentToken = false, keepDeviceSession = true } = {}) {
     const currentToken = keepCurrentToken ? sessionStorage.getItem("exam_guard_token") : null;
+    const currentDeviceSession = keepDeviceSession ? sessionStorage.getItem("exam_device_session_id") : null;
 
     for (const storage of [sessionStorage, localStorage]) {
       const keys = [];
@@ -96,6 +134,9 @@
 
     if (keepCurrentToken && currentToken) {
       sessionStorage.setItem("exam_guard_token", currentToken);
+    }
+    if (keepDeviceSession && currentDeviceSession) {
+      sessionStorage.setItem("exam_device_session_id", currentDeviceSession);
     }
   }
 
@@ -1093,7 +1134,7 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     if (!ok) return;
 
     try {
-      clearExamBrowserState();
+      clearExamBrowserState({ keepDeviceSession: false });
 
       try {
         localStorage.clear();
@@ -1131,6 +1172,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     }
   });
 
+  resetPreflightStatus();
+
   $("startBtn").addEventListener("click", async () => {
     const examCode = $("examCode").value.trim();
     const studentNo = $("studentNo").value.trim();
@@ -1151,7 +1194,12 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
       clearExamBrowserState();
     }
 
-    msg.textContent = "Checking Student ID…";
+    msg.textContent = "Checking Exam Code and Student ID…";
+    setPreflightStatus("exam","checking","Checking");
+    setPreflightStatus("student","checking","Checking");
+    setPreflightStatus("camera","idle","Not checked");
+    setPreflightStatus("microphone","idle","Not checked");
+    setPreflightStatus("session","idle","Not checked");
     $("startBtn").disabled = true;
 
     const { data, error } = await db.rpc("preview_exam_identity", {
@@ -1163,6 +1211,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     if (error || !data?.length) {
       const detail = String(error?.message || error?.details || error?.hint || "");
+      setPreflightStatus("exam","error","Unavailable");
+      setPreflightStatus("student","error","Not verified");
       if (/preview_exam_identity|function.*does not exist|schema cache|PGRST202/i.test(detail)) {
         msg.textContent = "Student identity confirmation is not installed in Supabase yet. Run supabase-upgrade-student-identity-confirmation.sql once in Supabase SQL Editor.";
       } else {
@@ -1172,6 +1222,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     }
 
     const identity = data[0];
+    setPreflightStatus("exam","ready","Published and open");
+    setPreflightStatus("student","ready", identity.student_name || "Verified");
     pendingIdentity = {
       examCode,
       studentNo: identity.student_no || studentNo,
@@ -1272,8 +1324,11 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     try {
       confirmMsg.textContent = "Requesting front-camera permission…";
+      setPreflightStatus("camera","checking","Requesting permission");
       await requestFrontCamera();
+      setPreflightStatus("camera","ready","Ready");
     } catch (cameraError) {
+      setPreflightStatus("camera","error","Permission required");
       confirmMsg.textContent = `Front-camera access is required for this examination. ${cameraError?.message || "Please allow camera access and try again."}`;
       yesBtn.disabled = false;
       noBtn.disabled = false;
@@ -1282,9 +1337,12 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     try {
       confirmMsg.textContent = "Requesting microphone permission…";
+      setPreflightStatus("microphone","checking","Requesting permission");
       await requestMicrophone();
+      setPreflightStatus("microphone","ready","Ready");
     } catch (microphoneError) {
       stopCameraMonitoring();
+      setPreflightStatus("microphone","error","Permission required");
       confirmMsg.textContent = `Microphone access is required for speech-event detection during this examination. ${microphoneError?.message || "Please allow microphone access and try again."}`;
       yesBtn.disabled = false;
       noBtn.disabled = false;
@@ -1296,6 +1354,7 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     // This click is also the user gesture used for fullscreen.
     await enterFullscreen();
 
+    setPreflightStatus("session","checking","Checking active-device lock");
     const { data, error } = await db.rpc("start_exam", {
       p_exam_code: identity.examCode,
       p_student_no: identity.studentNo,
@@ -1310,17 +1369,20 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       stopCameraMonitoring();
       await stopMicrophoneMonitoring();
-      confirmMsg.textContent = error?.message || "Could not start the exam.";
+      const rawStartError = error?.message || "Could not start the exam.";
+      setPreflightStatus("session","error", explainStartError(rawStartError));
+      confirmMsg.textContent = explainStartError(rawStartError);
       return;
     }
 
+    setPreflightStatus("session","ready","Session ready");
     attempt = data[0];
     pendingIdentity = null;
     $("identityConfirmModal").classList.add("hidden");
 
     // A genuinely new/restarted attempt must not inherit stale browser state
     // from a prior deleted or submitted attempt.
-    clearExamBrowserState();
+    clearExamBrowserState({ keepDeviceSession: true });
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
     resetExamFlagCounts();
     updateMobileMonitoringCapabilityNote();
