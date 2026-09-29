@@ -1211,13 +1211,34 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     if (error || !data?.length) {
       const detail = String(error?.message || error?.details || error?.hint || "");
+
+      if (/preview_exam_identity|function.*does not exist|schema cache|PGRST202/i.test(detail)) {
+        // Backward-compatible mode for live databases that have not yet installed
+        // the identity-preview RPC. The actual start_exam RPC still validates
+        // the exam code and Student ID server-side.
+        setPreflightStatus("exam","warning","Will verify when starting");
+        setPreflightStatus("student","warning","Will verify when starting");
+        pendingIdentity = {
+          examCode,
+          studentNo,
+          studentName: studentNo,
+          examTitle: examCode
+        };
+
+        msg.textContent = "";
+        $("identityStudentName").textContent = studentNo;
+        $("identityStudentNo").textContent = studentNo;
+        $("identityExamTitle").textContent = examCode;
+        $("identityConfirmQuestion").textContent = `Proceed with Student ID ${studentNo}?`;
+        $("identityConfirmMsg").textContent = "The server will verify your Exam Code and Student ID when you start.";
+        $("identityConfirmModal").classList.remove("hidden");
+        $("identityYesBtn").focus();
+        return;
+      }
+
       setPreflightStatus("exam","error","Unavailable");
       setPreflightStatus("student","error","Not verified");
-      if (/preview_exam_identity|function.*does not exist|schema cache|PGRST202/i.test(detail)) {
-        msg.textContent = "Student identity confirmation is not installed in Supabase yet. Run supabase-upgrade-student-identity-confirmation.sql once in Supabase SQL Editor.";
-      } else {
-        msg.textContent = error?.message || "Could not verify the Exam Code and Student ID.";
-      }
+      msg.textContent = explainStartError(error?.message || detail || "Could not verify the Exam Code and Student ID.");
       return;
     }
 
@@ -1322,53 +1343,35 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     yesBtn.disabled = true;
     noBtn.disabled = true;
 
-    try {
-      confirmMsg.textContent = "Requesting front-camera permission…";
-      setPreflightStatus("camera","checking","Requesting permission");
-      await requestFrontCamera();
-      setPreflightStatus("camera","ready","Ready");
-    } catch (cameraError) {
-      setPreflightStatus("camera","error","Permission required");
-      confirmMsg.textContent = `Front-camera access is required for this examination. ${cameraError?.message || "Please allow camera access and try again."}`;
-      yesBtn.disabled = false;
-      noBtn.disabled = false;
-      return;
-    }
+    // Start the server-side exam session first. Browser monitoring is important,
+    // but a temporary permission/API issue must not prevent a valid student
+    // from entering the examination.
+    setPreflightStatus("session","checking","Checking exam and session");
+    confirmMsg.textContent = "Starting exam session…";
 
-    try {
-      confirmMsg.textContent = "Requesting microphone permission…";
-      setPreflightStatus("microphone","checking","Requesting permission");
-      await requestMicrophone();
-      setPreflightStatus("microphone","ready","Ready");
-    } catch (microphoneError) {
-      stopCameraMonitoring();
-      setPreflightStatus("microphone","error","Permission required");
-      confirmMsg.textContent = `Microphone access is required for speech-event detection during this examination. ${microphoneError?.message || "Please allow microphone access and try again."}`;
-      yesBtn.disabled = false;
-      noBtn.disabled = false;
-      return;
-    }
-
-    confirmMsg.textContent = "";
-
-    // This click is also the user gesture used for fullscreen.
-    await enterFullscreen();
-
-    setPreflightStatus("session","checking","Checking active-device lock");
-    const { data, error } = await db.rpc("start_exam", {
+    const deviceSession = getExamDeviceSessionId();
+    let startResult = await db.rpc("start_exam", {
       p_exam_code: identity.examCode,
       p_student_no: identity.studentNo,
       p_user_agent: navigator.userAgent,
-      p_device_session: getExamDeviceSessionId()
+      p_device_session: deviceSession
     });
 
-    yesBtn.disabled = false;
-    noBtn.disabled = false;
+    // Backward compatibility for a live database that still has the older
+    // 3-argument start_exam signature.
+    if (startResult.error && /start_exam|function.*does not exist|schema cache|PGRST202/i.test(String(startResult.error.message || ""))) {
+      startResult = await db.rpc("start_exam", {
+        p_exam_code: identity.examCode,
+        p_student_no: identity.studentNo,
+        p_user_agent: navigator.userAgent
+      });
+    }
+
+    const { data, error } = startResult;
 
     if (error || !data?.length) {
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      stopCameraMonitoring();
-      await stopMicrophoneMonitoring();
+      yesBtn.disabled = false;
+      noBtn.disabled = false;
       const rawStartError = error?.message || "Could not start the exam.";
       setPreflightStatus("session","error", explainStartError(rawStartError));
       confirmMsg.textContent = explainStartError(rawStartError);
@@ -1377,6 +1380,41 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
 
     setPreflightStatus("session","ready","Session ready");
     attempt = data[0];
+
+    // Fullscreen is best-effort. iOS browsers may not provide the Fullscreen API.
+    try {
+      await enterFullscreen();
+    } catch (_) {}
+
+    // Monitoring permissions are now best-effort and visible in the preflight.
+    try {
+      setPreflightStatus("camera","checking","Requesting permission");
+      confirmMsg.textContent = "Starting front-camera monitoring…";
+      await requestFrontCamera();
+      setPreflightStatus("camera","ready","Ready");
+    } catch (cameraError) {
+      setPreflightStatus("camera","warning","Unavailable");
+      await logEvent("camera_monitoring_unavailable_at_start", {
+        message: String(cameraError?.message || cameraError).slice(0,300)
+      });
+    }
+
+    try {
+      setPreflightStatus("microphone","checking","Requesting permission");
+      confirmMsg.textContent = "Starting microphone monitoring…";
+      await requestMicrophone();
+      setPreflightStatus("microphone","ready","Ready");
+    } catch (microphoneError) {
+      setPreflightStatus("microphone","warning","Unavailable");
+      resetMicrophoneLevel();
+      updateMicrophoneStatus("Microphone unavailable");
+      await logEvent("microphone_monitoring_unavailable_at_start", {
+        message: String(microphoneError?.message || microphoneError).slice(0,300)
+      });
+    }
+
+    confirmMsg.textContent = "";
+
     pendingIdentity = null;
     $("identityConfirmModal").classList.add("hidden");
 
@@ -1395,8 +1433,8 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     if (!savedOnStartError) existingResponses = savedOnStart || [];
 
     await loadExam({ restored: existingResponses.length > 0, savedResponses: existingResponses });
-    startCameraCaptureSchedule();
-    await startSpeechMonitoring();
+    if (cameraStream?.active) startCameraCaptureSchedule();
+    if (microphoneStream?.active) await startSpeechMonitoring();
   });
 
   async function loadExam({ restored = false, savedResponses = [] } = {}) {
@@ -2466,15 +2504,21 @@ if (messageNode && String(score) === String(maxScore) && score !== null && maxSc
     try {
       await requestFrontCamera();
       startCameraCaptureSchedule();
-      await requestMicrophone();
-      await startSpeechMonitoring();
     } catch (cameraError) {
       updateCameraStatus("Camera unavailable");
+      await logEvent("camera_monitoring_unavailable_after_restore", {
+        message: String(cameraError?.message || cameraError).slice(0,300)
+      });
+    }
+
+    try {
+      await requestMicrophone();
+      await startSpeechMonitoring();
+    } catch (microphoneError) {
       resetMicrophoneLevel();
       updateMicrophoneStatus("Microphone unavailable");
-      warn("Your exam session was restored, but camera or microphone monitoring could not be restarted. Please allow access if prompted.");
-      await logEvent("monitoring_device_unavailable_after_restore", {
-        message: String(cameraError?.message || cameraError).slice(0, 300)
+      await logEvent("microphone_monitoring_unavailable_after_restore", {
+        message: String(microphoneError?.message || microphoneError).slice(0,300)
       });
     }
   }
