@@ -3702,3 +3702,22 @@ textarea{resize:vertical}
     font-size:.68rem;
   }
 }
+
+
+/* Active exam archive action */
+.attempt-group-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.archive-active-exam-btn{
+  white-space:nowrap;
+}
+@media(max-width:760px){
+  .attempt-group-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+}
