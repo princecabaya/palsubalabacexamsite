@@ -85,6 +85,7 @@
   let cameraStream = null;
   let cameraInterval = null;
   let cameraInitialTimeout = null;
+  let cameraInitialRetryCount = 0;
   let cameraCaptureBusy = false;
   let microphoneStream = null;
   let microphoneAudioContext = null;
@@ -369,6 +370,7 @@
     clearTimeout(cameraInitialTimeout);
     cameraInterval = null;
     cameraInitialTimeout = null;
+    cameraInitialRetryCount = 0;
     cameraCaptureBusy = false;
 
     for (const track of cameraStream?.getTracks?.() || []) {
@@ -386,18 +388,49 @@
 
     clearInterval(cameraInterval);
     clearTimeout(cameraInitialTimeout);
+    cameraInitialRetryCount = 0;
 
-    // Capture once shortly after the examination begins, then approximately
-    // every 60 seconds while the attempt remains active.
-    cameraInitialTimeout = setTimeout(() => captureAndUploadProctorPhoto(), 2500);
-    cameraInterval = setInterval(() => captureAndUploadProctorPhoto(), 60_000);
+    const tryInitialCapture = async () => {
+      if (!attempt?.attempt_token || submitted || !cameraStream?.active) return;
+
+      const saved = await captureAndUploadProctorPhoto({ source: "initial" });
+      if (saved) {
+        cameraInitialRetryCount = 0;
+        return;
+      }
+
+      cameraInitialRetryCount += 1;
+      if (cameraInitialRetryCount >= 6) {
+        await logEvent("camera_initial_photo_unavailable", {
+          retries: cameraInitialRetryCount,
+          message: "No initial proctor photo could be saved after repeated retries."
+        });
+        updateCameraStatus("Camera active • photo retry failed");
+        return;
+      }
+
+      updateCameraStatus(`Retrying photo ${cameraInitialRetryCount}/6…`);
+      cameraInitialTimeout = setTimeout(tryInitialCapture, 5000);
+    };
+
+    // Start shortly after the exam opens. If the video is not ready yet or the
+    // upload fails, retry every 5 seconds up to 6 times.
+    cameraInitialTimeout = setTimeout(tryInitialCapture, 2500);
+
+    // Continue normal periodic capture every 60 seconds.
+    cameraInterval = setInterval(() => {
+      captureAndUploadProctorPhoto({ source: "scheduled" });
+    }, 60_000);
   }
 
-  async function captureAndUploadProctorPhoto() {
-    if (!attempt?.attempt_token || submitted || !cameraStream?.active || cameraCaptureBusy) return;
+  async function captureAndUploadProctorPhoto({ source = "scheduled" } = {}) {
+    if (!attempt?.attempt_token || submitted || !cameraStream?.active || cameraCaptureBusy) return false;
 
     const video = $("proctorCameraPreview");
-    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      await logEvent("camera_photo_not_ready", { source });
+      return false;
+    }
 
     cameraCaptureBusy = true;
     updateCameraStatus("Saving photo…");
@@ -428,16 +461,22 @@
       if (data?.error) throw new Error(data.error);
 
       updateCameraStatus("Photo saved");
-      await logEvent("camera_photo_saved", { capturedAt: data?.captured_at || null });
+      await logEvent("camera_photo_saved", {
+        capturedAt: data?.captured_at || null,
+        source
+      });
       setTimeout(() => {
         if (cameraStream?.active && !submitted) updateCameraStatus("Camera active");
       }, 1800);
+      return true;
     } catch (error) {
       console.warn("Proctor photo capture failed:", error);
       updateCameraStatus("Photo save failed");
       await logEvent("camera_photo_failed", {
-        message: String(error?.message || error).slice(0, 300)
+        message: String(error?.message || error).slice(0, 300),
+        source
       });
+      return false;
     } finally {
       cameraCaptureBusy = false;
     }
