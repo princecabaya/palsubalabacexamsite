@@ -448,7 +448,7 @@
       .select(`
         id,status,started_at,submitted_at,score,max_score,active_session_id,session_locked_at,
         students(student_no,full_name),
-        exams(id,code,title,owner_id)
+        exams(id,code,title,owner_id,status,archived,archived_at)
       `)
       .order("started_at", { ascending: false })
       .limit(500);
@@ -519,6 +519,9 @@
           key: examKey,
           title: attempt.exams?.title || "Untitled Exam",
           code: attempt.exams?.code || "",
+          ownerId: attempt.exams?.owner_id || null,
+          examStatus: attempt.exams?.status || "",
+          archived: Boolean(attempt.exams?.archived),
           attempts: []
         });
       }
@@ -602,7 +605,15 @@
                   • ${group.totalSignals} signal${group.totalSignals === 1 ? "" : "s"}
                 </span>
               </button>
-              <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
+              <div class="attempt-group-actions">
+                <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
+                ${status.key === "active" && !group.archived && (currentTeacherProfile?.role === "main_admin" || group.ownerId === currentUserId)
+                  ? '<button type="button" class="archive-active-exam-btn danger-outline" title="Close this exam to new entries while preserving all existing attempts and scores">Archive Exam</button>'
+                  : ''}
+                ${status.key === "active" && group.archived
+                  ? '<span class="badge archived">Archived • active takers remain</span>'
+                  : ''}
+              </div>
             </div>
           </td>
         `;
@@ -616,6 +627,11 @@
         header.querySelector(".exam-excel-btn").addEventListener("click", async (event) => {
           event.stopPropagation();
           await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
+        });
+
+        header.querySelector(".archive-active-exam-btn")?.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await archiveActiveExamFromAttempts(group, event.currentTarget);
         });
 
         rows.appendChild(header);
@@ -642,6 +658,52 @@
         }
       }
     }
+  }
+
+  async function archiveActiveExamFromAttempts(group, button) {
+    if (!group?.key) return;
+
+    const activeCount = Number(group.activeCount || 0);
+    const submittedCount = Number(group.submittedCount || 0);
+
+    const ok = confirm(
+      `Archive "${group.title}" now?\n\n` +
+      "This will immediately close the exam to NEW entries and move it to Archived / Trash.\n\n" +
+      `Existing records will be preserved:\n• ${activeCount} active attempt${activeCount === 1 ? "" : "s"}\n• ${submittedCount} submitted attempt${submittedCount === 1 ? "" : "s"}\n• all answers, scores, AI feedback, and proctoring records\n\n` +
+      "Students who already started the exam can continue their current attempt. No score will be changed or deleted."
+    );
+    if (!ok) return;
+
+    const originalText = button?.textContent || "Archive Exam";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Archiving…";
+    }
+
+    const { error } = await db
+      .from("exams")
+      .update({
+        archived: true,
+        archived_at: new Date().toISOString(),
+        status: "closed"
+      })
+      .eq("id", group.key);
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+
+    if (error) {
+      alert(`Could not archive this exam: ${error.message}`);
+      return;
+    }
+
+    alert(
+      `"${group.title}" has been archived.\n\nNew students can no longer enter it. Existing active takers may finish, and all previous results remain preserved.`
+    );
+
+    await Promise.all([refreshAttempts(), loadExams()]);
   }
 
   async function exportExamAttemptsExcel(examId, examTitle, examCode, button) {
