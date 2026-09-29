@@ -3508,3 +3508,103 @@ textarea{resize:vertical}
     font-size:.62rem;
   }
 }
+
+
+/* =========================================================
+   Student exam entry preflight
+   ========================================================= */
+.exam-preflight{
+  margin:12px 0 4px;
+  padding:11px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fbfdff;
+}
+.exam-preflight-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.exam-preflight-head strong{font-size:.88rem}
+.exam-preflight-head .muted{font-size:.72rem}
+.preflight-grid{display:grid;gap:6px}
+.preflight-row{
+  display:grid;
+  grid-template-columns:24px 92px minmax(0,1fr);
+  gap:8px;
+  align-items:center;
+  min-height:34px;
+  padding:6px 8px;
+  border:1px solid #e5eaf1;
+  border-radius:9px;
+  background:#fff;
+  font-size:.78rem;
+}
+.preflight-icon{
+  width:22px;
+  height:22px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  background:#eef2f7;
+  color:#64748b;
+  font-weight:900;
+}
+.preflight-name{font-weight:800}
+.preflight-detail{
+  min-width:0;
+  color:var(--muted);
+  text-align:right;
+  overflow-wrap:anywhere;
+}
+.preflight-row[data-state="ready"]{
+  border-color:#bbf7d0;
+  background:#f0fdf4;
+}
+.preflight-row[data-state="ready"] .preflight-icon{
+  background:#dcfce7;
+  color:#047857;
+}
+.preflight-row[data-state="checking"] .preflight-icon{
+  background:#e0f2fe;
+  color:#0369a1;
+}
+.preflight-row[data-state="warning"]{
+  border-color:#fde68a;
+  background:#fffbeb;
+}
+.preflight-row[data-state="warning"] .preflight-icon{
+  background:#fef3c7;
+  color:#92400e;
+}
+.preflight-row[data-state="error"]{
+  border-color:#fecaca;
+  background:#fef2f2;
+}
+.preflight-row[data-state="error"] .preflight-icon{
+  background:#fee2e2;
+  color:#b91c1c;
+}
+@media(max-width:640px){
+  .exam-preflight{
+    margin-top:10px;
+    padding:9px;
+  }
+  .exam-preflight-head{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:2px;
+  }
+  .preflight-row{
+    grid-template-columns:22px 78px minmax(0,1fr);
+    gap:6px;
+    min-height:32px;
+    padding:5px 7px;
+    font-size:.73rem;
+  }
+  .preflight-detail{
+    font-size:.7rem;
+  }
+}
