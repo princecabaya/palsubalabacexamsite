@@ -3903,3 +3903,25 @@ textarea{resize:vertical}
     width:100%;
   }
 }
+
+
+/* Student local-answer recovery */
+.student-submit-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+#restoreLocalAnswersBtn{
+  white-space:nowrap;
+}
+@media(max-width:600px){
+  .student-submit-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .student-submit-actions button{
+    width:100%;
+  }
+}
