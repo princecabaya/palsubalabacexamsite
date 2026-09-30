@@ -1280,6 +1280,27 @@
   }
 
 
+  async function waitForSavedResponseRestoreAck(attemptId, sentAt, { timeoutMs = 15000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    const afterIso = sentAt ? new Date(sentAt).toISOString() : new Date(Date.now() - 5000).toISOString();
+
+    while (Date.now() < deadline) {
+      const { data, error } = await db
+        .from("proctor_events")
+        .select("occurred_at,event_type,details")
+        .eq("attempt_id", attemptId)
+        .eq("event_type", "saved_responses_restored_to_browser")
+        .gte("occurred_at", afterIso)
+        .order("occurred_at", { ascending: false })
+        .limit(1);
+
+      if (!error && data?.length) return data[0];
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    return null;
+  }
+
   async function restoreSavedResponsesToStudent() {
     const attempt = currentDetailAttempt;
     const button = $("restoreSavedResponsesBtn");
@@ -1321,16 +1342,38 @@
     }
 
     const count = Number(data?.saved_response_count || 0);
+    const sentAt = data?.created_at || new Date().toISOString();
+
     if (statusNode) {
-      statusNode.textContent = `Restore sent • ${count} saved response${count === 1 ? "" : "s"} available`;
+      statusNode.textContent = "Restore sent • waiting for student browser…";
+    }
+
+    const ack = await waitForSavedResponseRestoreAck(attempt.id, sentAt);
+
+    if (ack) {
+      const restored = Number(ack?.details?.restored_count || 0);
+      if (statusNode) {
+        statusNode.textContent = `Restored on student browser • ${restored} field${restored === 1 ? "" : "s"} refilled`;
+      }
+      alert(
+        `Restore confirmed on ${studentName}\'s browser.\n\n` +
+        `${restored} blank response field${restored === 1 ? " was" : "s were"} refilled from the saved attempt.`
+      );
+      return;
+    }
+
+    if (statusNode) {
+      statusNode.textContent = "No browser acknowledgment • refresh/reopen needed";
     }
 
     alert(
-      `Restore command sent to ${studentName}.\n\n` +
+      `The restore command was stored for ${studentName}, but their current browser did not acknowledge it within 15 seconds.\n\n` +
       `${count} Supabase-saved response${count === 1 ? " is" : "s are"} available. ` +
-      "The student's active browser should refill blank answer fields within about 3 seconds."
+      "This usually means the student opened the exam before the restore feature was deployed. " +
+      "Have only this affected student refresh/reopen the same exam page; the saved responses will be loaded into the restored session."
     );
   }
+
 
   async function loadSavedResponses(attempt) {
     const rows = $("savedResponseRows");
