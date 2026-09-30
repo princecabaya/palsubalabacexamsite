@@ -76,6 +76,9 @@
   let attempt = null;
   let questions = [];
   let timerHandle = null;
+  let timerSyncHandle = null;
+  let timerDeadlineMs = null;
+  let timerExpiryCheckInFlight = false;
   let submitted = false;
   let attemptMessagePollHandle = null;
   let lastAttemptMessageAt = null;
@@ -2276,23 +2279,73 @@
     }
   }
 
+  async function syncAttemptDeadline({ announce = false } = {}) {
+    if (!attempt?.attempt_token || submitted) return false;
+
+    const { data, error } = await db.rpc("get_attempt_time_state", {
+      p_attempt_token: attempt.attempt_token
+    });
+
+    if (error || !data?.length) return false;
+
+    const nextEnd = new Date(data[0].ends_at).getTime();
+    if (!Number.isFinite(nextEnd)) return false;
+
+    const previousEnd = timerDeadlineMs;
+    timerDeadlineMs = nextEnd;
+    attempt.ends_at = data[0].ends_at;
+
+    if (announce && previousEnd && nextEnd > previousEnd + 1000) {
+      const addedMinutes = Math.round((nextEnd - previousEnd) / 60000);
+      warn(`Your teacher added approximately ${addedMinutes} minute${addedMinutes === 1 ? "" : "s"} to your exam time.`);
+    }
+
+    return true;
+  }
+
   function startTimer() {
-    const end = new Date(attempt.ends_at).getTime();
-    const tick = () => {
-      const ms = Math.max(0, end - Date.now());
+    clearInterval(timerHandle);
+    clearInterval(timerSyncHandle);
+
+    timerDeadlineMs = new Date(attempt.ends_at).getTime();
+    timerExpiryCheckInFlight = false;
+
+    const tick = async () => {
+      const ms = Math.max(0, timerDeadlineMs - Date.now());
       const total = Math.ceil(ms / 1000);
       const min = Math.floor(total / 60);
       const sec = total % 60;
+
       $("timer").textContent = `${String(min).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
       const fixedTimer = $("fixedRemainingTime");
       if (fixedTimer) fixedTimer.textContent = $("timer").textContent;
-      if (ms <= 0) {
-        clearInterval(timerHandle);
-        submitExam(true);
+
+      if (ms <= 0 && !timerExpiryCheckInFlight) {
+        timerExpiryCheckInFlight = true;
+
+        // Re-check the authoritative server deadline before auto-submitting.
+        // This prevents a student from being submitted at the old deadline if
+        // the teacher granted extra time moments earlier.
+        const updated = await syncAttemptDeadline({ announce: true });
+        const stillExpired = !updated || timerDeadlineMs <= Date.now();
+
+        timerExpiryCheckInFlight = false;
+
+        if (stillExpired) {
+          clearInterval(timerHandle);
+          clearInterval(timerSyncHandle);
+          submitExam(true);
+        }
       }
     };
+
     tick();
     timerHandle = setInterval(tick, 1000);
+
+    // Live-sync the deadline while the attempt is open.
+    timerSyncHandle = setInterval(() => {
+      syncAttemptDeadline({ announce: true });
+    }, 10_000);
   }
 
   async function primeCompletionAudio() {
@@ -2426,6 +2479,8 @@
     submitted = true;
     stopAttemptMessagePolling();
     clearInterval(timerHandle);
+    clearInterval(timerSyncHandle);
+    timerSyncHandle = null;
     stopCameraMonitoring();
     clearExamBrowserState();
     examView.classList.add("hidden");
