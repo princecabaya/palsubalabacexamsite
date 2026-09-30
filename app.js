@@ -81,6 +81,7 @@
   let timerExpiryCheckInFlight = false;
   let submitted = false;
   let attemptMessagePollHandle = null;
+  let pendingRestoreMessage = null;
   let lastAttemptMessageAt = null;
   let suppressBlurUntil = 0;
   const queuedEvents = [];
@@ -1350,6 +1351,28 @@
     }
   }
 
+  function showRestoreAnswersPrompt(item) {
+    pendingRestoreMessage = item || null;
+    const modal = $("restoreAnswersModal");
+    if (!modal) return;
+
+    const textNode = $("restoreAnswersText");
+    if (textNode) {
+      textNode.textContent =
+        "Your teacher found saved responses from this exam attempt. Do you want to restore them into blank answer fields now?";
+    }
+
+    modal.classList.remove("hidden");
+    if (navigator.vibrate) {
+      try { navigator.vibrate([120,70,120]); } catch (_) {}
+    }
+  }
+
+  function hideRestoreAnswersPrompt() {
+    $("restoreAnswersModal")?.classList.add("hidden");
+    pendingRestoreMessage = null;
+  }
+
   async function restoreSavedResponsesIntoCurrentForm() {
     if (!attempt?.attempt_token || submitted || !examForm) return 0;
 
@@ -1452,7 +1475,7 @@
 
     for (const item of messages) {
       if (item.message_type === "restore_saved_responses") {
-        await restoreSavedResponsesIntoCurrentForm();
+        showRestoreAnswersPrompt(item);
       }
     }
 
@@ -1476,6 +1499,39 @@
   }
 
   $("dismissTeacherMessageBtn")?.addEventListener("click", hideTeacherLiveMessage);
+
+  $("acceptRestoreAnswersBtn")?.addEventListener("click", async () => {
+    const button = $("acceptRestoreAnswersBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Restoring…";
+    }
+
+    const restored = await restoreSavedResponsesIntoCurrentForm();
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Yes, Restore My Answers";
+    }
+
+    hideRestoreAnswersPrompt();
+
+    if (restored > 0) {
+      showTeacherLiveMessage({
+        message: `${restored} saved response${restored === 1 ? " was" : "s were"} restored. Please review your answers before submitting.`,
+        created_at: new Date().toISOString()
+      });
+    }
+  });
+
+  $("declineRestoreAnswersBtn")?.addEventListener("click", async () => {
+    const declinedMessage = pendingRestoreMessage;
+    hideRestoreAnswersPrompt();
+    warn("Restore skipped. You can ask your teacher to send it again if needed.");
+    await logEvent("saved_responses_restore_declined", {
+      message_id: declinedMessage?.message_id || null
+    });
+  });
 
   $("identityYesBtn").addEventListener("click", async () => {
     if (!pendingIdentity) return;
