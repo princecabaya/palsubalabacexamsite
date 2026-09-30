@@ -962,6 +962,8 @@
     const proctorOnly = isProctorForExam(a.exams?.id) && a.exams?.owner_id !== currentUserId;
     const reopenBtn = $("reopenAttemptBtn");
     if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
+    const permitEditBtn = $("permitEditAttemptBtn");
+    if (permitEditBtn) permitEditBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
 
     const unlockBtn = $("unlockSessionBtn");
     if (unlockBtn) {
@@ -4422,6 +4424,60 @@
     await loadExams();
   }
 
+  async function permitEditingAfterSubmission() {
+    const a = currentDetailAttempt;
+    if (!a || a.status !== "submitted") return;
+
+    const studentName = a.students?.full_name || "this student";
+    const entered = prompt(
+      `How many minutes should ${studentName} be allowed to edit the submitted attempt?`,
+      "30"
+    );
+    if (entered === null) return;
+
+    const minutes = Number.parseInt(String(entered).trim(), 10);
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 240) {
+      alert("Enter a number from 1 to 240 minutes.");
+      return;
+    }
+
+    const ok = confirm(
+      `Permit ${studentName} to edit the submitted exam for ${minutes} minute${minutes === 1 ? "" : "s"}?\n\n` +
+      "Their existing submitted answers will be preserved and loaded back. Individually submitted essays will be unlocked. The student must submit the exam again when finished."
+    );
+    if (!ok) return;
+
+    const button = $("permitEditAttemptBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Granting permission…";
+    }
+
+    const { data, error } = await db.rpc("admin_permit_submitted_attempt_edit", {
+      p_attempt_id: a.id,
+      p_minutes: minutes
+    });
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Permit Editing After Submission";
+    }
+
+    if (error) {
+      alert(`Could not grant editing permission: ${error.message}\n\nRun supabase-upgrade-edit-after-submission.sql once in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    const until = data?.permitted_until ? new Date(data.permitted_until) : null;
+    alert(
+      `${studentName} may now edit the submitted attempt${until ? ` until ${until.toLocaleString()}` : ""}.\n\n` +
+      "Ask the student to enter the same Exam Code and Student ID. Their previous answers will load for editing, and they must submit again when finished."
+    );
+
+    closeAttemptDrawer();
+    await refreshAttempts();
+  }
+
   async function reopenCurrentAttempt() {
     const a = currentDetailAttempt;
     if (!a || a.status !== "submitted") return;
@@ -4632,6 +4688,7 @@
 
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
+  $("permitEditAttemptBtn")?.addEventListener("click", permitEditingAfterSubmission);
   $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
   $("add30MinBtn")?.addEventListener("click", () => extendCurrentAttemptTime(30));
   $("add60MinBtn")?.addEventListener("click", () => extendCurrentAttemptTime(60));
