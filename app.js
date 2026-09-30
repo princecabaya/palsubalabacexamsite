@@ -346,6 +346,24 @@
     } catch (_) {}
   }
 
+  function loadLocalRecoverySnapshot(token = attempt?.attempt_token) {
+    const key = recoverySnapshotKey(token);
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.attempt_token !== token) return null;
+      if (Number(parsed.expires_at || 0) <= Date.now()) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function loadLocalDraft(questionId) {
     const key = localDraftKey(questionId);
     if (!key) return null;
@@ -2686,6 +2704,89 @@
     warn(`Question ${question.position} essay submitted successfully. You may continue with the remaining questions.`);
   }
 
+  async function restoreLocalStoredAnswers() {
+    if (!attempt?.attempt_token || submitted || !examForm) return;
+
+    const ok = confirm(
+      "Restore locally stored answers from this browser?\n\nOnly blank answer fields will be filled. Existing visible answers will not be overwritten."
+    );
+    if (!ok) return;
+
+    const snapshot = loadLocalRecoverySnapshot(attempt.attempt_token);
+    let restoredCount = 0;
+    let savedBackCount = 0;
+
+    for (const q of questions) {
+      const questionId = String(q.question_id);
+      if (q.question_type === "essay" && submittedEssayQuestionIds.has(questionId)) continue;
+
+      const visible = String(currentAnswerForQuestion(questionId) ?? "");
+      if (visible.trim()) continue;
+
+      const draft = loadLocalDraft(questionId);
+      const snapshotAnswer = String(snapshot?.answers?.[questionId] ?? "");
+      const answer = draft?.answer?.trim()
+        ? String(draft.answer)
+        : snapshotAnswer;
+
+      if (!String(answer).trim()) continue;
+
+      const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(questionId)}"]`);
+      if (!wrap) continue;
+
+      let applied = false;
+      const radios = [...wrap.querySelectorAll('input[type="radio"]')];
+      if (radios.length) {
+        const match = radios.find(input => String(input.value) === String(answer));
+        if (match) {
+          match.checked = true;
+          applied = true;
+        }
+      } else {
+        const mathBoard = wrap.querySelector(".math-solver-board");
+        if (mathBoard) {
+          const parsed = parseSavedMathResponse(String(answer));
+          const solution = mathBoard.querySelector(".math-solution-input");
+          const finalAnswer = mathBoard.querySelector(".math-final-answer-input");
+          if (solution) solution.value = parsed.solution;
+          if (finalAnswer) finalAnswer.value = parsed.finalAnswer;
+          applied = true;
+        } else {
+          const field = wrap.querySelector("textarea, input.short-response-input, input[type='text']");
+          if (field) {
+            field.value = String(answer);
+            applied = true;
+          }
+        }
+      }
+
+      if (!applied) continue;
+      restoredCount += 1;
+      saveLocalDraft(questionId, answer);
+
+      const state = wrap.querySelector(".save-state");
+      if (state) {
+        state.textContent = draft?.answer?.trim() ? "Restored from browser draft" : "Restored from 7-day browser snapshot";
+        state.style.color = "";
+      }
+
+      try {
+        await saveAnswer(q.question_id, answer, state, { quiet:true });
+        savedBackCount += 1;
+      } catch (_) {}
+    }
+
+    if (restoredCount > 0) {
+      warn(`${restoredCount} local answer${restoredCount === 1 ? " was" : "s were"} restored. ${savedBackCount} ${savedBackCount === 1 ? "was" : "were"} also saved back to Supabase.`);
+      await logEvent("local_answers_restored_by_student", {
+        restored_count: restoredCount,
+        saved_back_count: savedBackCount
+      });
+    } else {
+      warn("No locally stored blank answers were found for this exam attempt.");
+    }
+  }
+
   async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
     if (!attempt?.attempt_token || submitted) return;
 
@@ -3101,6 +3202,7 @@
   // Restore the active server-side attempt and its saved answers immediately.
   restoreSavedAttempt();
 
+  $("restoreLocalAnswersBtn")?.addEventListener("click", restoreLocalStoredAnswers);
   $("submitBtn").addEventListener("click", () => submitExam(false));
 
   // Proctoring signals.
