@@ -3848,3 +3848,19 @@ textarea{resize:vertical}
     flex:1 1 72px;
   }
 }
+
+
+/* Retained answer recovery snapshot */
+.recovery-snapshot-info{
+  margin:10px 0;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#f8fafc;
+  line-height:1.45;
+}
+.saved-response-recovery-actions{
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
