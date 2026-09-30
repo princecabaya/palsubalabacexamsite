@@ -969,6 +969,11 @@
         : "This active attempt currently has no browser/device lock.";
     }
 
+    const timeControls = $("timeExtensionControls");
+    if (timeControls) {
+      timeControls.classList.toggle("hidden", a.status !== "active" || proctorOnly);
+    }
+
     $("proctorPhotoEvidenceActions")?.classList.toggle("hidden", proctorOnly);
 
     const messageSection = $("teacherMessageSection");
@@ -4092,6 +4097,66 @@
     await refreshAttempts();
   }
 
+  async function extendCurrentAttemptTime(minutes) {
+    const attempt = currentDetailAttempt;
+    if (!attempt || attempt.status !== "active") {
+      alert("Time can only be added to an active exam attempt.");
+      return;
+    }
+
+    const amount = Number(minutes);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 240) {
+      alert("Enter a whole number of minutes between 1 and 240.");
+      return;
+    }
+
+    const studentName = attempt.students?.full_name || "this student";
+    const ok = confirm(
+      `Add ${amount} minute${amount === 1 ? "" : "s"} to ${studentName}'s current exam attempt?\n\n` +
+      "Only this student's deadline will change. Their answers, score, session, and other students are unaffected."
+    );
+    if (!ok) return;
+
+    const buttons = [
+      $("add30MinBtn"),
+      $("add60MinBtn"),
+      $("addCustomTimeBtn")
+    ].filter(Boolean);
+
+    buttons.forEach(btn => btn.disabled = true);
+
+    const { data, error } = await db.rpc("admin_extend_attempt_time", {
+      p_attempt_id: attempt.id,
+      p_minutes: amount
+    });
+
+    buttons.forEach(btn => btn.disabled = false);
+
+    if (error) {
+      alert(
+        `Could not add time: ${error.message}\n\nRun supabase-upgrade-attempt-time-extension.sql once in Supabase SQL Editor, then refresh the dashboard.`
+      );
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    const newEnd = row?.ends_at ? new Date(row.ends_at) : null;
+
+    alert(
+      `${amount} minute${amount === 1 ? "" : "s"} added for ${studentName}.` +
+      (newEnd && !Number.isNaN(newEnd.getTime())
+        ? `\n\nNew deadline: ${newEnd.toLocaleString()}`
+        : "") +
+      "\n\nThe student's timer will update automatically within about 10 seconds."
+    );
+
+    await refreshAttempts();
+
+    // Keep the drawer open on the same student's refreshed attempt if possible.
+    const refreshed = attemptsCache.find(item => item.id === attempt.id);
+    if (refreshed) currentDetailAttempt = refreshed;
+  }
+
   async function unlockCurrentAttemptSession() {
     const attempt = currentDetailAttempt;
     if (!attempt || attempt.status !== "active") return;
@@ -4200,6 +4265,14 @@
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
   $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
+  $("add30MinBtn")?.addEventListener("click", () => extendCurrentAttemptTime(30));
+  $("add60MinBtn")?.addEventListener("click", () => extendCurrentAttemptTime(60));
+  $("addCustomTimeBtn")?.addEventListener("click", () => {
+    const raw = prompt("How many minutes would you like to add?\n\nEnter 1 to 240 minutes.", "30");
+    if (raw === null) return;
+    const minutes = Number(String(raw).trim());
+    extendCurrentAttemptTime(minutes);
+  });
   $("resetAttemptBtn")?.addEventListener("click", resetCurrentAttempt);
   $("closeDetail").addEventListener("click", closeAttemptDrawer);
   $("signOutBtn").addEventListener("click", async () => {
