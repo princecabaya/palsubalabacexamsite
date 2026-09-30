@@ -384,12 +384,16 @@
     const jobs = [];
 
     for (const q of questions) {
+      if (q.question_type === "essay" && submittedEssayQuestionIds.has(String(q.question_id))) {
+        continue;
+      }
+
       const answer = currentAnswerForQuestion(q.question_id);
       const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(String(q.question_id))}"]`);
       const state = wrap?.querySelector(".save-state");
 
       // Save even blank values so a deliberately cleared text response is reflected
-      // in the database before scoring.
+      // in the database before scoring. Individually submitted essays are skipped.
       jobs.push(saveAnswer(q.question_id, answer, state, { quiet: true }));
     }
 
