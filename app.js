@@ -104,6 +104,7 @@
   let examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
   let speechFlagTimer = null;
   const pendingAnswerSaves = new Map();
+  const submittedEssayQuestionIds = new Set();
 
   let flexCameraStream = null;
   let flexRenderFrame = null;
