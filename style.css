@@ -3742,3 +3742,68 @@ textarea{resize:vertical}
     flex:1 1 110px;
   }
 }
+
+
+/* Student confirmation for teacher-triggered answer restoration */
+.restore-answers-modal{
+  position:fixed;
+  inset:0;
+  z-index:1200;
+  display:grid;
+  place-items:center;
+  padding:18px;
+  background:rgba(15,23,42,.56);
+  backdrop-filter:blur(4px);
+}
+.restore-answers-card{
+  width:min(520px,100%);
+  border-radius:18px;
+  background:#fff;
+  padding:24px;
+  box-shadow:0 24px 64px rgba(15,23,42,.28);
+  text-align:center;
+}
+.restore-answers-icon{
+  width:54px;
+  height:54px;
+  margin:0 auto 10px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  background:#eff6ff;
+  font-size:1.8rem;
+  font-weight:900;
+}
+.restore-answers-card h2{
+  margin:0 0 8px;
+}
+.restore-answers-card p{
+  margin:0;
+  line-height:1.5;
+}
+.restore-answers-actions{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.restore-answers-actions button{
+  min-width:170px;
+}
+.restore-answers-note{
+  margin-top:12px!important;
+  font-size:.78rem;
+  color:var(--muted);
+}
+@media(max-width:600px){
+  .restore-answers-card{padding:20px 16px}
+  .restore-answers-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .restore-answers-actions button{
+    width:100%;
+    min-width:0;
+  }
+}
