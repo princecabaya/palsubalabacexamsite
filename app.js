@@ -2615,6 +2615,77 @@
   }
 
 
+  async function submitSingleEssay(question, textarea, stateNode, button) {
+    if (!attempt?.attempt_token || submitted) return;
+    const questionId = String(question?.question_id || "");
+    if (!questionId || submittedEssayQuestionIds.has(questionId)) return;
+
+    const answer = String(textarea?.value ?? "");
+    if (!answer.trim()) {
+      warn("Write your essay response before submitting this item.");
+      textarea?.focus();
+      return;
+    }
+
+    const ok = confirm(
+      `Submit Question ${question.position} now?\n\nThis essay will be saved and locked. You can continue answering the remaining questions afterward.`
+    );
+    if (!ok) return;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Submitting essay…";
+    }
+    if (stateNode) stateNode.textContent = "Submitting essay…";
+
+    saveLocalDraft(questionId, answer);
+
+    const { data, error } = await db.rpc("submit_essay_response", {
+      p_attempt_token: attempt.attempt_token,
+      p_question_id: question.question_id,
+      p_answer: answer
+    });
+
+    if (error) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Submit This Essay";
+      }
+      if (stateNode) {
+        stateNode.textContent = "Essay submission failed — try again.";
+        stateNode.style.color = "#b42318";
+      }
+      const missing = /submit_essay_response|function.*does not exist|schema cache|PGRST202/i.test(String(error.message || error));
+      warn(missing
+        ? "Per-essay submission is not active in Supabase yet. Please inform your teacher."
+        : `Could not submit this essay: ${error.message}`);
+      return;
+    }
+
+    submittedEssayQuestionIds.add(questionId);
+    if (textarea) {
+      textarea.readOnly = true;
+      textarea.classList.add("essay-submitted-response");
+    }
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Submitted ✓";
+    }
+
+    const submittedAt = data?.submitted_at ? new Date(data.submitted_at) : new Date();
+    if (stateNode) {
+      stateNode.textContent = `Essay submitted ${submittedAt.toLocaleTimeString()}`;
+      stateNode.style.color = "";
+    }
+
+    await logEvent("essay_submit_confirmed_in_browser", {
+      question_id: question.question_id,
+      position: question.position
+    });
+
+    warn(`Question ${question.position} essay submitted successfully. You may continue with the remaining questions.`);
+  }
+
   async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
     if (!attempt?.attempt_token || submitted) return;
 
