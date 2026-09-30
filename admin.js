@@ -948,6 +948,8 @@
     if (summaryDetails && "open" in summaryDetails) summaryDetails.open = true;
     const savedDetails = $("savedResponsesSection");
     if (savedDetails && "open" in savedDetails) savedDetails.open = false;
+    const restoreSavedBtn = $("restoreSavedResponsesBtn");
+    if (restoreSavedBtn) restoreSavedBtn.classList.toggle("hidden", a.status !== "active");
     const photoDetails = $("proctorPhotosSection");
     if (photoDetails && "open" in photoDetails) photoDetails.open = false;
     const eventDetails = $("eventDetailsSection");
@@ -1277,6 +1279,58 @@
     await loadProctorPhotos(currentDetailAttempt);
   }
 
+
+  async function restoreSavedResponsesToStudent() {
+    const attempt = currentDetailAttempt;
+    const button = $("restoreSavedResponsesBtn");
+    const statusNode = $("restoreSavedResponsesStatus");
+
+    if (!attempt || attempt.status !== "active") {
+      alert("Saved answers can only be restored while the student's attempt is active.");
+      return;
+    }
+
+    const studentName = attempt.students?.full_name || "this student";
+    const ok = confirm(
+      `Restore Supabase-saved answers to ${studentName}\'s active exam browser?\n\n` +
+      "Only currently blank response fields will be refilled. Newer answers already visible on the student's screen will not be overwritten."
+    );
+    if (!ok) return;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Sending restore…";
+    }
+    if (statusNode) statusNode.textContent = "";
+
+    const { data, error } = await db.rpc("admin_restore_attempt_responses", {
+      p_attempt_id: attempt.id
+    });
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Restore Saved Answers to Student";
+    }
+
+    if (error) {
+      if (statusNode) statusNode.textContent = error.message;
+      alert(
+        `Could not send restore command: ${error.message}\n\nRun supabase-upgrade-restore-saved-responses.sql once in Supabase SQL Editor, then refresh the dashboard.`
+      );
+      return;
+    }
+
+    const count = Number(data?.saved_response_count || 0);
+    if (statusNode) {
+      statusNode.textContent = `Restore sent • ${count} saved response${count === 1 ? "" : "s"} available`;
+    }
+
+    alert(
+      `Restore command sent to ${studentName}.\n\n` +
+      `${count} Supabase-saved response${count === 1 ? " is" : "s are"} available. ` +
+      "The student's active browser should refill blank answer fields within about 3 seconds."
+    );
+  }
 
   async function loadSavedResponses(attempt) {
     const rows = $("savedResponseRows");
@@ -4260,6 +4314,7 @@
 
   $("searchBox").addEventListener("input", renderAttempts);
   $("sendAttemptMessageBtn")?.addEventListener("click", sendCurrentAttemptMessage);
+  $("restoreSavedResponsesBtn")?.addEventListener("click", restoreSavedResponsesToStudent);
   $("teacherMessageSection")?.addEventListener("click", applyAttemptMessagePreset);
 
   $("refreshBtn").addEventListener("click", refreshAttempts);
