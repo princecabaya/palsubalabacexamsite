@@ -1375,6 +1375,90 @@
   }
 
 
+  let currentRecoverySnapshot = null;
+
+  async function loadAttemptRecoverySnapshot(attempt) {
+    const button = $("viewRecoverySnapshotBtn");
+    const info = $("recoverySnapshotInfo");
+    currentRecoverySnapshot = null;
+
+    if (button) button.classList.add("hidden");
+    if (info) {
+      info.classList.add("hidden");
+      info.innerHTML = "";
+    }
+
+    const { data, error } = await db.rpc("admin_get_attempt_recovery_snapshot", {
+      p_attempt_id: attempt.id
+    });
+
+    if (error) {
+      const missing = /admin_get_attempt_recovery_snapshot|function.*does not exist|schema cache|PGRST202/i.test(String(error.message || error));
+      if (!missing && info) {
+        info.classList.remove("hidden");
+        info.textContent = "Recovery snapshot could not be loaded.";
+      }
+      return;
+    }
+
+    if (!data) return;
+
+    currentRecoverySnapshot = data;
+    const count = Number(data.answered_count || 0);
+
+    if (button) {
+      button.classList.remove("hidden");
+      button.textContent = `View 7-Day Recovery Snapshot (${count})`;
+    }
+
+    if (info) {
+      info.classList.remove("hidden");
+      info.innerHTML = `
+        <strong>Recovery snapshot available:</strong>
+        ${escapeHtml(String(count))} answered item${count === 1 ? "" : "s"} •
+        captured ${escapeHtml(fmt(data.created_at))} •
+        expires ${escapeHtml(fmt(data.expires_at))}
+      `;
+    }
+  }
+
+  function showCurrentRecoverySnapshot() {
+    if (!currentRecoverySnapshot) {
+      alert("No recovery snapshot is currently available for this attempt.");
+      return;
+    }
+
+    const answers = currentRecoverySnapshot.answers || {};
+    const entries = Object.entries(answers)
+      .filter(([,answer]) => String(answer ?? "").trim() !== "");
+
+    const text = entries.length
+      ? entries.map(([questionId, answer]) => `${questionId}\n${String(answer)}`).join("\n\n--------------------\n\n")
+      : "No nonblank answers are stored in this snapshot.";
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!popup) {
+      alert("Popup was blocked. Allow popups for this site and try again.");
+      return;
+    }
+
+    popup.document.write(`
+      <!doctype html>
+      <html><head><meta charset="utf-8"><title>Recovery Snapshot</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:24px;line-height:1.45}
+        pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;padding:16px;border-radius:10px}
+      </style></head>
+      <body>
+        <h1>7-Day Recovery Snapshot</h1>
+        <p>Captured: ${escapeHtml(fmt(currentRecoverySnapshot.created_at))}</p>
+        <p>Answered items: ${escapeHtml(String(currentRecoverySnapshot.answered_count || 0))}</p>
+        <pre>${escapeHtml(text)}</pre>
+      </body></html>
+    `);
+    popup.document.close();
+  }
+
   async function loadSavedResponses(attempt) {
     const rows = $("savedResponseRows");
     const note = $("savedResponsesNote");
@@ -1384,6 +1468,7 @@
 
     rows.innerHTML = '<tr><td colspan="3">Loading saved responses…</td></tr>';
     countBadge.textContent = "Loading…";
+    loadAttemptRecoverySnapshot(attempt);
 
     const examId = attempt.exams?.id;
     if (!examId) {
@@ -4358,6 +4443,7 @@
   $("searchBox").addEventListener("input", renderAttempts);
   $("sendAttemptMessageBtn")?.addEventListener("click", sendCurrentAttemptMessage);
   $("restoreSavedResponsesBtn")?.addEventListener("click", restoreSavedResponsesToStudent);
+  $("viewRecoverySnapshotBtn")?.addEventListener("click", showCurrentRecoverySnapshot);
   $("teacherMessageSection")?.addEventListener("click", applyAttemptMessagePreset);
 
   $("refreshBtn").addEventListener("click", refreshAttempts);
