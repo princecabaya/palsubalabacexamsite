@@ -1915,6 +1915,7 @@
 
   function renderQuestions(savedResponses = []) {
     examForm.innerHTML = "";
+    submittedEssayQuestionIds.clear();
     const savedByQuestion = new Map(
       (savedResponses || []).map(r => [String(r.question_id), r])
     );
@@ -1954,9 +1955,14 @@
       const state = document.createElement("div");
       state.className = "save-state";
       const saved = savedByQuestion.get(String(q.question_id));
-      state.textContent = saved
-        ? `Saved ${saved.saved_at ? new Date(saved.saved_at).toLocaleTimeString() : ""}`.trim()
-        : "Not answered";
+      const essayAlreadySubmitted = q.question_type === "essay" && Boolean(saved?.essay_submitted_at);
+      if (essayAlreadySubmitted) submittedEssayQuestionIds.add(String(q.question_id));
+
+      state.textContent = essayAlreadySubmitted
+        ? `Essay submitted ${new Date(saved.essay_submitted_at).toLocaleTimeString()}`
+        : (saved
+          ? `Saved ${saved.saved_at ? new Date(saved.saved_at).toLocaleTimeString() : ""}`.trim()
+          : "Not answered");
 
       if (q.question_type === "mcq" || q.question_type === "binary") {
         const choices = Array.isArray(q.choices) && q.choices.length
