@@ -950,6 +950,8 @@
     if (savedDetails && "open" in savedDetails) savedDetails.open = false;
     const restoreSavedBtn = $("restoreSavedResponsesBtn");
     if (restoreSavedBtn) restoreSavedBtn.classList.toggle("hidden", a.status !== "active");
+    const remoteSubmitBtn = $("remoteSubmitSavedBtn");
+    if (remoteSubmitBtn) remoteSubmitBtn.classList.toggle("hidden", a.status !== "active");
     const photoDetails = $("proctorPhotosSection");
     if (photoDetails && "open" in photoDetails) photoDetails.open = false;
     const eventDetails = $("eventDetailsSection");
@@ -1498,6 +1500,74 @@
 
     alert(`Recovered answer saved for Item ${position}. It is now part of this attempt\'s database responses.`);
     await loadSavedResponses(attempt);
+  }
+
+  async function remoteSubmitSavedResponsesForStudent() {
+    const attempt = currentDetailAttempt;
+    if (!attempt) return;
+
+    if (attempt.status !== "active") {
+      alert("Remote submission is available only for an active attempt. Reopen the attempt first if it was already submitted or expired.");
+      return;
+    }
+
+    const examId = attempt.exams?.id;
+    if (!examId) {
+      alert("Exam information is unavailable for this attempt.");
+      return;
+    }
+
+    const [questionResult, responseResult] = await Promise.all([
+      db.from("questions").select("id").eq("exam_id", examId),
+      db.from("responses").select("question_id,answer").eq("attempt_id", attempt.id)
+    ]);
+
+    if (questionResult.error || responseResult.error) {
+      alert(`Could not verify saved responses: ${questionResult.error?.message || responseResult.error?.message || "Unknown error"}`);
+      return;
+    }
+
+    const total = (questionResult.data || []).length;
+    const saved = (responseResult.data || []).filter(row => String(row.answer ?? "").trim() !== "").length;
+    const studentName = attempt.students?.full_name || "this student";
+
+    const ok = confirm(
+      `Submit the currently saved Supabase responses for ${studentName}?\n\n` +
+      `Saved responses: ${saved}/${total}\n\n` +
+      "Only answers already stored in the database will be included. Any answer that exists only on the student\'s phone/browser and was never saved to Supabase cannot be included. This will finalize the attempt as submitted."
+    );
+    if (!ok) return;
+
+    const button = $("remoteSubmitSavedBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Submitting saved responses…";
+    }
+
+    const { data, error } = await db.rpc("admin_submit_saved_attempt", {
+      p_attempt_id: attempt.id
+    });
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Submit Saved Responses for Student";
+    }
+
+    if (error) {
+      alert(`Remote submission failed: ${error.message}\n\nRun supabase-upgrade-teacher-remote-submit.sql once in Supabase SQL Editor, then refresh the teacher dashboard.`);
+      return;
+    }
+
+    alert(
+      `${studentName}\'s attempt was submitted remotely.\n\n` +
+      `Saved responses included: ${data?.saved_response_count ?? saved}/${data?.total_question_count ?? total}.\n` +
+      "The action was recorded as a teacher remote submission."
+    );
+
+    await refreshAttempts();
+    await loadExams();
+    $("attemptDetail")?.classList.add("hidden");
+    currentDetailAttempt = null;
   }
 
   async function loadSavedResponses(attempt) {
@@ -4556,6 +4626,7 @@
   $("searchBox").addEventListener("input", renderAttempts);
   $("sendAttemptMessageBtn")?.addEventListener("click", sendCurrentAttemptMessage);
   $("restoreSavedResponsesBtn")?.addEventListener("click", restoreSavedResponsesToStudent);
+  $("remoteSubmitSavedBtn")?.addEventListener("click", remoteSubmitSavedResponsesForStudent);
   $("viewRecoverySnapshotBtn")?.addEventListener("click", showCurrentRecoverySnapshot);
   $("teacherMessageSection")?.addEventListener("click", applyAttemptMessagePreset);
 
