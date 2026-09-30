@@ -552,6 +552,14 @@
           Array.isArray(criterion?.levels) && criterion.levels.length >= 2
         );
 
+      const isHolisticRubric = item.question_type === "essay" &&
+        item.rubric_type === "holistic" &&
+        Array.isArray(item.rubric_criteria) &&
+        item.rubric_criteria.length > 0 &&
+        item.rubric_criteria.every(criterion =>
+          Number.isFinite(Number(criterion?.max_points)) && Number(criterion.max_points) > 0
+        );
+
       article.innerHTML = `
         <div class="grading-review-head">
           <div>
@@ -564,9 +572,10 @@
         <div class="grading-student-answer"><strong>Student response</strong><pre>${escapeHtml(item.student_answer || "(No response)")}</pre></div>
         ${item.reference_answer ? `<p><strong>Reference:</strong> ${escapeHtml(item.reference_answer)}</p>` : ""}
         ${isAnalyticMatrix ? '<div class="analytic-grading-mount"></div>' : ""}
+        ${isHolisticRubric ? '<div class="holistic-grading-mount"></div>' : ""}
         <div class="form-grid compact grading-inputs">
           <label>Teacher score
-            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}" ${isAnalyticMatrix ? "readonly" : ""}>
+            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}" ${(isAnalyticMatrix || isHolisticRubric) ? "readonly" : ""}>
           </label>
           <label>Teacher comment
             <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
@@ -578,6 +587,8 @@
 
       if (isAnalyticMatrix) {
         renderAnalyticGradingSelector(article, item);
+      } else if (isHolisticRubric) {
+        renderHolisticGradingSelector(article, item);
       }
     }
   }
@@ -706,6 +717,122 @@
     recalculate();
   }
 
+  function renderHolisticGradingSelector(article, item) {
+    const mount = article.querySelector(".holistic-grading-mount");
+    const scoreInput = article.querySelector(".teacher-score-input");
+    if (!mount || !scoreInput) return;
+
+    const persisted = item.teacher_rubric_scores && typeof item.teacher_rubric_scores === "object"
+      ? item.teacher_rubric_scores
+      : {};
+
+    const selected = {};
+
+    mount.innerHTML = `
+      <div class="analytic-grading-header">
+        <div>
+          <strong>Holistic Rubric</strong>
+          <p class="muted">Select a score for each rubric criterion. The total is computed automatically.</p>
+        </div>
+        <div class="analytic-grading-total">
+          <span>Rubric score</span>
+          <strong class="holistic-running-score">0 / ${escapeHtml(item.points)}</strong>
+        </div>
+      </div>
+      <div class="holistic-grading-criteria"></div>
+    `;
+
+    const criteriaWrap = mount.querySelector(".holistic-grading-criteria");
+    const running = mount.querySelector(".holistic-running-score");
+
+    function buildScoreOptions(maxPoints) {
+      const values = [];
+      const max = Number(maxPoints);
+      const step = Number.isInteger(max) ? 1 : 0.25;
+      for (let value = 0; value <= max + 0.0001; value += step) {
+        values.push(Number(value.toFixed(2)));
+      }
+      if (!values.some(value => Math.abs(value - max) < 0.001)) values.push(max);
+      return [...new Set(values)].sort((a,b) => b-a);
+    }
+
+    function recalculate() {
+      let total = 0;
+      let complete = true;
+      item.rubric_criteria.forEach((criterion, criterionIndex) => {
+        const choice = selected[String(criterionIndex)];
+        if (!choice) { complete = false; return; }
+        total += Number(choice.points || 0);
+      });
+      scoreInput.value = complete ? String(Number(total.toFixed(2))) : "";
+      article.dataset.rubricScores = JSON.stringify(selected);
+      running.textContent = `${formatNumber(total)} / ${formatNumber(item.points)}`;
+      mount.classList.toggle("rubric-incomplete", !complete);
+    }
+
+    item.rubric_criteria.forEach((criterion, criterionIndex) => {
+      const maxPoints = Number(criterion.max_points || 0);
+      const section = document.createElement("section");
+      section.className = "analytic-grade-criterion holistic-grade-criterion";
+
+      const heading = document.createElement("div");
+      heading.className = "analytic-grade-criterion-head";
+      heading.innerHTML = `
+        <div>
+          <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
+          <span class="muted">Maximum ${formatNumber(maxPoints)} pts</span>
+        </div>
+        <strong class="criterion-selected-score">— / ${formatNumber(maxPoints)}</strong>
+      `;
+      section.appendChild(heading);
+
+      const description = document.createElement("p");
+      description.className = "holistic-grade-description";
+      description.textContent = String(criterion.description || "No descriptor provided.");
+      section.appendChild(description);
+
+      const scoreChoices = document.createElement("div");
+      scoreChoices.className = "holistic-score-choices";
+
+      buildScoreOptions(maxPoints).forEach(points => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "holistic-score-choice";
+        button.dataset.points = String(points);
+        button.textContent = `${formatNumber(points)} pts`;
+        button.addEventListener("click", () => {
+          selected[String(criterionIndex)] = {
+            criterion: String(criterion.criterion || ""),
+            points: Number(points),
+            max_points: maxPoints,
+            description: String(criterion.description || "")
+          };
+          scoreChoices.querySelectorAll(".holistic-score-choice").forEach(node => {
+            node.classList.toggle("selected", node === button);
+          });
+          heading.querySelector(".criterion-selected-score").textContent =
+            `${formatNumber(points)} / ${formatNumber(maxPoints)}`;
+          recalculate();
+        });
+        scoreChoices.appendChild(button);
+      });
+
+      section.appendChild(scoreChoices);
+      criteriaWrap.appendChild(section);
+
+      const savedChoice = persisted[String(criterionIndex)] || persisted[criterion.criterion];
+      if (savedChoice) {
+        const wantedPoints = Number(savedChoice.points);
+        const matching = [...scoreChoices.querySelectorAll(".holistic-score-choice")].find(button =>
+          Number(button.dataset.points) === wantedPoints
+        );
+        matching?.click();
+      }
+    });
+
+    recalculate();
+  }
+
   function formatNumber(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return "0";
@@ -786,7 +913,9 @@
       }
 
       let rubric_scores = null;
-      if (card.querySelector(".analytic-grading-mount")) {
+      const analyticMount = card.querySelector(".analytic-grading-mount");
+      const holisticMount = card.querySelector(".holistic-grading-mount");
+      if (analyticMount || holisticMount) {
         try {
           rubric_scores = JSON.parse(card.dataset.rubricScores || "{}");
         } catch (_) {
@@ -795,7 +924,9 @@
 
         const criteriaCount = card.querySelectorAll(".analytic-grade-criterion").length;
         if (Object.keys(rubric_scores).length !== criteriaCount) {
-          $("gradingReviewMsg").textContent = "Select one performance level for every analytic rubric criterion before approval.";
+          $("gradingReviewMsg").textContent = analyticMount
+            ? "Select one performance level for every analytic rubric criterion before approval."
+            : "Select a score for every holistic rubric criterion before approval.";
           return;
         }
       }
