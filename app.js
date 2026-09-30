@@ -132,7 +132,11 @@
       const keys = [];
       for (let i = 0; i < storage.length; i += 1) {
         const key = storage.key(i);
-        if (key && key.startsWith("exam_guard_")) keys.push(key);
+        if (
+          key &&
+          key.startsWith("exam_guard_") &&
+          !key.startsWith("exam_guard_recovery_")
+        ) keys.push(key);
       }
       keys.forEach(key => storage.removeItem(key));
     }
@@ -144,6 +148,8 @@
       sessionStorage.setItem("exam_device_session_id", currentDeviceSession);
     }
   }
+
+  cleanupExpiredRecoverySnapshots();
 
   function getExamDeviceSessionId() {
     const key = "exam_device_session_id";
@@ -201,6 +207,125 @@
     if (textInput) return textInput.value;
 
     return "";
+  }
+
+  const RECOVERY_SNAPSHOT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function recoverySnapshotKey(token = attempt?.attempt_token) {
+    return token ? `exam_guard_recovery_${token}` : "";
+  }
+
+  function cleanupExpiredRecoverySnapshots() {
+    try {
+      const now = Date.now();
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("exam_guard_recovery_")) keys.push(key);
+      }
+      keys.forEach(key => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "null");
+          const expiresAt = Number(parsed?.expires_at || 0);
+          if (!expiresAt || expiresAt <= now) localStorage.removeItem(key);
+        } catch (_) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (_) {}
+  }
+
+  function buildCurrentAnswerSnapshot() {
+    const answers = {};
+    let answeredCount = 0;
+    for (const q of questions) {
+      const answer = String(currentAnswerForQuestion(q.question_id) ?? "");
+      answers[String(q.question_id)] = answer;
+      if (answer.trim() !== "") answeredCount += 1;
+    }
+    return {
+      attempt_token: attempt?.attempt_token || "",
+      exam_title: attempt?.exam_title || "",
+      student_name: attempt?.student_name || "",
+      student_no: attempt?.student_no || "",
+      answers,
+      answered_count: answeredCount,
+      captured_at: Date.now(),
+      expires_at: Date.now() + RECOVERY_SNAPSHOT_RETENTION_MS
+    };
+  }
+
+  function saveLocalRecoverySnapshot(snapshot) {
+    if (!snapshot?.attempt_token) return false;
+    try {
+      localStorage.setItem(recoverySnapshotKey(snapshot.attempt_token), JSON.stringify(snapshot));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function saveServerRecoverySnapshot(snapshot) {
+    if (!snapshot?.attempt_token) return { available:false, saved:false };
+    const { data, error } = await db.rpc("save_attempt_recovery_snapshot", {
+      p_attempt_token: snapshot.attempt_token,
+      p_answers: snapshot.answers
+    });
+    if (error) {
+      const missingFunction = /save_attempt_recovery_snapshot|function.*does not exist|schema cache|PGRST202/i.test(String(error.message || error));
+      return { available:!missingFunction, saved:false, error };
+    }
+    return { available:true, saved:true, data };
+  }
+
+  function normalizedAnswer(value) {
+    return String(value ?? "").replace(/\r\n/g, "\n").trim();
+  }
+
+  async function verifyAnswersSaved(snapshot, { retry = true } = {}) {
+    if (!snapshot?.attempt_token) return { available:false, verified:false, mismatches:[] };
+
+    const fetchState = () => db.rpc("get_attempt_saved_response_state", {
+      p_attempt_token: snapshot.attempt_token
+    });
+
+    let { data, error } = await fetchState();
+    if (error) {
+      const missingFunction = /get_attempt_saved_response_state|function.*does not exist|schema cache|PGRST202/i.test(String(error.message || error));
+      return { available:!missingFunction, verified:false, mismatches:[], error };
+    }
+
+    const compare = rows => {
+      const saved = new Map((rows || []).map(row => [String(row.question_id), normalizedAnswer(row.answer)]));
+      const mismatches = [];
+      for (const [questionId, answer] of Object.entries(snapshot.answers || {})) {
+        const expected = normalizedAnswer(answer);
+        if (!expected) continue;
+        if (saved.get(String(questionId)) !== expected) mismatches.push(String(questionId));
+      }
+      return mismatches;
+    };
+
+    let mismatches = compare(data);
+    if (mismatches.length && retry) {
+      for (const questionId of mismatches) {
+        const answer = snapshot.answers[questionId];
+        const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(String(questionId))}"]`);
+        const state = wrap?.querySelector(".save-state");
+        try { await saveAnswer(questionId, answer, state, { quiet:true }); } catch (_) {}
+      }
+      await Promise.all([...pendingAnswerSaves.values()]);
+      const second = await fetchState();
+      if (!second.error) {
+        data = second.data;
+        error = null;
+        mismatches = compare(data);
+      } else {
+        error = second.error;
+      }
+    }
+
+    return { available:true, verified:!error && mismatches.length === 0, mismatches, error };
   }
 
   function localDraftKey(questionId) {
