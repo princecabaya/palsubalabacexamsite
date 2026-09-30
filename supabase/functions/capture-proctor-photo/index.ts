@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     const { data: attempt, error: attemptError } = await admin
       .from("attempts")
-      .select("id,status,started_at,exam_id,exams(duration_minutes,end_at)")
+      .select("id,status,started_at,extended_until,exam_id,exams(duration_minutes,end_at)")
       .eq("attempt_token", attemptToken)
       .maybeSingle();
 
@@ -46,7 +46,13 @@ Deno.serve(async (req) => {
     const durationMs = Number(exam?.duration_minutes || 0) * 60_000;
     const attemptEnd = new Date(attempt.started_at).getTime() + durationMs;
     const scheduledEnd = exam?.end_at ? new Date(exam.end_at).getTime() : Number.POSITIVE_INFINITY;
-    if (Date.now() > Math.min(attemptEnd, scheduledEnd)) {
+    const baseEnd = Math.min(attemptEnd, scheduledEnd);
+    const extendedEnd = attempt.extended_until
+      ? new Date(attempt.extended_until).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const effectiveEnd = Math.max(baseEnd, extendedEnd);
+
+    if (Date.now() > effectiveEnd) {
       return json({ error: "Exam time has expired." }, 409);
     }
 
