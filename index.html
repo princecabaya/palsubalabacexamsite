@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260930-1140">
+  <link rel="stylesheet" href="style.css?v=20260930-1550">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -173,6 +173,21 @@
         <div id="teacherLiveMessageTime" class="teacher-live-message-time"></div>
       </div>
 
+      <div id="restoreAnswersModal" class="restore-answers-modal hidden" role="dialog" aria-modal="true" aria-labelledby="restoreAnswersTitle">
+        <div class="restore-answers-card">
+          <div class="restore-answers-icon">↺</div>
+          <h2 id="restoreAnswersTitle">Restore Saved Answers?</h2>
+          <p id="restoreAnswersText">
+            Your teacher found saved responses from this exam attempt. Do you want to restore them into blank answer fields now?
+          </p>
+          <div class="restore-answers-actions">
+            <button id="acceptRestoreAnswersBtn" type="button" class="primary">Yes, Restore My Answers</button>
+            <button id="declineRestoreAnswersBtn" type="button">Not Now</button>
+          </div>
+          <p class="restore-answers-note">Existing answers currently visible on your screen will not be overwritten.</p>
+        </div>
+      </div>
+
       <div id="warningBar" class="warning hidden" role="alert"></div>
 
       <form id="examForm" class="question-list"></form>
@@ -316,7 +331,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20260930-1520"></script>
+  <script src="app.js?v=20260930-1550"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
