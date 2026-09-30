@@ -202,6 +202,57 @@
     return "";
   }
 
+  function localDraftKey(questionId) {
+    return attempt?.attempt_token
+      ? `exam_guard_draft_${attempt.attempt_token}_${questionId}`
+      : "";
+  }
+
+  function saveLocalDraft(questionId, answer) {
+    const key = localDraftKey(questionId);
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        answer: String(answer ?? ""),
+        saved_at: Date.now()
+      }));
+    } catch (_) {}
+  }
+
+  function loadLocalDraft(questionId) {
+    const key = localDraftKey(questionId);
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.answer !== "string") return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearLocalDraftsForAttempt(token = attempt?.attempt_token) {
+    if (!token) return;
+    const prefix = `exam_guard_draft_${token}_`;
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) keys.push(key);
+      }
+      keys.forEach(key => localStorage.removeItem(key));
+    } catch (_) {}
+  }
+
+  function emergencySnapshotCurrentAnswers() {
+    if (!attempt?.attempt_token || submitted || !examForm) return;
+    for (const q of questions) {
+      saveLocalDraft(q.question_id, currentAnswerForQuestion(q.question_id));
+    }
+  }
+
   async function forceSaveAllCurrentAnswers() {
     const jobs = [];
 
@@ -1430,6 +1481,7 @@
     // from a prior deleted or submitted attempt.
     clearExamBrowserState({ keepDeviceSession: true });
     sessionStorage.setItem("exam_guard_token", attempt.attempt_token);
+    try { localStorage.setItem("exam_guard_token", attempt.attempt_token); } catch (_) {}
     resetExamFlagCounts();
     updateMobileMonitoringCapabilityNote();
     startAttemptMessagePolling();
@@ -1648,7 +1700,10 @@
           if (saved && String(saved.answer ?? "") === radio.value) {
             radio.checked = true;
           }
-          radio.addEventListener("change", () => saveAnswer(q.question_id, radio.value, state));
+          radio.addEventListener("change", () => {
+            saveLocalDraft(q.question_id, radio.value);
+            saveAnswer(q.question_id, radio.value, state);
+          });
 
           const span = document.createElement("span");
           const prefix = q.question_type === "mcq" ? `${String.fromCharCode(65+i)}. ` : "";
@@ -1673,12 +1728,21 @@
           ta.placeholder = q.question_type === "essay"
             ? "Write your essay response here"
             : "Type your answer here";
-          if (saved) ta.value = String(saved.answer ?? "");
+          const localDraft = loadLocalDraft(q.question_id);
+          if (localDraft) {
+            ta.value = localDraft.answer;
+            state.textContent = "Recovered local draft";
+          } else if (saved) {
+            ta.value = String(saved.answer ?? "");
+          }
+
           let debounce;
           ta.addEventListener("input", () => {
+            // Immediate browser-local protection on every keystroke.
+            saveLocalDraft(q.question_id, ta.value);
             state.textContent = "Saving…";
             clearTimeout(debounce);
-            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 600);
+            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 350);
           });
           wrap.appendChild(ta);
         }
@@ -2266,6 +2330,7 @@
         stateNode.textContent = `Saved ${new Date().toLocaleTimeString()}`;
         stateNode.style.color = "";
       }
+      saveLocalDraft(questionId, answer);
     })();
 
     pendingAnswerSaves.set(String(questionId), savePromise);
@@ -2477,6 +2542,12 @@
 
     await stopMicrophoneMonitoring();
     submitted = true;
+    const completedAttemptToken = attempt?.attempt_token || "";
+    clearLocalDraftsForAttempt(completedAttemptToken);
+    try {
+      sessionStorage.removeItem("exam_guard_token");
+      localStorage.removeItem("exam_guard_token");
+    } catch (_) {}
     stopAttemptMessagePolling();
     clearInterval(timerHandle);
     clearInterval(timerSyncHandle);
@@ -2528,8 +2599,9 @@
   }
 
   async function restoreSavedAttempt() {
-    const token = sessionStorage.getItem("exam_guard_token");
+    const token = sessionStorage.getItem("exam_guard_token") || localStorage.getItem("exam_guard_token");
     if (!token) return;
+    try { sessionStorage.setItem("exam_guard_token", token); } catch (_) {}
 
     const msg = $("loginMsg");
     msg.textContent = "Restoring your saved exam session…";
@@ -2542,6 +2614,7 @@
 
     if (resumeError || !resumeData?.length) {
       sessionStorage.removeItem("exam_guard_token");
+      try { localStorage.removeItem("exam_guard_token"); } catch (_) {}
       $("startBtn").disabled = false;
       msg.textContent = resumeError?.message?.includes("locked to another browser or device")
         ? resumeError.message
@@ -2607,6 +2680,7 @@
   // Proctoring signals.
   document.addEventListener("visibilitychange", () => {
     if (!attempt || submitted) return;
+    if (document.hidden) emergencySnapshotCurrentAnswers();
     logEvent(document.hidden ? "tab_or_window_hidden" : "tab_or_window_visible", {
       state: document.visibilityState
     });
@@ -2679,8 +2753,30 @@
     if (attempt && !submitted) logEvent("print_attempt");
   });
 
+  window.addEventListener("pagehide", () => {
+    if (!attempt || submitted) return;
+    emergencySnapshotCurrentAnswers();
+  });
+
+  // Keep an active exam on the current history entry. This protects against
+  // accidental browser Back gestures/taps without trapping the student after submission.
+  try {
+    history.replaceState({ examGuard: true }, "", location.href);
+    history.pushState({ examGuard: true }, "", location.href);
+  } catch (_) {}
+
+  window.addEventListener("popstate", () => {
+    if (!attempt || submitted) return;
+    emergencySnapshotCurrentAnswers();
+    try { history.pushState({ examGuard: true }, "", location.href); } catch (_) {}
+    warn("Back navigation is disabled during the exam. Your latest answers were kept.");
+    forceSaveAllCurrentAnswers().catch(() => {});
+    logEvent("back_navigation_blocked");
+  });
+
   window.addEventListener("beforeunload", (e) => {
     if (!attempt || submitted) return;
+    emergencySnapshotCurrentAnswers();
     logEvent("leave_or_reload_attempt");
     e.preventDefault();
     e.returnValue = "";
