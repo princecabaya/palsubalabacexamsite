@@ -3873,3 +3873,33 @@ textarea{resize:vertical}
 .saved-responses-table td:last-child{
   min-width:170px;
 }
+
+
+/* Per-essay student submission */
+.essay-submit-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.essay-submit-btn{
+  min-width:160px;
+}
+.essay-submit-note{
+  font-size:.82rem;
+  line-height:1.35;
+}
+.essay-submitted-response{
+  background:#f8fafc;
+  border-style:dashed;
+}
+@media(max-width:600px){
+  .essay-submit-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .essay-submit-btn{
+    width:100%;
+  }
+}
