@@ -3721,3 +3721,24 @@ textarea{resize:vertical}
     justify-content:flex-start;
   }
 }
+
+
+/* Safe per-student exam time extension controls */
+.time-extension-controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.time-extension-controls button{
+  white-space:nowrap;
+  min-height:38px;
+}
+@media(max-width:760px){
+  .time-extension-controls{
+    width:100%;
+  }
+  .time-extension-controls button{
+    flex:1 1 110px;
+  }
+}
