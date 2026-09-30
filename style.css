@@ -3864,3 +3864,12 @@ textarea{resize:vertical}
   flex-wrap:wrap;
   gap:8px;
 }
+
+
+/* Teacher recovered response controls */
+.teacher-save-response-btn{
+  white-space:nowrap;
+}
+.saved-responses-table td:last-child{
+  min-width:170px;
+}
