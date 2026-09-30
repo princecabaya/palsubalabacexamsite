@@ -1376,11 +1376,13 @@
 
 
   let currentRecoverySnapshot = null;
+  let currentRecoveryQuestionMeta = new Map();
 
   async function loadAttemptRecoverySnapshot(attempt) {
     const button = $("viewRecoverySnapshotBtn");
     const info = $("recoverySnapshotInfo");
     currentRecoverySnapshot = null;
+    currentRecoveryQuestionMeta = new Map();
 
     if (button) button.classList.add("hidden");
     if (info) {
@@ -1433,7 +1435,11 @@
       .filter(([,answer]) => String(answer ?? "").trim() !== "");
 
     const text = entries.length
-      ? entries.map(([questionId, answer]) => `${questionId}\n${String(answer)}`).join("\n\n--------------------\n\n")
+      ? entries.map(([questionId, answer]) => {
+          const q = currentRecoveryQuestionMeta.get(String(questionId));
+          const label = q ? `Item ${q.position}: ${q.prompt || ""}` : `Question ${questionId}`;
+          return `${label}\n${String(answer)}`;
+        }).join("\n\n--------------------\n\n")
       : "No nonblank answers are stored in this snapshot.";
 
     const popup = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
@@ -1503,6 +1509,7 @@
     );
 
     const questions = questionResult.data || [];
+    currentRecoveryQuestionMeta = new Map(questions.map(q => [String(q.id), q]));
     const answered = questions.filter(q => {
       const r = responsesByQuestion.get(String(q.id));
       return r && String(r.answer ?? "").trim() !== "";
