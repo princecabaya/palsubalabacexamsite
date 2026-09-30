@@ -3807,3 +3807,44 @@ textarea{resize:vertical}
     min-width:0;
   }
 }
+
+
+/* Interactive holistic essay grading */
+.holistic-grading-mount{
+  margin-top:14px;
+}
+.holistic-grading-criteria{
+  display:grid;
+  gap:12px;
+}
+.holistic-grade-criterion{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  background:#fff;
+}
+.holistic-grade-description{
+  margin:8px 0 10px;
+  color:var(--muted);
+  line-height:1.45;
+}
+.holistic-score-choices{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.holistic-score-choice{
+  min-width:64px;
+  padding:7px 10px;
+  border-radius:10px;
+}
+.holistic-score-choice.selected{
+  font-weight:900;
+  outline:2px solid currentColor;
+  outline-offset:1px;
+}
+@media(max-width:760px){
+  .holistic-score-choice{
+    flex:1 1 72px;
+  }
+}
