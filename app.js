@@ -2781,25 +2781,68 @@
 
     $("submitBtn").disabled = true;
     const originalSubmitText = $("submitBtn").textContent;
+    $("submitBtn").textContent = "Protecting answers…";
+
+    const recoverySnapshot = buildCurrentAnswerSnapshot();
+    const localSnapshotSaved = saveLocalRecoverySnapshot(recoverySnapshot);
+    const serverSnapshot = await saveServerRecoverySnapshot(recoverySnapshot);
+
     $("submitBtn").textContent = "Saving answers…";
 
     try {
-      warn("Saving your latest answers before submission…");
+      warn("Saving and verifying your latest answers before submission…");
       await forceSaveAllCurrentAnswers();
     } catch (saveError) {
       $("submitBtn").disabled = false;
       $("submitBtn").textContent = originalSubmitText;
-      warn(`Could not save all answers. Please check your connection and submit again. ${saveError?.message || ""}`);
+      warn(`Could not save all answers. Your recovery copy was kept. Please check your connection and submit again. ${saveError?.message || ""}`);
       return;
     }
 
-    await logEvent(auto ? "auto_submit_time_expired" : "student_submit_clicked");
+    const verification = await verifyAnswersSaved(recoverySnapshot, { retry:true });
+
+    if (verification.available && !verification.verified) {
+      $("submitBtn").disabled = false;
+      $("submitBtn").textContent = originalSubmitText;
+      const mismatchCount = verification.mismatches.length;
+      warn(
+        `Submission stopped for safety: ${mismatchCount || "some"} answered item${mismatchCount === 1 ? "" : "s"} did not match the Supabase saved copy. ` +
+        "Your recovery snapshot is retained. Check your connection and press Submit again."
+      );
+      await logEvent("submission_verification_blocked", {
+        expected_answered: recoverySnapshot.answered_count,
+        mismatch_count: mismatchCount,
+        local_snapshot_saved: localSnapshotSaved,
+        server_snapshot_saved: Boolean(serverSnapshot.saved)
+      });
+      return;
+    }
+
+    await logEvent(auto ? "auto_submit_time_expired" : "student_submit_clicked", {
+      expected_answered: recoverySnapshot.answered_count,
+      verification_available: Boolean(verification.available),
+      verification_passed: Boolean(verification.verified),
+      local_snapshot_saved: localSnapshotSaved,
+      server_snapshot_saved: Boolean(serverSnapshot.saved)
+    });
 
     $("submitBtn").textContent = "Submitting…";
 
-    const { data, error } = await db.rpc("submit_exam", {
-      p_attempt_token: attempt.attempt_token
+    let submitResult = await db.rpc("submit_exam_verified", {
+      p_attempt_token: attempt.attempt_token,
+      p_expected_nonblank: recoverySnapshot.answered_count
     });
+
+    if (
+      submitResult.error &&
+      /submit_exam_verified|function.*does not exist|schema cache|PGRST202/i.test(String(submitResult.error.message || submitResult.error))
+    ) {
+      submitResult = await db.rpc("submit_exam", {
+        p_attempt_token: attempt.attempt_token
+      });
+    }
+
+    const { data, error } = submitResult;
 
     if (error) {
       $("submitBtn").disabled = false;
@@ -2811,7 +2854,7 @@
     await stopMicrophoneMonitoring();
     submitted = true;
     const completedAttemptToken = attempt?.attempt_token || "";
-    clearLocalDraftsForAttempt(completedAttemptToken);
+    // Recovery snapshot is intentionally retained for 7 days after submission.
     try {
       sessionStorage.removeItem("exam_guard_token");
       localStorage.removeItem("exam_guard_token");
