@@ -3666,7 +3666,7 @@
             ` : `
               <button type="button" data-exam-action="preview">Preview Exam</button>
               <button type="button" data-exam-action="edit" ${exam.status === "published" ? 'disabled title="Published examinations cannot be edited"' : ""}>Edit Exam</button>
-              ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button>' : ""}
+              ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button><button type="button" data-exam-action="extend-window">Extend Exam Window</button>' : ""}
               <button type="button" data-action="draft">Draft</button>
               <button type="button" data-action="published">Publish</button>
               <button type="button" data-action="closed">Close</button>
@@ -3688,6 +3688,7 @@
             if (action === "preview") await previewExam(exam);
             if (action === "edit") await editExam(exam);
             if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
+            if (action === "extend-window") await extendExamWindow(exam);
             if (action === "archive") await archiveExam(exam);
             if (action === "restore") await restoreExam(exam);
             if (action === "retake") await createRetakeExam(exam);
@@ -4094,6 +4095,61 @@
       code,
       title: `${rootTitle} (Retake ${number})`
     };
+  }
+
+  async function extendExamWindow(exam) {
+    if (!exam?.id) return;
+    if (exam.status !== "published") {
+      alert("Only a published examination can have its live exam window extended.");
+      return;
+    }
+
+    const currentEnd = exam.end_at ? new Date(exam.end_at) : null;
+    const defaultValue = currentEnd && Number.isFinite(currentEnd.getTime())
+      ? toLocalDateTimeInput(currentEnd.toISOString())
+      : "";
+
+    const entered = prompt(
+      `Extend "${exam.title}" until what new closing date/time?\n\n` +
+      "Use the local date/time format shown in the exam editor (for example, 2026-09-30T12:00).",
+      defaultValue
+    );
+    if (entered === null) return;
+
+    const newEndIso = toIsoOrNull(String(entered).trim());
+    if (!newEndIso) {
+      alert("Enter a valid new closing date and time.");
+      return;
+    }
+
+    const newEnd = new Date(newEndIso);
+    if (currentEnd && newEnd <= currentEnd) {
+      alert("The new closing time must be later than the current closing time.");
+      return;
+    }
+
+    const ok = confirm(
+      `Extend the whole exam window to ${newEnd.toLocaleString()}?\n\n` +
+      "This applies to all students. The exam duration will also be increased automatically when necessary so active students can continue until the new closing time."
+    );
+    if (!ok) return;
+
+    const { data, error } = await db.rpc("admin_extend_exam_window", {
+      p_exam_id: exam.id,
+      p_new_end_at: newEndIso
+    });
+
+    if (error) {
+      alert(`Could not extend the exam window: ${error.message}\n\nRun supabase-upgrade-extend-exam-window.sql once in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    const nextDuration = Number(data?.new_duration_minutes || exam.duration_minutes || 0);
+    alert(
+      `Exam window extended successfully.\n\nNew closing time: ${newEnd.toLocaleString()}\nNew duration: ${nextDuration} minutes.\n\nActive student timers will pick up the new deadline automatically.`
+    );
+    await loadExams();
+    await refreshAttempts();
   }
 
   async function createRetakeExam(exam) {
