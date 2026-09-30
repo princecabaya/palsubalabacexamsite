@@ -1350,6 +1350,87 @@
     }
   }
 
+  async function restoreSavedResponsesIntoCurrentForm() {
+    if (!attempt?.attempt_token || submitted || !examForm) return 0;
+
+    const { data, error } = await db.rpc("get_saved_exam_responses", {
+      p_attempt_token: attempt.attempt_token
+    });
+    if (error) {
+      warn("Your teacher requested answer restoration, but the saved responses could not be loaded. Please inform your teacher.");
+      return 0;
+    }
+
+    let restoredCount = 0;
+
+    for (const row of data || []) {
+      const questionId = String(row.question_id || "");
+      const savedAnswer = String(row.answer ?? "");
+      if (!questionId || !savedAnswer.trim()) continue;
+
+      const wrap = examForm.querySelector(`[data-question-id="${CSS.escape(questionId)}"]`);
+      if (!wrap) continue;
+
+      // Never overwrite something the student currently sees in the answer field.
+      const visibleAnswer = currentAnswerForQuestion(questionId);
+      if (String(visibleAnswer ?? "").trim()) continue;
+
+      // If this browser has a newer local draft, prefer that draft over the older
+      // server copy. Otherwise use the Supabase-saved answer the teacher requested.
+      const localDraft = loadLocalDraft(questionId);
+      const answerToRestore = localDraft?.answer?.trim()
+        ? String(localDraft.answer)
+        : savedAnswer;
+
+      const radioInputs = [...wrap.querySelectorAll('input[type="radio"]')];
+      if (radioInputs.length) {
+        const match = radioInputs.find(input => String(input.value) === answerToRestore);
+        if (match) {
+          match.checked = true;
+          restoredCount += 1;
+        }
+      } else {
+        const mathBoard = wrap.querySelector(".math-solver-board");
+        if (mathBoard) {
+          const parsed = parseSavedMathResponse(answerToRestore);
+          const solution = mathBoard.querySelector(".math-solution-input");
+          const finalAnswer = mathBoard.querySelector(".math-final-answer-input");
+          if (solution) solution.value = parsed.solution;
+          if (finalAnswer) finalAnswer.value = parsed.finalAnswer;
+          restoredCount += 1;
+        } else {
+          const field = wrap.querySelector("textarea, input.short-response-input, input[type='text']");
+          if (field) {
+            field.value = answerToRestore;
+            restoredCount += 1;
+          }
+        }
+      }
+
+      if (restoredCount > 0) {
+        saveLocalDraft(questionId, answerToRestore);
+        const state = wrap.querySelector(".save-state");
+        if (state) {
+          state.textContent = localDraft?.answer?.trim()
+            ? "Recovered browser draft"
+            : "Restored from saved attempt";
+          state.style.color = "";
+        }
+      }
+    }
+
+    if (restoredCount > 0) {
+      warn(`${restoredCount} saved response${restoredCount === 1 ? " was" : "s were"} restored. Please review your answers before submitting.`);
+      await logEvent("saved_responses_restored_to_browser", {
+        restored_count: restoredCount
+      });
+    } else {
+      warn("Your teacher sent a restore request, but no blank answers needed restoration.");
+    }
+
+    return restoredCount;
+  }
+
   async function pollAttemptMessages({ initial = false } = {}) {
     if (!attempt?.attempt_token || submitted) return;
 
@@ -1368,6 +1449,12 @@
 
     const messages = Array.isArray(data) ? data : [];
     if (!messages.length) return;
+
+    for (const item of messages) {
+      if (item.message_type === "restore_saved_responses") {
+        await restoreSavedResponsesIntoCurrentForm();
+      }
+    }
 
     const latest = messages[messages.length - 1];
     lastAttemptMessageAt = latest.created_at || lastAttemptMessageAt;
