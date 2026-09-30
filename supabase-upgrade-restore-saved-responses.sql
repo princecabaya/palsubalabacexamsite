@@ -85,7 +85,9 @@ $$;
 revoke all on function public.admin_restore_attempt_responses(uuid) from public;
 grant execute on function public.admin_restore_attempt_responses(uuid) to authenticated;
 
-create or replace function public.get_attempt_messages(
+drop function if exists public.get_attempt_messages(uuid,timestamptz);
+
+create function public.get_attempt_messages(
   p_attempt_token uuid,
   p_after timestamptz default null
 )
