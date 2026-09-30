@@ -2008,7 +2008,11 @@
             ? "Write your essay response here"
             : "Type your answer here";
           const localDraft = loadLocalDraft(q.question_id);
-          if (localDraft) {
+          if (essayAlreadySubmitted && saved) {
+            ta.value = String(saved.answer ?? "");
+            ta.readOnly = true;
+            ta.classList.add("essay-submitted-response");
+          } else if (localDraft) {
             ta.value = localDraft.answer;
             state.textContent = "Recovered local draft";
           } else if (saved) {
@@ -2017,13 +2021,41 @@
 
           let debounce;
           ta.addEventListener("input", () => {
-            // Immediate browser-local protection on every keystroke.
+            if (q.question_type === "essay" && submittedEssayQuestionIds.has(String(q.question_id))) return;
             saveLocalDraft(q.question_id, ta.value);
             state.textContent = "Saving…";
             clearTimeout(debounce);
             debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 350);
           });
           wrap.appendChild(ta);
+
+          if (q.question_type === "essay") {
+            const essayActions = document.createElement("div");
+            essayActions.className = "essay-submit-actions";
+
+            const essaySubmitBtn = document.createElement("button");
+            essaySubmitBtn.type = "button";
+            essaySubmitBtn.className = "essay-submit-btn";
+
+            if (essayAlreadySubmitted) {
+              essaySubmitBtn.textContent = "Submitted ✓";
+              essaySubmitBtn.disabled = true;
+            } else {
+              essaySubmitBtn.textContent = "Submit This Essay";
+              essaySubmitBtn.addEventListener("click", () => {
+                submitSingleEssay(q, ta, state, essaySubmitBtn);
+              });
+            }
+
+            const essayNote = document.createElement("span");
+            essayNote.className = "muted essay-submit-note";
+            essayNote.textContent = essayAlreadySubmitted
+              ? "This essay is locked and already included in your exam attempt."
+              : "Submit this essay when finished. It will be saved and locked immediately.";
+
+            essayActions.append(essaySubmitBtn, essayNote);
+            wrap.appendChild(essayActions);
+          }
         }
 
         if (q.question_type === "essay" && Array.isArray(q.rubric_criteria) && q.rubric_criteria.length) {
