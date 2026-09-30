@@ -1465,6 +1465,41 @@
     popup.document.close();
   }
 
+  async function teacherSaveRecoveredResponse(questionId, position) {
+    const attempt = currentDetailAttempt;
+    if (!attempt || attempt.status !== "active") {
+      alert("Teacher recovery can only be saved while the attempt is active. Reopen the attempt first if it was already submitted.");
+      return;
+    }
+
+    const answer = prompt(`Enter the recovered answer for Item ${position}.\n\nThis will be saved into the student\'s response record and included when they submit. It cannot overwrite an existing nonblank student answer.`);
+    if (answer === null) return;
+    if (!String(answer).trim()) {
+      alert("Recovered answer cannot be blank.");
+      return;
+    }
+
+    const ok = confirm(
+      `Save this recovered answer for Item ${position}?\n\n` +
+      "It will become part of the student\'s database responses. A later blank save from the student\'s phone will not erase it, but a new nonblank answer typed by the student can replace it."
+    );
+    if (!ok) return;
+
+    const { data, error } = await db.rpc("admin_save_recovered_response", {
+      p_attempt_id: attempt.id,
+      p_question_id: questionId,
+      p_answer: String(answer)
+    });
+
+    if (error) {
+      alert(`Could not save recovered answer: ${error.message}\n\nRun supabase-upgrade-teacher-recovered-responses.sql once in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    alert(`Recovered answer saved for Item ${position}. It is now part of this attempt\'s database responses.`);
+    await loadSavedResponses(attempt);
+  }
+
   async function loadSavedResponses(attempt) {
     const rows = $("savedResponseRows");
     const note = $("savedResponsesNote");
@@ -1472,13 +1507,13 @@
 
     if (!rows || !note || !countBadge) return;
 
-    rows.innerHTML = '<tr><td colspan="3">Loading saved responses…</td></tr>';
+    rows.innerHTML = '<tr><td colspan="4">Loading saved responses…</td></tr>';
     countBadge.textContent = "Loading…";
     loadAttemptRecoverySnapshot(attempt);
 
     const examId = attempt.exams?.id;
     if (!examId) {
-      rows.innerHTML = '<tr><td colspan="3">Exam information is unavailable.</td></tr>';
+      rows.innerHTML = '<tr><td colspan="4">Exam information is unavailable.</td></tr>';
       note.textContent = "Could not identify the examination for this attempt.";
       countBadge.textContent = "0 answered";
       return;
@@ -1492,13 +1527,13 @@
         .order("position", { ascending: true }),
       db
         .from("responses")
-        .select("question_id,answer,saved_at")
+        .select("question_id,answer,saved_at,teacher_recovered,teacher_recovered_at")
         .eq("attempt_id", attempt.id)
     ]);
 
     if (questionResult.error || responseResult.error) {
       const message = questionResult.error?.message || responseResult.error?.message || "Could not load saved responses.";
-      rows.innerHTML = `<tr><td colspan="3">${escapeHtml(message)}</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
       note.textContent = "Saved responses could not be loaded.";
       countBadge.textContent = "—";
       return;
@@ -1527,7 +1562,7 @@
     rows.innerHTML = "";
 
     if (!questions.length) {
-      rows.innerHTML = '<tr><td colspan="3">No questions were found for this examination.</td></tr>';
+      rows.innerHTML = '<tr><td colspan="4">No questions were found for this examination.</td></tr>';
       return;
     }
 
@@ -1538,6 +1573,7 @@
 
       const tr = document.createElement("tr");
       tr.className = rawAnswer ? "" : "unanswered-response-row";
+      const teacherRecovered = Boolean(saved?.teacher_recovered);
       tr.innerHTML = `
         <td>
           <strong>Item ${escapeHtml(String(question.position))}</strong>
@@ -1545,7 +1581,21 @@
         </td>
         <td>${displayedAnswer ? escapeHtml(displayedAnswer) : '<span class="muted">Unanswered</span>'}</td>
         <td>${saved?.saved_at ? fmt(saved.saved_at) : "—"}</td>
+        <td>
+          ${teacherRecovered
+            ? `<span class="badge ok">Teacher recovered</span>${saved?.teacher_recovered_at ? `<div class="muted">${escapeHtml(fmt(saved.teacher_recovered_at))}</div>` : ""}`
+            : (rawAnswer
+              ? '<span class="muted">Student response present</span>'
+              : (attempt.status === "active"
+                ? `<button type="button" class="teacher-save-response-btn" data-question-id="${escapeAttr(question.id)}" data-position="${escapeAttr(question.position)}">Save Recovered Answer</button>`
+                : '<span class="muted">Reopen attempt to recover</span>'))}
+        </td>
       `;
+
+      tr.querySelector(".teacher-save-response-btn")?.addEventListener("click", () => {
+        teacherSaveRecoveredResponse(question.id, question.position);
+      });
+
       rows.appendChild(tr);
     }
   }
