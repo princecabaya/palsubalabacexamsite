@@ -2854,7 +2854,8 @@
     await stopMicrophoneMonitoring();
     submitted = true;
     const completedAttemptToken = attempt?.attempt_token || "";
-    // Recovery snapshot is intentionally retained for 7 days after submission.
+    // Keep the dedicated 7-day recovery snapshot, but clear the older per-question draft keys.
+    clearLocalDraftsForAttempt(completedAttemptToken);
     try {
       sessionStorage.removeItem("exam_guard_token");
       localStorage.removeItem("exam_guard_token");
