@@ -3607,14 +3607,14 @@
   async function loadExams() {
     let { data: exams, error } = await db
       .from("exams")
-      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at, owner_id, draft_payload, draft_updated_at")
+      .select("id, code, title, duration_minutes, status, start_at, end_at, archived, archived_at, owner_id, draft_payload, draft_updated_at, results_released, results_released_at")
       .order("created_at", { ascending: false });
 
     // Keep the dashboard usable before the one-time archive database upgrade is run.
     if (error && /archived|draft_payload|draft_updated_at/i.test(error.message || "")) {
       const fallback = await db
         .from("exams")
-        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id")
+        .select("id, code, title, duration_minutes, status, start_at, end_at, owner_id, results_released, results_released_at")
         .order("created_at", { ascending: false });
       exams = (fallback.data || []).map(e => ({ ...e, archived: false, archived_at: null, draft_payload: null, draft_updated_at: null }));
       error = fallback.error;
@@ -3739,6 +3739,7 @@
               <button type="button" data-exam-action="preview">Preview Exam</button>
               <button type="button" data-exam-action="edit" ${exam.status === "published" ? 'disabled title="Published examinations cannot be edited"' : ""}>Edit Exam</button>
               ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button><button type="button" data-exam-action="extend-window">Extend Exam Window</button>' : ""}
+              <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Student Results" : "Release Student Results"}</button>
               <button type="button" data-action="draft">Draft</button>
               <button type="button" data-action="published">Publish</button>
               <button type="button" data-action="closed">Close</button>
@@ -3761,6 +3762,7 @@
             if (action === "edit") await editExam(exam);
             if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
             if (action === "extend-window") await extendExamWindow(exam);
+            if (action === "toggle-results") await toggleExamResultsRelease(exam);
             if (action === "archive") await archiveExam(exam);
             if (action === "restore") await restoreExam(exam);
             if (action === "retake") await createRetakeExam(exam);
@@ -4167,6 +4169,30 @@
       code,
       title: `${rootTitle} (Retake ${number})`
     };
+  }
+
+  async function toggleExamResultsRelease(exam) {
+    if (!exam?.id) return;
+    const release = !Boolean(exam.results_released);
+    const message = release
+      ? `Release scores, correct answers, and detailed results for "${exam.title}" to students?`
+      : `Hide student scores and detailed results again for "${exam.title}"?`;
+    if (!confirm(message)) return;
+
+    const { error } = await db.rpc("admin_set_exam_results_released", {
+      p_exam_id: exam.id,
+      p_released: release
+    });
+
+    if (error) {
+      alert(`Could not ${release ? "release" : "hide"} student results: ${error.message}\n\nRun supabase-upgrade-result-release-control.sql once in Supabase SQL Editor, then refresh the dashboard.`);
+      return;
+    }
+
+    alert(release
+      ? "Student results are now released. Students can use View Result to see their score and detailed report."
+      : "Student results are hidden again.");
+    await loadExams();
   }
 
   async function extendExamWindow(exam) {
