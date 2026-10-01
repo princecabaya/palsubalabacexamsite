@@ -923,7 +923,10 @@
     button.disabled = false;
 
     if (error || !data) {
-      msg.textContent = error?.message || "No submitted result was found.";
+      const message = error?.message || "No submitted result was found.";
+      msg.textContent = /not yet released/i.test(message)
+        ? "Your exam was submitted, but your teacher has not released the score/results yet."
+        : message;
       return;
     }
 
@@ -3088,39 +3091,19 @@
     const fixedTimer = $("fixedRemainingTime");
     if (fixedTimer) fixedTimer.textContent = "00:00";
 
-    const row = data?.[0];
-    $("doneText").textContent = row?.score == null
-      ? "Your responses have been recorded."
-      : `Your responses have been recorded. Objective auto-score: ${row.score}/${row.max_score}. Constructed responses, if any, still require teacher approval.`;
+    $("doneText").textContent =
+      "Your exam has been submitted successfully. Your score and correct answers will be available only after your teacher releases the results.";
 
-    // Generate a provisional score for constructed-response items. This never
-    // becomes the final grade until the teacher reviews and approves it.
-    const provisional = await window.ExamAI?.gradeConstructed?.(attempt.attempt_token);
-    if (provisional?.grading_status === "pending_review") {
-      if (provisional.provisional_score !== null && provisional.provisional_score !== undefined) {
-        $("doneText").textContent =
-          `Your responses have been recorded. Provisional overall score: ${provisional.provisional_score}/${provisional.provisional_max_score}. Essay, Short Response, and Math Solver items are still subject to teacher review and approval.`;
-      } else {
-        $("doneText").textContent =
-          "Your responses have been recorded. Free local checks were completed. Any unresolved Essay, Short Response, or Math Solver items will be reviewed by your teacher before the final result is approved.";
-      }
-    }
-
+    // Keep student-facing score/report features hidden until the teacher releases results.
+    $("resultReportPanel")?.classList.add("hidden");
+    $("aiFeedbackPanel")?.classList.add("hidden");
+    $("flexScorePanel")?.classList.add("hidden");
     updateFlexScoreContext({
-      score: provisional?.provisional_score ?? row?.score ?? null,
-      maxScore: provisional?.provisional_max_score ?? row?.max_score ?? null,
+      score: null,
+      maxScore: null,
       examTitle: attempt?.exam_title || "",
       studentName: attempt?.student_name || ""
     });
-
-    // AI feedback is generated server-side so no Gemini/API secret is exposed in GitHub.
-    // The feedback helper fails gracefully if the Edge Function has not been deployed yet.
-    window.ExamAI?.generateFeedback(attempt.attempt_token, {
-      score: row?.score ?? null,
-      maxScore: row?.max_score ?? null
-    });
-
-    window.ExamReport?.enableStudent(attempt.attempt_token);
 
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
