@@ -4583,3 +4583,23 @@ textarea{resize:vertical}
     justify-self:stretch;
   }
 }
+
+
+/* Live proctor loading/error states */
+.group-live-loading,
+.group-live-error{
+  grid-column:1 / -1;
+  width:min(680px,100%);
+  justify-self:center;
+  padding:28px 20px;
+  border:1px dashed var(--line);
+  border-radius:14px;
+  background:#fff;
+  text-align:center;
+  color:var(--muted);
+}
+.group-live-error{
+  border-color:#fecaca;
+  background:#fffafa;
+  color:#b91c1c;
+}
