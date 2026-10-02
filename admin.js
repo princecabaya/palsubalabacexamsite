@@ -643,9 +643,18 @@
           await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
         });
 
-        header.querySelector(".group-live-proctor-btn")?.addEventListener("click", async (event) => {
+        header.querySelector(".group-live-proctor-btn")?.addEventListener("click", (event) => {
           event.stopPropagation();
-          await openGroupLiveProctor(group, event.currentTarget);
+          const button = event.currentTarget;
+          openGroupLiveProctor(group, button).catch(error => {
+            console.error("Live Proctor failed to open:", error);
+            button.disabled = false;
+            button.textContent = "Live Proctor";
+            const panel = $("groupLiveProctorPanel");
+            const meta = $("groupLiveProctorMeta");
+            panel?.classList.remove("hidden");
+            if (meta) meta.textContent = "Could not start Live Proctor: " + (error?.message || error);
+          });
         });
 
         header.querySelector(".archive-active-exam-btn")?.addEventListener("click", async (event) => {
@@ -5081,50 +5090,74 @@
       return;
     }
 
-    await closeGroupLiveProctor({ notifyServer:true });
-
-    groupLiveExam = {
-      id: group.key,
-      title: group.title,
-      code: group.code,
-      attempts: activeAttempts
-    };
-    groupLivePageIndex = 0;
-
     const panel = $("groupLiveProctorPanel");
     const grid = $("groupLiveProctorGrid");
     const meta = $("groupLiveProctorMeta");
     const title = $("groupLiveProctorTitle");
 
-    if (title) title.textContent = group.title || "Live Proctoring";
-    if (meta) {
-      meta.textContent =
-        activeAttempts.length + " active student" +
-        (activeAttempts.length === 1 ? "" : "s") +
-        " • " + (group.code || "") +
-        " • showing up to 9 live cameras at a time";
-    }
-    if (grid) grid.innerHTML = "";
-    if ($("groupBroadcastMessage")) $("groupBroadcastMessage").value = "";
-    if ($("groupBroadcastStatus")) {
-      $("groupBroadcastStatus").textContent = "";
-      $("groupBroadcastStatus").classList.remove("error","success");
-    }
-
+    // Open the workspace immediately so the teacher gets instant feedback.
     panel?.classList.remove("hidden");
-    updateGroupLivePager();
+    if (title) title.textContent = group.title || "Live Proctoring";
+    if (meta) meta.textContent = "Preparing live proctoring workspace…";
+    if (grid) {
+      grid.innerHTML = '<div class="group-live-loading">Preparing camera requests…</div>';
+      delete grid.dataset.pageCount;
+    }
 
-    const originalText = button?.textContent || "";
+    const originalText = button?.textContent || "Live Proctor";
     if (button) {
       button.disabled = true;
       button.textContent = "Opening…";
     }
 
-    await renderGroupLivePage({ notifyPrevious:false });
+    try {
+      // Clean up any older group session without letting a stale busy flag block this launch.
+      groupLivePageBusy = false;
+      await closeGroupLiveProctor({ notifyServer:true });
 
-    if (button) {
-      button.disabled = false;
-      button.textContent = originalText || "Live Proctor";
+      // closeGroupLiveProctor hides the panel, so reopen it for the new session.
+      panel?.classList.remove("hidden");
+
+      groupLiveExam = {
+        id: group.key,
+        title: group.title,
+        code: group.code,
+        attempts: activeAttempts
+      };
+      groupLivePageIndex = 0;
+      groupLivePageBusy = false;
+
+      if (title) title.textContent = group.title || "Live Proctoring";
+      if (meta) {
+        meta.textContent =
+          activeAttempts.length + " active student" +
+          (activeAttempts.length === 1 ? "" : "s") +
+          " • " + (group.code || "") +
+          " • showing up to 9 live cameras at a time";
+      }
+      if (grid) grid.innerHTML = "";
+      if ($("groupBroadcastMessage")) $("groupBroadcastMessage").value = "";
+      if ($("groupBroadcastStatus")) {
+        $("groupBroadcastStatus").textContent = "";
+        $("groupBroadcastStatus").classList.remove("error","success");
+      }
+
+      updateGroupLivePager();
+      await renderGroupLivePage({ notifyPrevious:false });
+    } catch (error) {
+      groupLivePageBusy = false;
+      console.error("Could not initialize Live Proctor:", error);
+      panel?.classList.remove("hidden");
+      if (meta) meta.textContent = "Live Proctor could not start: " + (error?.message || error);
+      if (grid) {
+        grid.innerHTML = '<div class="group-live-error">Live Proctor could not start. Close this panel, refresh the dashboard, and try again.</div>';
+      }
+      throw error;
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText || "Live Proctor";
+      }
     }
   }
 
@@ -5180,6 +5213,7 @@
       groupLiveExam = null;
       groupLivePageIndex = 0;
       groupLiveTouchStartX = null;
+      groupLivePageBusy = false;
       $("groupLiveProctorPanel")?.classList.add("hidden");
       if ($("groupLiveProctorGrid")) {
         $("groupLiveProctorGrid").innerHTML = "";
