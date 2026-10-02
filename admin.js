@@ -28,6 +28,10 @@
   let groupLiveExam = null;
   const groupLivePeers = new Map();
   let groupLiveClosing = false;
+  let groupLivePageIndex = 0;
+  const GROUP_LIVE_PAGE_SIZE = 9;
+  let groupLiveTouchStartX = null;
+  let groupLivePageBusy = false;
   let currentProctorPhotos = [];
   let currentSpeechClips = [];
   let proctorAssignments = [];
@@ -4969,53 +4973,193 @@
     }
   }
 
+  function groupLivePageCount() {
+    const total = groupLiveExam?.attempts?.length || 0;
+    return Math.max(1, Math.ceil(total / GROUP_LIVE_PAGE_SIZE));
+  }
+
+  function groupLivePageAttempts(pageIndex = groupLivePageIndex) {
+    const attempts = groupLiveExam?.attempts || [];
+    const start = pageIndex * GROUP_LIVE_PAGE_SIZE;
+    return attempts.slice(start, start + GROUP_LIVE_PAGE_SIZE);
+  }
+
+  function updateGroupLivePager() {
+    const total = groupLiveExam?.attempts?.length || 0;
+    const pageCount = groupLivePageCount();
+    groupLivePageIndex = Math.max(0, Math.min(groupLivePageIndex, pageCount - 1));
+
+    const start = total ? groupLivePageIndex * GROUP_LIVE_PAGE_SIZE + 1 : 0;
+    const end = total ? Math.min(total, start + GROUP_LIVE_PAGE_SIZE - 1) : 0;
+
+    if ($("groupLivePageIndicator")) {
+      $("groupLivePageIndicator").textContent = "Page " + (groupLivePageIndex + 1) + " of " + pageCount;
+    }
+    if ($("groupLivePageRange")) {
+      $("groupLivePageRange").textContent = total
+        ? "Students " + start + "–" + end + " of " + total
+        : "No active students";
+    }
+
+    const prev = $("groupLivePrevPageBtn");
+    const next = $("groupLiveNextPageBtn");
+    if (prev) prev.disabled = groupLivePageBusy || groupLivePageIndex <= 0;
+    if (next) next.disabled = groupLivePageBusy || groupLivePageIndex >= pageCount - 1;
+  }
+
+  async function stopGroupLiveEntry(attemptId, { notifyServer = true } = {}) {
+    const entry = groupLivePeers.get(attemptId);
+    if (!entry) return;
+
+    clearInterval(entry.pollHandle);
+    entry.pollHandle = null;
+    try { entry.pc?.close(); } catch (_) {}
+
+    if (notifyServer && entry.sessionId) {
+      try {
+        await db.rpc("admin_end_live_camera", { p_session_id: entry.sessionId });
+      } catch (_) {}
+    }
+
+    groupLivePeers.delete(attemptId);
+  }
+
+  async function renderGroupLivePage({ notifyPrevious = true } = {}) {
+    if (!groupLiveExam || groupLivePageBusy) return;
+    groupLivePageBusy = true;
+    updateGroupLivePager();
+
+    const grid = $("groupLiveProctorGrid");
+    const pageAttempts = groupLivePageAttempts();
+    const pageIds = new Set(pageAttempts.map(a => a.id));
+
+    try {
+      const stops = [];
+      for (const attemptId of Array.from(groupLivePeers.keys())) {
+        if (!pageIds.has(attemptId)) {
+          stops.push(stopGroupLiveEntry(attemptId, { notifyServer: notifyPrevious }));
+        }
+      }
+      if (stops.length) await Promise.allSettled(stops);
+
+      if (grid) grid.innerHTML = "";
+      pageAttempts.forEach(renderGroupLiveCard);
+
+      // Limit active WebRTC setup to exactly one 3x3 page (max 9 students).
+      const batchSize = 3;
+      for (let i = 0; i < pageAttempts.length; i += batchSize) {
+        await Promise.allSettled(
+          pageAttempts.slice(i, i + batchSize).map(startGroupLiveStudent)
+        );
+      }
+    } finally {
+      groupLivePageBusy = false;
+      updateGroupLivePager();
+    }
+  }
+
+  async function changeGroupLivePage(delta) {
+    if (!groupLiveExam || groupLivePageBusy) return;
+    const nextIndex = Math.max(
+      0,
+      Math.min(groupLivePageIndex + delta, groupLivePageCount() - 1)
+    );
+    if (nextIndex === groupLivePageIndex) return;
+
+    groupLivePageIndex = nextIndex;
+    updateGroupLivePager();
+    await renderGroupLivePage({ notifyPrevious: true });
+  }
+
   async function openGroupLiveProctor(group, button = null) {
     const activeAttempts = (group?.attempts || []).filter(a => a.status === "active");
-    if (!activeAttempts.length) { alert("There are no active students in this examination."); return; }
+    if (!activeAttempts.length) {
+      alert("There are no active students in this examination.");
+      return;
+    }
+
     await closeGroupLiveProctor({ notifyServer:true });
-    groupLiveExam = { id:group.key, title:group.title, code:group.code, attempts:activeAttempts };
+
+    groupLiveExam = {
+      id: group.key,
+      title: group.title,
+      code: group.code,
+      attempts: activeAttempts
+    };
+    groupLivePageIndex = 0;
+
     const panel = $("groupLiveProctorPanel");
     const grid = $("groupLiveProctorGrid");
     const meta = $("groupLiveProctorMeta");
     const title = $("groupLiveProctorTitle");
+
     if (title) title.textContent = group.title || "Live Proctoring";
-    if (meta) meta.textContent = activeAttempts.length + " active student" + (activeAttempts.length === 1 ? "" : "s") + " • " + (group.code || "");
+    if (meta) {
+      meta.textContent =
+        activeAttempts.length + " active student" +
+        (activeAttempts.length === 1 ? "" : "s") +
+        " • " + (group.code || "") +
+        " • showing up to 9 live cameras at a time";
+    }
     if (grid) grid.innerHTML = "";
     if ($("groupBroadcastMessage")) $("groupBroadcastMessage").value = "";
-    if ($("groupBroadcastStatus")) { $("groupBroadcastStatus").textContent = ""; $("groupBroadcastStatus").classList.remove("error","success"); }
-    panel?.classList.remove("hidden");
-    activeAttempts.forEach(renderGroupLiveCard);
-    const originalText = button?.textContent || "";
-    if (button) { button.disabled = true; button.textContent = "Requesting…"; }
-    const batchSize = 4;
-    for (let i = 0; i < activeAttempts.length; i += batchSize) {
-      await Promise.allSettled(activeAttempts.slice(i, i + batchSize).map(startGroupLiveStudent));
+    if ($("groupBroadcastStatus")) {
+      $("groupBroadcastStatus").textContent = "";
+      $("groupBroadcastStatus").classList.remove("error","success");
     }
-    if (button) { button.disabled = false; button.textContent = originalText || "Live Proctor"; }
+
+    panel?.classList.remove("hidden");
+    updateGroupLivePager();
+
+    const originalText = button?.textContent || "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Opening…";
+    }
+
+    await renderGroupLivePage({ notifyPrevious:false });
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText || "Live Proctor";
+    }
   }
 
   async function refreshGroupLiveRequests() {
-    if (!groupLiveExam) return;
+    if (!groupLiveExam || groupLivePageBusy) return;
+
     const btn = $("refreshGroupLiveBtn");
-    if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Refreshing…";
+    }
+
     try {
-      const activeNow = attemptsCache.filter(a => a.status === "active" && String(a.exams?.id || "") === String(groupLiveExam.id));
+      const activeNow = attemptsCache.filter(a =>
+        a.status === "active" &&
+        String(a.exams?.id || "") === String(groupLiveExam.id)
+      );
+
       groupLiveExam.attempts = activeNow;
-      const activeIds = new Set(activeNow.map(a => a.id));
-      for (const [attemptId, entry] of Array.from(groupLivePeers.entries())) {
-        if (!activeIds.has(attemptId)) {
-          clearInterval(entry.pollHandle); try { entry.pc?.close(); } catch (_) {}
-          if (entry.sessionId) db.rpc("admin_end_live_camera", { p_session_id: entry.sessionId }).catch(()=>{});
-          groupLivePeers.delete(attemptId); document.getElementById(groupLiveCardId(attemptId))?.remove();
-        }
+      const maxPage = Math.max(0, Math.ceil(activeNow.length / GROUP_LIVE_PAGE_SIZE) - 1);
+      groupLivePageIndex = Math.min(groupLivePageIndex, maxPage);
+
+      if ($("groupLiveProctorMeta")) {
+        $("groupLiveProctorMeta").textContent =
+          activeNow.length + " active student" +
+          (activeNow.length === 1 ? "" : "s") +
+          " • " + (groupLiveExam.code || "") +
+          " • showing up to 9 live cameras at a time";
       }
-      for (const attempt of activeNow) {
-        renderGroupLiveCard(attempt);
-        const entry = groupLivePeers.get(attempt.id);
-        if (!entry || ["failed","closed","disconnected"].includes(entry.pc?.connectionState || "")) await startGroupLiveStudent(attempt);
+
+      await renderGroupLivePage({ notifyPrevious:true });
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Refresh Requests";
       }
-      if ($("groupLiveProctorMeta")) $("groupLiveProctorMeta").textContent = activeNow.length + " active student" + (activeNow.length === 1 ? "" : "s") + " • " + (groupLiveExam.code || "");
-    } finally { if (btn) { btn.disabled = false; btn.textContent = "Refresh Requests"; } }
+      updateGroupLivePager();
+    }
   }
 
   async function closeGroupLiveProctor({ notifyServer = true } = {}) {
@@ -5030,9 +5174,13 @@
       groupLivePeers.clear();
       if (jobs.length) await Promise.allSettled(jobs);
     } finally {
-      groupLiveExam = null; $("groupLiveProctorPanel")?.classList.add("hidden");
+      groupLiveExam = null;
+      groupLivePageIndex = 0;
+      groupLiveTouchStartX = null;
+      $("groupLiveProctorPanel")?.classList.add("hidden");
       if ($("groupLiveProctorGrid")) $("groupLiveProctorGrid").innerHTML = "";
       groupLiveClosing = false;
+      updateGroupLivePager();
     }
   }
 
@@ -5355,6 +5503,8 @@
   $("closeTeacherLiveCameraBtn")?.addEventListener("click", () => endTeacherLiveCamera({ notifyServer:true }));
   $("closeGroupLiveProctorBtn")?.addEventListener("click", () => closeGroupLiveProctor({ notifyServer:true }));
   $("refreshGroupLiveBtn")?.addEventListener("click", refreshGroupLiveRequests);
+  $("groupLivePrevPageBtn")?.addEventListener("click", () => changeGroupLivePage(-1));
+  $("groupLiveNextPageBtn")?.addEventListener("click", () => changeGroupLivePage(1));
   $("sendGroupBroadcastBtn")?.addEventListener("click", sendGroupBroadcastMessage);
   $("groupBroadcastMessage")?.addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -5382,6 +5532,21 @@
   });
   $("resetAttemptBtn")?.addEventListener("click", resetCurrentAttempt);
   $("closeDetail").addEventListener("click", closeAttemptDrawer);
+
+  $("groupLiveSwipeSurface")?.addEventListener("touchstart", event => {
+    groupLiveTouchStartX = event.changedTouches?.[0]?.clientX ?? null;
+  }, { passive:true });
+
+  $("groupLiveSwipeSurface")?.addEventListener("touchend", event => {
+    if (groupLiveTouchStartX === null) return;
+    const endX = event.changedTouches?.[0]?.clientX ?? groupLiveTouchStartX;
+    const delta = endX - groupLiveTouchStartX;
+    groupLiveTouchStartX = null;
+
+    if (Math.abs(delta) < 60) return;
+    if (delta < 0) changeGroupLivePage(1);
+    else changeGroupLivePage(-1);
+  }, { passive:true });
   $("signOutBtn").addEventListener("click", async () => {
     clearInterval(pollHandle);
     await closeGroupLiveProctor({ notifyServer:true });
