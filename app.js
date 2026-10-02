@@ -82,6 +82,10 @@
   let submitted = false;
   let attemptMessagePollHandle = null;
   let pendingRestoreMessage = null;
+  let liveCameraPollHandle = null;
+  let studentLivePeer = null;
+  let studentLiveSessionId = null;
+  let pendingLiveCameraRequest = null;
   let lastAttemptMessageAt = null;
   let suppressBlurUntil = 0;
   const queuedEvents = [];
@@ -1635,6 +1639,120 @@
     showTeacherLiveMessage(latest);
   }
 
+  function waitForIceGatheringComplete(pc, timeoutMs = 8000) {
+    if (!pc || pc.iceGatheringState === "complete") return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => {
+        pc.removeEventListener("icegatheringstatechange", check);
+        clearTimeout(timer);
+        resolve();
+      };
+      const check = () => { if (pc.iceGatheringState === "complete") done(); };
+      const timer = setTimeout(done, timeoutMs);
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+  }
+
+  function closeStudentLiveCameraConnection() {
+    try { studentLivePeer?.close(); } catch (_) {}
+    studentLivePeer = null;
+    studentLiveSessionId = null;
+    pendingLiveCameraRequest = null;
+    $("liveCameraRequestModal")?.classList.add("hidden");
+  }
+
+  async function pollLiveCameraRequest() {
+    if (!attempt?.attempt_token || submitted) return;
+    const { data, error } = await db.rpc("student_get_live_camera_request", {
+      p_attempt_token: attempt.attempt_token
+    });
+    if (error) return;
+
+    if (!data) {
+      if (studentLivePeer && studentLiveSessionId) closeStudentLiveCameraConnection();
+      return;
+    }
+
+    if (data.status === "requested" && data.id !== studentLiveSessionId) {
+      pendingLiveCameraRequest = data;
+      $("liveCameraRequestModal")?.classList.remove("hidden");
+      if (navigator.vibrate) { try { navigator.vibrate([120,80,120]); } catch (_) {} }
+    } else if (["ended","expired","declined"].includes(String(data.status))) {
+      closeStudentLiveCameraConnection();
+    }
+  }
+
+  function startLiveCameraPolling() {
+    clearInterval(liveCameraPollHandle);
+    pollLiveCameraRequest().catch(()=>{});
+    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 2500);
+  }
+
+  function stopLiveCameraPolling() {
+    clearInterval(liveCameraPollHandle);
+    liveCameraPollHandle = null;
+    closeStudentLiveCameraConnection();
+  }
+
+  async function acceptLiveCameraRequest() {
+    const request = pendingLiveCameraRequest;
+    if (!request?.id || !request?.offer_sdp || !attempt?.attempt_token) return;
+
+    const btn = $("acceptLiveCameraBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting…"; }
+
+    try {
+      const stream = await requestFrontCamera();
+      if (!stream?.active) throw new Error("Front camera is not available.");
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+      studentLivePeer = pc;
+      studentLiveSessionId = request.id;
+
+      for (const track of stream.getVideoTracks()) pc.addTrack(track, stream);
+      await pc.setRemoteDescription({ type:"offer", sdp:request.offer_sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await waitForIceGatheringComplete(pc);
+
+      const { error } = await db.rpc("student_answer_live_camera", {
+        p_attempt_token: attempt.attempt_token,
+        p_session_id: request.id,
+        p_answer_sdp: pc.localDescription?.sdp || answer.sdp
+      });
+      if (error) throw error;
+
+      pendingLiveCameraRequest = null;
+      $("liveCameraRequestModal")?.classList.add("hidden");
+      warn("Live camera check connected. Your teacher can temporarily view your front camera.");
+
+      pc.addEventListener("connectionstatechange", () => {
+        if (["failed","closed","disconnected"].includes(pc.connectionState)) {
+          closeStudentLiveCameraConnection();
+        }
+      });
+    } catch (error) {
+      closeStudentLiveCameraConnection();
+      warn(`Could not start live camera: ${error?.message || error}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Allow Live Camera"; }
+    }
+  }
+
+  async function declineLiveCameraRequest() {
+    const request = pendingLiveCameraRequest;
+    $("liveCameraRequestModal")?.classList.add("hidden");
+    pendingLiveCameraRequest = null;
+    if (!request?.id || !attempt?.attempt_token) return;
+    await db.rpc("student_decline_live_camera", {
+      p_attempt_token: attempt.attempt_token,
+      p_session_id: request.id
+    });
+    warn("Live camera request declined.");
+  }
+
   function startAttemptMessagePolling() {
     clearInterval(attemptMessagePollHandle);
     lastAttemptMessageAt = null;
@@ -1645,6 +1763,7 @@
   }
 
   function stopAttemptMessagePolling() {
+    stopLiveCameraPolling();
     clearInterval(attemptMessagePollHandle);
     attemptMessagePollHandle = null;
   }
@@ -1674,6 +1793,9 @@
       });
     }
   });
+
+  $("acceptLiveCameraBtn")?.addEventListener("click", acceptLiveCameraRequest);
+  $("declineLiveCameraBtn")?.addEventListener("click", declineLiveCameraRequest);
 
   $("declineRestoreAnswersBtn")?.addEventListener("click", async () => {
     const declinedMessage = pendingRestoreMessage;
