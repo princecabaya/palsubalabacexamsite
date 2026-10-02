@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20261002-1245">
+  <link rel="stylesheet" href="style.css?v=20261002-1320">
 </head>
 <body>
   <main class="shell wide">
@@ -350,10 +350,21 @@
               <span id="groupBroadcastStatus" class="message-inline" role="status"></span>
             </section>
 
-            <div id="groupLiveProctorGrid" class="group-live-proctor-grid"></div>
+            <nav class="group-live-pager" aria-label="Live proctoring pages">
+              <button id="groupLivePrevPageBtn" type="button" aria-label="Previous 9 students">← Previous</button>
+              <div class="group-live-page-status">
+                <strong id="groupLivePageIndicator">Page 1 of 1</strong>
+                <span id="groupLivePageRange" class="muted">Students 1–9</span>
+              </div>
+              <button id="groupLiveNextPageBtn" type="button" aria-label="Next 9 students">Next →</button>
+            </nav>
+
+            <div id="groupLiveSwipeSurface" class="group-live-swipe-surface">
+              <div id="groupLiveProctorGrid" class="group-live-proctor-grid"></div>
+            </div>
 
             <footer class="group-live-proctor-footer muted">
-              Live video is peer-to-peer and is not recorded by this feature. Each student must allow the teacher's live-camera request.
+              Only the current 3×3 page keeps live camera connections active to reduce bandwidth. Swipe left/right or use Previous/Next to change pages. Students on a newly opened page must allow the live-camera request.
             </footer>
           </div>
         </div>
@@ -838,7 +849,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="admin.js?v=20261002-1245"></script>
+  <script src="admin.js?v=20261002-1320"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260930-1705"></script>
   <script src="admin-analysis.js?v=20260928-2302"></script>
