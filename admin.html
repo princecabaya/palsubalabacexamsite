@@ -149,6 +149,7 @@
                   <div class="summary-card"><span>Fullscreen Exits</span><strong id="summaryFullscreen">0</strong></div>
                   <div class="summary-card"><span>Restricted Actions</span><strong id="summaryRestricted">0</strong></div>
                   <div class="summary-card"><span>Speech Signals</span><strong id="summarySpeech">0</strong></div>
+                  <div class="summary-card"><span>Transcribed Clips</span><strong id="summarySpeechClips">0</strong></div>
                   <div class="summary-card"><span>Camera Proctoring</span><strong id="summaryCameraStatus">—</strong></div>
                 </div>
 
@@ -166,7 +167,8 @@
                     <p><strong>copy/cut/paste/contextmenu blocked</strong> — A restricted editing or right-click action was attempted and blocked.</p>
                     <p><strong>keyboard/developer-tools/reload blocked</strong> — A monitored keyboard shortcut was attempted and blocked.</p>
                     <p><strong>print_attempt / printscreen_key_detected</strong> — A detectable print or screenshot-key action occurred. Screenshot-key detection is best-effort only.</p>
-                    <p><strong>possible_speech_detected</strong> — Sustained sound consistent with possible speech was detected locally by the microphone. No audio is stored, and this event cannot identify the speaker or what was said.</p>
+                    <p><strong>possible_speech_detected</strong> — Sustained sound consistent with possible speech was detected locally. When the stronger recording trigger is available, a short audio clip may be saved and transcribed for teacher review.</p>
+                    <p><strong>speech_clip_saved</strong> — A short triggered audio clip was privately stored and sent for transcription. The transcript is a review aid and may contain recognition errors.</p>
                     <p><strong>student_submit_clicked</strong> — The student pressed the Submit Exam button.</p>
                     <p><strong>exam_submitted</strong> — Supabase finalized the attempt and stored the auto-scored result.</p>
                   </div>
@@ -248,6 +250,27 @@
                 </div>
                 <p class="muted evidence-note">Preserved photos are excluded from the normal 7-day cleanup until released. A photo is a review record and should be considered together with other exam evidence.</p>
                 <div id="proctorPhotoGrid" class="proctor-photo-grid"></div>
+              </div>
+            </details>
+
+            <details id="speechClipsSection" class="attempt-drawer-section">
+              <summary class="attempt-drawer-summary">
+                <span>
+                  <strong>Speech Clips &amp; Transcripts</strong>
+                  <span id="speechClipsNote" class="muted">Only sustained speech-triggered clips are recorded; ordinary clips expire after 7 days.</span>
+                </span>
+                <span id="speechClipsCount" class="badge">0 clips</span>
+              </summary>
+              <div class="attempt-drawer-body">
+                <div id="speechClipEvidenceActions" class="proctor-photo-actions">
+                  <span id="speechClipSelection" class="muted">0 selected</span>
+                  <div class="row">
+                    <button id="saveSelectedSpeechEvidenceBtn" type="button" class="primary" disabled>Save Selected as Evidence</button>
+                    <button id="releaseSelectedSpeechEvidenceBtn" type="button" disabled>Release Selected Evidence</button>
+                  </div>
+                </div>
+                <p class="muted evidence-note">Transcripts are machine-generated review aids. Listen to the original clip before drawing conclusions, especially for background speech, Filipino-English code-switching, names, and mathematics.</p>
+                <div id="speechClipList" class="speech-clip-list"></div>
               </div>
             </details>
 
