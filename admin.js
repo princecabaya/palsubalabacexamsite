@@ -3984,6 +3984,81 @@
         const qCount = Math.max(counts[exam.id] || 0, draftQuestionCount);
         const archived = Boolean(exam.archived);
         tr.classList.toggle("archived-row", archived);
+
+        const isProctorOnly = isProctorForExam(exam.id) && exam.owner_id !== currentUserId;
+        let actionMarkup = "";
+
+        if (isProctorOnly) {
+          actionMarkup = `
+            <div class="exam-action-primary">
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+            </div>
+            <span class="badge proctor">Proctor access</span>
+          `;
+        } else if (archived) {
+          actionMarkup = `
+            <div class="exam-action-primary">
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="restore" class="primary">Restore</button>
+            </div>
+            <details class="exam-more-actions">
+              <summary>More Actions</summary>
+              <div class="exam-more-actions-menu">
+                <button type="button" data-exam-action="delete" class="danger-outline">Permanently Delete</button>
+              </div>
+            </details>
+          `;
+        } else if (exam.status === "draft") {
+          actionMarkup = `
+            <div class="exam-action-primary">
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="edit">Edit Exam</button>
+              <button type="button" data-action="published" class="primary">Publish</button>
+            </div>
+            <details class="exam-more-actions">
+              <summary>More Actions</summary>
+              <div class="exam-more-actions-menu">
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+              </div>
+            </details>
+          `;
+        } else if (exam.status === "published") {
+          actionMarkup = `
+            <div class="exam-action-primary">
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+              <button type="button" data-exam-action="extend-window">Extend Window</button>
+              <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
+            </div>
+            <details class="exam-more-actions">
+              <summary>More Actions</summary>
+              <div class="exam-more-actions-menu">
+                <button type="button" data-action="closed">Close Exam</button>
+                <button type="button" data-exam-action="retake">Retake Exam</button>
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+              </div>
+            </details>
+          `;
+        } else {
+          actionMarkup = `
+            <div class="exam-action-primary">
+              <button type="button" data-exam-action="preview">Preview Exam</button>
+              <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+              <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
+              <button type="button" data-exam-action="retake">Retake Exam</button>
+            </div>
+            <details class="exam-more-actions">
+              <summary>More Actions</summary>
+              <div class="exam-more-actions-menu">
+                <button type="button" data-action="draft">Return to Draft</button>
+                <button type="button" data-action="published">Publish Again</button>
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+              </div>
+            </details>
+          `;
+        }
+
         tr.innerHTML = `
           <td data-label="Title">
             <button type="button" class="exam-title-link" data-exam-id="${escapeAttr(exam.id)}" data-exam-code="${escapeAttr(exam.code)}" data-exam-title="${escapeAttr(exam.title)}">${escapeHtml(exam.title)}</button>
@@ -3996,37 +4071,21 @@
           <td data-label="Questions">${qCount}</td>
           <td data-label="Start">${fmt(exam.start_at)}</td>
           <td data-label="End">${fmt(exam.end_at)}</td>
-          <td data-label="Actions" class="action-cell">
-            ${isProctorForExam(exam.id) && exam.owner_id !== currentUserId ? `
-              <button type="button" data-exam-action="preview">Preview Exam</button>
-              <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
-              <span class="badge proctor">Proctor access</span>
-            ` : archived ? `
-              <button type="button" data-exam-action="preview">Preview Exam</button>
-              <button type="button" data-exam-action="retake">Retake Exam</button>
-              <button type="button" data-exam-action="restore">Restore</button>
-            ` : `
-              <button type="button" data-exam-action="preview">Preview Exam</button>
-              <button type="button" data-exam-action="edit" ${exam.status === "published" ? 'disabled title="Published examinations cannot be edited"' : ""}>Edit Exam</button>
-              ${exam.status === "published" ? '<button type="button" data-exam-action="exam-pdf">Exam PDF</button><button type="button" data-exam-action="extend-window">Extend Exam Window</button>' : ""}
-              <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Student Results" : "Release Student Results"}</button>
-              <button type="button" data-action="draft">Draft</button>
-              <button type="button" data-action="published">Publish</button>
-              <button type="button" data-action="closed">Close</button>
-              <button type="button" data-exam-action="retake">Retake Exam</button>
-              <button type="button" data-exam-action="archive">Move to Trash</button>
-            `}
+          <td data-label="Actions" class="action-cell exam-action-cell">
+            ${actionMarkup}
           </td>
         `;
 
         tr.querySelectorAll("button[data-action]").forEach(btn => {
           btn.addEventListener("click", async () => {
+            btn.closest("details")?.removeAttribute("open");
             await updateExamStatus(exam.id, btn.dataset.action);
           });
         });
 
         tr.querySelectorAll("button[data-exam-action]").forEach(btn => {
           btn.addEventListener("click", async () => {
+            btn.closest("details")?.removeAttribute("open");
             const action = btn.dataset.examAction;
             if (action === "preview") await previewExam(exam);
             if (action === "edit") await editExam(exam);
