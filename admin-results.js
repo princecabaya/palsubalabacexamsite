@@ -533,10 +533,11 @@
     const itemsNode = $("gradingReviewItems");
     itemsNode.innerHTML = "";
 
-    for (const item of items) {
-      const article = document.createElement("article");
-      article.className = "grading-review-card";
+    items.forEach((item, itemIndex) => {
+      const article = document.createElement("details");
+      article.className = "grading-review-card compact-grading-card";
       article.dataset.questionId = item.question_id;
+      article.open = itemIndex === 0;
 
       const provisional = item.provisional_score == null ? null : Number(item.provisional_score);
       const teacher = item.teacher_score == null ? null : Number(item.teacher_score);
@@ -561,61 +562,91 @@
         );
 
       article.innerHTML = `
-        <div class="grading-review-head">
-          <div>
+        <summary class="compact-grading-summary">
+          <div class="compact-grading-summary-main">
             <strong>${escapeHtml(item.section_title || "Part 1")} • Question ${escapeHtml(item.position)}</strong>
             <span class="badge">${escapeHtml(formatQuestionType(item.question_type))}</span>
           </div>
-          <strong>${escapeHtml(item.points)} pts</strong>
-        </div>
-        <div class="grading-review-prompt">${escapeHtml(item.prompt || "")}</div>
-        <div class="grading-student-answer"><strong>Student response</strong><pre>${escapeHtml(item.student_answer || "(No response)")}</pre></div>
-        ${item.reference_answer ? `<p><strong>Reference:</strong> ${escapeHtml(item.reference_answer)}</p>` : ""}
-        ${isAnalyticMatrix ? '<div class="analytic-grading-mount"></div>' : ""}
-        ${isHolisticRubric ? '<div class="holistic-grading-mount"></div>' : ""}
-        <div class="form-grid compact grading-inputs">
-          <label>Teacher score
-            <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}" ${(isAnalyticMatrix || isHolisticRubric) ? "readonly" : ""}>
-          </label>
-          <label>Teacher comment
-            <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
-          </label>
+          <div class="compact-grading-summary-score">
+            <span class="compact-summary-score-value">${startingScore === "" ? "Not scored" : escapeHtml(formatNumber(startingScore) + " / " + formatNumber(item.points))}</span>
+            <span class="muted">${escapeHtml(item.points)} pts</span>
+          </div>
+        </summary>
+
+        <div class="compact-grading-body">
+          <details class="compact-question-prompt">
+            <summary>Question prompt</summary>
+            <div class="grading-review-prompt">${escapeHtml(item.prompt || "")}</div>
+          </details>
+
+          <div class="grading-student-answer compact-student-answer">
+            <div class="compact-response-head">
+              <strong>Student response</strong>
+              <span class="muted">Scroll inside this box for long responses</span>
+            </div>
+            <pre>${escapeHtml(item.student_answer || "(No response)")}</pre>
+          </div>
+
+          ${item.reference_answer ? `
+            <details class="compact-reference-answer">
+              <summary>Reference answer</summary>
+              <p>${escapeHtml(item.reference_answer)}</p>
+            </details>
+          ` : ""}
+
+          ${isAnalyticMatrix ? '<div class="analytic-grading-mount compact-rubric-mount"></div>' : ""}
+          ${isHolisticRubric ? '<div class="holistic-grading-mount compact-rubric-mount"></div>' : ""}
+
+          <div class="form-grid compact grading-inputs compact-grading-footer">
+            <label>Teacher score
+              <input class="teacher-score-input" type="number" min="0" max="${escapeAttr(item.points)}" step="0.25" value="${startingScore}" ${(isAnalyticMatrix || isHolisticRubric) ? "readonly" : ""}>
+            </label>
+            <label>Teacher comment
+              <input class="teacher-comment-input" value="${escapeAttr(item.teacher_comment || "")}" placeholder="Optional comment">
+            </label>
+          </div>
         </div>
       `;
 
       itemsNode.appendChild(article);
+
+      const scoreInput = article.querySelector(".teacher-score-input");
+      const summaryScore = article.querySelector(".compact-summary-score-value");
+      scoreInput?.addEventListener("input", () => {
+        const value = Number(scoreInput.value);
+        summaryScore.textContent = Number.isFinite(value)
+          ? `${formatNumber(value)} / ${formatNumber(item.points)}`
+          : "Not scored";
+      });
 
       if (isAnalyticMatrix) {
         renderAnalyticGradingSelector(article, item);
       } else if (isHolisticRubric) {
         renderHolisticGradingSelector(article, item);
       }
-    }
+    });
   }
 
   function renderAnalyticGradingSelector(article, item) {
     const mount = article.querySelector(".analytic-grading-mount");
     const scoreInput = article.querySelector(".teacher-score-input");
+    const summaryScore = article.querySelector(".compact-summary-score-value");
     if (!mount || !scoreInput) return;
 
     const persisted = item.teacher_rubric_scores && typeof item.teacher_rubric_scores === "object"
       ? item.teacher_rubric_scores
       : {};
-
     const selected = {};
 
     mount.innerHTML = `
-      <div class="analytic-grading-header">
+      <div class="compact-rubric-header">
         <div>
           <strong>Analytic Rubric</strong>
-          <p class="muted">Select one performance level for every criterion.</p>
+          <span class="muted">Select one level per criterion.</span>
         </div>
-        <div class="analytic-grading-total">
-          <span>Rubric score</span>
-          <strong class="analytic-running-score">0 / ${escapeHtml(item.points)}</strong>
-        </div>
+        <strong class="analytic-running-score">0 / ${escapeHtml(item.points)}</strong>
       </div>
-      <div class="analytic-grading-criteria"></div>
+      <div class="compact-rubric-table analytic-grading-criteria"></div>
     `;
 
     const criteriaWrap = mount.querySelector(".analytic-grading-criteria");
@@ -627,53 +658,44 @@
 
       item.rubric_criteria.forEach((criterion, criterionIndex) => {
         const choice = selected[String(criterionIndex)];
-        if (!choice) {
-          complete = false;
-          return;
-        }
+        if (!choice) { complete = false; return; }
         total += Number(choice.points || 0);
       });
 
-      scoreInput.value = complete ? String(total) : "";
+      scoreInput.value = complete ? String(Number(total.toFixed(2))) : "";
       article.dataset.rubricScores = JSON.stringify(selected);
       running.textContent = `${formatNumber(total)} / ${formatNumber(item.points)}`;
+      if (summaryScore) summaryScore.textContent = complete
+        ? `${formatNumber(total)} / ${formatNumber(item.points)}`
+        : "Rubric incomplete";
       mount.classList.toggle("rubric-incomplete", !complete);
     }
 
     item.rubric_criteria.forEach((criterion, criterionIndex) => {
-      const section = document.createElement("section");
-      section.className = "analytic-grade-criterion";
+      const criterionMax = Math.max(...criterion.levels.map(level => Number(level?.points || 0)));
+      const row = document.createElement("div");
+      row.className = "compact-rubric-row analytic-grade-criterion";
 
-      const criterionMax = Math.max(
-        ...criterion.levels.map(level => Number(level?.points || 0))
-      );
-
-      const heading = document.createElement("div");
-      heading.className = "analytic-grade-criterion-head";
-      heading.innerHTML = `
-        <div>
-          <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
-          <span class="muted">Maximum ${formatNumber(criterionMax)} pts</span>
-        </div>
-        <strong class="criterion-selected-score">— / ${formatNumber(criterionMax)}</strong>
+      const name = document.createElement("div");
+      name.className = "compact-rubric-name";
+      name.innerHTML = `
+        <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
+        <span class="muted">Max ${formatNumber(criterionMax)} pts</span>
       `;
-      section.appendChild(heading);
 
-      const levels = document.createElement("div");
-      levels.className = "analytic-grade-levels";
+      const choices = document.createElement("div");
+      choices.className = "compact-rubric-choices";
 
       criterion.levels.forEach((level, levelIndex) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "analytic-level-choice";
+        button.className = "analytic-level-choice compact-score-choice";
         button.dataset.criterionIndex = String(criterionIndex);
         button.dataset.levelIndex = String(levelIndex);
+        button.title = String(level?.description || "No descriptor provided.");
         button.innerHTML = `
-          <div class="analytic-level-choice-head">
-            <strong>${escapeHtml(level?.level || `Level ${levelIndex + 1}`)}</strong>
-            <span>${formatNumber(level?.points)} pts</span>
-          </div>
-          <p>${escapeHtml(level?.description || "No descriptor provided.")}</p>
+          <strong>${escapeHtml(formatNumber(level?.points))}</strong>
+          <span>${escapeHtml(level?.level || `L${levelIndex + 1}`)}</span>
         `;
 
         button.addEventListener("click", () => {
@@ -682,28 +704,34 @@
             points: Number(level?.points || 0),
             description: String(level?.description || "")
           };
-
-          levels.querySelectorAll(".analytic-level-choice").forEach(node => {
+          choices.querySelectorAll(".analytic-level-choice").forEach(node => {
             node.classList.toggle("selected", node === button);
           });
-
-          heading.querySelector(".criterion-selected-score").textContent =
-            `${formatNumber(level?.points)} / ${formatNumber(criterionMax)}`;
-
           recalculate();
         });
-
-        levels.appendChild(button);
+        choices.appendChild(button);
       });
 
-      section.appendChild(levels);
-      criteriaWrap.appendChild(section);
+      const descriptor = document.createElement("details");
+      descriptor.className = "compact-rubric-descriptor";
+      descriptor.innerHTML = '<summary>Descriptor</summary><p class="muted">Select a level to view its descriptor.</p>';
+
+      choices.addEventListener("click", event => {
+        const button = event.target.closest(".analytic-level-choice");
+        if (!button) return;
+        const levelIndex = Number(button.dataset.levelIndex);
+        const level = criterion.levels[levelIndex];
+        descriptor.querySelector("p").textContent = String(level?.description || "No descriptor provided.");
+      });
+
+      row.append(name, choices, descriptor);
+      criteriaWrap.appendChild(row);
 
       const savedChoice = persisted[String(criterionIndex)] || persisted[criterion.criterion];
       if (savedChoice) {
         const wantedLevel = String(savedChoice.level || "").trim().toLowerCase();
         const wantedPoints = Number(savedChoice.points);
-        const matching = [...levels.querySelectorAll(".analytic-level-choice")].find((button, levelIndex) => {
+        const matching = [...choices.querySelectorAll(".analytic-level-choice")].find((button, levelIndex) => {
           const level = criterion.levels[levelIndex];
           return (
             (wantedLevel && String(level?.level || "").trim().toLowerCase() === wantedLevel) ||
@@ -720,26 +748,23 @@
   function renderHolisticGradingSelector(article, item) {
     const mount = article.querySelector(".holistic-grading-mount");
     const scoreInput = article.querySelector(".teacher-score-input");
+    const summaryScore = article.querySelector(".compact-summary-score-value");
     if (!mount || !scoreInput) return;
 
     const persisted = item.teacher_rubric_scores && typeof item.teacher_rubric_scores === "object"
       ? item.teacher_rubric_scores
       : {};
-
     const selected = {};
 
     mount.innerHTML = `
-      <div class="analytic-grading-header">
+      <div class="compact-rubric-header">
         <div>
           <strong>Holistic Rubric</strong>
-          <p class="muted">Select a score for each rubric criterion. The total is computed automatically.</p>
+          <span class="muted">Select a score for every criterion.</span>
         </div>
-        <div class="analytic-grading-total">
-          <span>Rubric score</span>
-          <strong class="holistic-running-score">0 / ${escapeHtml(item.points)}</strong>
-        </div>
+        <strong class="holistic-running-score">0 / ${escapeHtml(item.points)}</strong>
       </div>
-      <div class="holistic-grading-criteria"></div>
+      <div class="compact-rubric-table holistic-grading-criteria"></div>
     `;
 
     const criteriaWrap = mount.querySelector(".holistic-grading-criteria");
@@ -764,42 +789,37 @@
         if (!choice) { complete = false; return; }
         total += Number(choice.points || 0);
       });
+
       scoreInput.value = complete ? String(Number(total.toFixed(2))) : "";
       article.dataset.rubricScores = JSON.stringify(selected);
       running.textContent = `${formatNumber(total)} / ${formatNumber(item.points)}`;
+      if (summaryScore) summaryScore.textContent = complete
+        ? `${formatNumber(total)} / ${formatNumber(item.points)}`
+        : "Rubric incomplete";
       mount.classList.toggle("rubric-incomplete", !complete);
     }
 
     item.rubric_criteria.forEach((criterion, criterionIndex) => {
       const maxPoints = Number(criterion.max_points || 0);
-      const section = document.createElement("section");
-      section.className = "analytic-grade-criterion holistic-grade-criterion";
+      const row = document.createElement("div");
+      row.className = "compact-rubric-row analytic-grade-criterion holistic-grade-criterion";
 
-      const heading = document.createElement("div");
-      heading.className = "analytic-grade-criterion-head";
-      heading.innerHTML = `
-        <div>
-          <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
-          <span class="muted">Maximum ${formatNumber(maxPoints)} pts</span>
-        </div>
-        <strong class="criterion-selected-score">— / ${formatNumber(maxPoints)}</strong>
+      const name = document.createElement("div");
+      name.className = "compact-rubric-name";
+      name.innerHTML = `
+        <strong>${escapeHtml(criterion.criterion || `Criterion ${criterionIndex + 1}`)}</strong>
+        <span class="muted">Max ${formatNumber(maxPoints)} pts</span>
       `;
-      section.appendChild(heading);
-
-      const description = document.createElement("p");
-      description.className = "holistic-grade-description";
-      description.textContent = String(criterion.description || "No descriptor provided.");
-      section.appendChild(description);
 
       const scoreChoices = document.createElement("div");
-      scoreChoices.className = "holistic-score-choices";
+      scoreChoices.className = "compact-rubric-choices holistic-score-choices";
 
       buildScoreOptions(maxPoints).forEach(points => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "holistic-score-choice";
+        button.className = "holistic-score-choice compact-score-choice";
         button.dataset.points = String(points);
-        button.textContent = `${formatNumber(points)} pts`;
+        button.textContent = formatNumber(points);
         button.addEventListener("click", () => {
           selected[String(criterionIndex)] = {
             criterion: String(criterion.criterion || ""),
@@ -810,15 +830,20 @@
           scoreChoices.querySelectorAll(".holistic-score-choice").forEach(node => {
             node.classList.toggle("selected", node === button);
           });
-          heading.querySelector(".criterion-selected-score").textContent =
-            `${formatNumber(points)} / ${formatNumber(maxPoints)}`;
           recalculate();
         });
         scoreChoices.appendChild(button);
       });
 
-      section.appendChild(scoreChoices);
-      criteriaWrap.appendChild(section);
+      const descriptor = document.createElement("details");
+      descriptor.className = "compact-rubric-descriptor";
+      descriptor.innerHTML = `
+        <summary>Descriptor</summary>
+        <p class="muted">${escapeHtml(String(criterion.description || "No descriptor provided."))}</p>
+      `;
+
+      row.append(name, scoreChoices, descriptor);
+      criteriaWrap.appendChild(row);
 
       const savedChoice = persisted[String(criterionIndex)] || persisted[criterion.criterion];
       if (savedChoice) {
