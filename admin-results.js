@@ -189,9 +189,9 @@
       if (proctorOnly) {
         analysisButton.classList.add("hidden");
       } else {
-        analysisButton.addEventListener("click", async () => {
-          await openExamResults(exam, { noScroll: true });
-          $("openTestAnalysisBtn")?.click();
+        analysisButton.addEventListener("click", () => {
+          const url = "test-analysis.html?exam_id=" + encodeURIComponent(exam.id);
+          window.open(url, "_blank", "noopener");
         });
       }
     }
