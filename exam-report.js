@@ -174,28 +174,61 @@
     doc.text("EXAMINATION RESULT REPORT", pageWidth / 2, 45, { align: "center" });
 
     doc.setFont("times", "normal");
-    doc.setFontSize(10.5);
-    doc.text(`Student Name: ${report.student_name || "—"}`, 18, 54);
-    doc.text(`Student ID: ${report.student_no || "—"}`, 18, 60);
-    doc.text(`Examination: ${report.exam_title || "—"}`, 18, 66);
-    doc.text(`Exam Code: ${report.exam_code || "—"}`, 18, 72);
+    doc.setFontSize(9.6);
 
-    doc.text(`Submitted: ${fmtDate(report.submitted_at)}`, 112, 54);
-    doc.text(`Score: ${score}/${maxScore}`, 112, 60);
-    doc.text(
-      `Percentage: ${percentage === null ? "—" : fmtNumber(percentage) + "%"}`,
-      112,
-      66
-    );
+    const leftX = 18;
+    const rightX = 112;
+    const leftWidth = 86;
+    const rightWidth = 80;
+    const lineHeight = 5.2;
+
+    function drawInfoLine(label, value, x, y, maxWidth) {
+      doc.setFont("times", "bold");
+      const labelText = label + ":";
+      doc.text(labelText, x, y);
+      const labelWidth = doc.getTextWidth(labelText + " ");
+      doc.setFont("times", "normal");
+      const available = Math.max(20, maxWidth - labelWidth);
+      const lines = doc.splitTextToSize(String(value ?? "—"), available);
+      doc.text(lines, x + labelWidth, y);
+      return Math.max(1, lines.length);
+    }
+
+    let leftY = 54;
+    leftY += drawInfoLine("Student Name", report.student_name || "—", leftX, leftY, leftWidth) * lineHeight;
+    leftY += drawInfoLine("Student ID", report.student_no || "—", leftX, leftY, leftWidth) * lineHeight;
+    leftY += drawInfoLine("Examination", report.exam_title || "—", leftX, leftY, leftWidth) * lineHeight;
+    leftY += drawInfoLine("Exam Code", report.exam_code || "—", leftX, leftY, leftWidth) * lineHeight;
+    leftY += drawInfoLine(
+      "Instructor / Professor",
+      report.teacher_name || WATERMARK_TEACHER || "—",
+      leftX,
+      leftY,
+      leftWidth
+    ) * lineHeight;
+
+    let rightY = 54;
+    rightY += drawInfoLine("Submitted", fmtDate(report.submitted_at), rightX, rightY, rightWidth) * lineHeight;
+    rightY += drawInfoLine("Score", `${score}/${maxScore}`, rightX, rightY, rightWidth) * lineHeight;
+    rightY += drawInfoLine(
+      "Percentage",
+      percentage === null ? "—" : fmtNumber(percentage) + "%",
+      rightX,
+      rightY,
+      rightWidth
+    ) * lineHeight;
+
+    const infoBottom = Math.max(leftY, rightY);
+    const noteY = infoBottom + 2;
 
     doc.setFont("times", "italic");
-    doc.setFontSize(9);
+    doc.setFontSize(8.8);
     doc.setTextColor(85);
-    doc.text(
+    const noteLines = doc.splitTextToSize(
       "This report shows the student's saved answer and the answer key for auto-scored items.",
-      18,
-      79
+      pageWidth - 36
     );
+    doc.text(noteLines, 18, noteY);
 
     const body = report.items.map(item => [
       String(item.position ?? ""),
@@ -213,16 +246,18 @@
     }
 
     doc.autoTable({
-      startY: 85,
+      startY: noteY + noteLines.length * 4.5 + 3,
       margin: { top: 42, right: 14, bottom: 16, left: 14 },
       head: [["Item", "Question", "Student Answer", "Correct Answer", "Result", "Points"]],
       body,
       theme: "grid",
       styles: {
         font: "times",
-        fontSize: 8.5,
-        cellPadding: 2.2,
+        fontSize: 8.1,
+        cellPadding: 2,
         valign: "top",
+        overflow: "linebreak",
+        minCellHeight: 7,
         lineColor: [190, 195, 205],
         lineWidth: 0.15,
         textColor: [30, 30, 30]
@@ -236,12 +271,12 @@
         lineWidth: 0.2
       },
       columnStyles: {
-        0: { cellWidth: 11, halign: "center" },
-        1: { cellWidth: 61 },
-        2: { cellWidth: 35 },
-        3: { cellWidth: 35 },
-        4: { cellWidth: 24, halign: "center" },
-        5: { cellWidth: 20, halign: "center" }
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: 49 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 28, halign: "center" },
+        5: { cellWidth: 25, halign: "center" }
       },
       didParseCell(data) {
         if (data.section !== "body" || data.column.index !== 4) return;
