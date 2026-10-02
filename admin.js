@@ -5042,7 +5042,10 @@
       }
       if (stops.length) await Promise.allSettled(stops);
 
-      if (grid) grid.innerHTML = "";
+      if (grid) {
+        grid.innerHTML = "";
+        grid.dataset.pageCount = String(pageAttempts.length);
+      }
       pageAttempts.forEach(renderGroupLiveCard);
 
       // Limit active WebRTC setup to exactly one 3x3 page (max 9 students).
@@ -5178,7 +5181,10 @@
       groupLivePageIndex = 0;
       groupLiveTouchStartX = null;
       $("groupLiveProctorPanel")?.classList.add("hidden");
-      if ($("groupLiveProctorGrid")) $("groupLiveProctorGrid").innerHTML = "";
+      if ($("groupLiveProctorGrid")) {
+        $("groupLiveProctorGrid").innerHTML = "";
+        delete $("groupLiveProctorGrid").dataset.pageCount;
+      }
       groupLiveClosing = false;
       updateGroupLivePager();
     }
