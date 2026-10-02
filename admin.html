@@ -309,6 +309,18 @@
               <div id="teacherLiveCameraPlaceholder" class="teacher-live-camera-placeholder">Waiting for the student to accept the live camera request…</div>
             </div>
             <p class="muted teacher-live-camera-note">Live video is peer-to-peer and is not recorded by this feature. The session automatically expires after 10 minutes.</p>
+
+            <div class="teacher-live-message-box" aria-label="Send live message to student">
+              <label for="teacherLiveMessageInput">Send live message</label>
+              <div class="teacher-live-message-compose">
+                <textarea id="teacherLiveMessageInput" rows="2" maxlength="300" placeholder="Type a message for the student…"></textarea>
+                <button id="sendTeacherLiveMessageBtn" type="button" class="primary">Send</button>
+              </div>
+              <div class="teacher-live-message-footer">
+                <span id="teacherLiveMessageStatus" class="message-inline" role="status"></span>
+                <span class="muted">The message appears on the student's active exam screen.</span>
+              </div>
+            </div>
           </div>
         </div>
 
