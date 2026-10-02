@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20261002-1210">
+  <link rel="stylesheet" href="style.css?v=20261002-1515">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -226,11 +226,20 @@
       <h1>Exam submitted</h1>
       <p id="doneText">Your responses have been recorded.</p>
 
+      <section id="objectiveScorePanel" class="objective-score-panel hidden" aria-label="Objective score">
+        <div>
+          <span class="objective-score-label">Objective Score</span>
+          <strong id="objectiveScoreValue">—</strong>
+          <span id="objectiveScorePercent" class="muted">—</span>
+        </div>
+        <p id="objectiveScoreNote" class="muted">Your objective score is available now. Item-by-item correct/incorrect results and answer keys remain hidden until your teacher releases the full results.</p>
+      </section>
+
       <section id="resultReportPanel" class="result-report-panel hidden">
         <div class="feedback-head">
           <div>
             <h2>Your Exam Results</h2>
-            <p class="muted">Review your score and each auto-scored item after submission.</p>
+            <p class="muted">The item-by-item review becomes available only after your teacher releases the full results.</p>
           </div>
         </div>
 
@@ -352,7 +361,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20261002-1210"></script>
+  <script src="app.js?v=20261002-1515"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
