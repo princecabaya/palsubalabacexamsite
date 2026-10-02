@@ -85,22 +85,46 @@
 
         <aside id="detailPanel" class="attempt-detail-drawer hidden" aria-label="Student attempt details">
           <div class="attempt-drawer-header">
-            <div>
-              <h2 id="detailTitle">Attempt details</h2>
-              <p id="detailMeta" class="muted"></p>
-            </div>
-            <div class="row attempt-recovery-actions">
-              <button id="reopenAttemptBtn" type="button" class="hidden">Reopen & Continue</button>
-              <button id="permitEditAttemptBtn" type="button" class="primary hidden">Permit Editing After Submission</button>
-              <button id="unlockSessionBtn" type="button" class="hidden">Unlock Active Session</button>
-              <button id="requestLiveCameraBtn" type="button" class="primary hidden">Request Live Camera</button>
-              <div id="timeExtensionControls" class="row time-extension-controls hidden">
-                <button id="add30MinBtn" type="button">+30 min</button>
-                <button id="add60MinBtn" type="button">+1 hour</button>
-                <button id="addCustomTimeBtn" type="button">Custom Time</button>
+            <div class="attempt-student-heading">
+              <div class="attempt-student-identity">
+                <h2 id="detailTitle">Attempt details</h2>
+                <p id="detailMeta" class="muted"></p>
               </div>
-              <button id="resetAttemptBtn" type="button" class="danger-outline">Reset for Retake</button>
-              <button id="closeDetail" type="button" aria-label="Close attempt details">Close</button>
+              <button id="closeDetail" class="attempt-close-btn" type="button" aria-label="Close attempt details">Close</button>
+            </div>
+
+            <div class="attempt-recovery-actions attempt-control-panel">
+              <div class="attempt-control-group">
+                <span class="attempt-control-label">Session</span>
+                <div class="attempt-control-buttons">
+                  <button id="reopenAttemptBtn" type="button" class="hidden">Reopen &amp; Continue</button>
+                  <button id="permitEditAttemptBtn" type="button" class="primary hidden">Permit Editing After Submission</button>
+                  <button id="unlockSessionBtn" type="button" class="hidden">Unlock Active Session</button>
+                </div>
+              </div>
+
+              <div class="attempt-control-group">
+                <span class="attempt-control-label">Live Proctoring</span>
+                <div class="attempt-control-buttons">
+                  <button id="requestLiveCameraBtn" type="button" class="primary hidden">Request Live Camera</button>
+                </div>
+              </div>
+
+              <div class="attempt-control-group">
+                <span class="attempt-control-label">Extend Exam Time</span>
+                <div id="timeExtensionControls" class="time-extension-controls hidden">
+                  <button id="add30MinBtn" type="button">+30 min</button>
+                  <button id="add60MinBtn" type="button">+1 hour</button>
+                  <button id="addCustomTimeBtn" type="button">Custom Time</button>
+                </div>
+              </div>
+
+              <div class="attempt-control-group attempt-control-danger">
+                <span class="attempt-control-label">Attempt Management</span>
+                <div class="attempt-control-buttons">
+                  <button id="resetAttemptBtn" type="button" class="danger-outline">Reset for Retake</button>
+                </div>
+              </div>
             </div>
           </div>
 
