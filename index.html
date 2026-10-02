@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20261002-1125">
+  <link rel="stylesheet" href="style.css?v=20261002-1210">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -36,7 +36,7 @@
 
       <label class="check">
         <input type="checkbox" id="consentBox">
-        <span>I understand that exam-behavior events will be recorded, the front camera will take proctoring photos, and an authorized teacher may request a temporary live camera check during an active exam. A live view begins only after you accept the request. The microphone is used to detect possible speech events. When sustained speech reaches the recording trigger, a short audio clip may be recorded, privately uploaded, and machine-transcribed for authorized teacher review. Ordinary proctoring photos and triggered audio clips are normally retained for up to 7 days; an authorized teacher may preserve selected evidence longer when needed for examination review.</span>
+        <span>I understand that exam-behavior events will be recorded, the front camera will take proctoring photos, and an authorized teacher may request a temporary live camera check during an active exam. A live view begins only after you accept the request. Browser notifications are used for live-camera requests, teacher messages, and reminders to return to the exam when the page has been away for an extended period. The microphone is used to detect possible speech events. When sustained speech reaches the recording trigger, a short audio clip may be recorded, privately uploaded, and machine-transcribed for authorized teacher review. Ordinary proctoring photos and triggered audio clips are normally retained for up to 7 days; an authorized teacher may preserve selected evidence longer when needed for examination review.</span>
       </label>
 
       <section class="exam-preflight" aria-label="Exam entry readiness">
@@ -63,6 +63,11 @@
           <div class="preflight-row" data-preflight="microphone" data-state="idle">
             <span class="preflight-icon">○</span>
             <span class="preflight-name">Microphone</span>
+            <span class="preflight-detail">Not checked</span>
+          </div>
+          <div class="preflight-row" data-preflight="notifications" data-state="idle">
+            <span class="preflight-icon">○</span>
+            <span class="preflight-name">Notifications</span>
             <span class="preflight-detail">Not checked</span>
           </div>
           <div class="preflight-row" data-preflight="session" data-state="idle">
@@ -347,7 +352,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20261002-1125"></script>
+  <script src="app.js?v=20261002-1210"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
