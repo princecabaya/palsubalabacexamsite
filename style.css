@@ -4058,18 +4058,21 @@ textarea{resize:vertical}
 }
 .attempt-control-group{
   min-width:0;
+  min-height:76px;
   padding:11px;
   border:1px solid var(--line);
   border-radius:12px;
   background:#f8fafc;
+  display:flex;
+  flex-direction:column;
 }
 .attempt-control-label{
   display:block;
   margin-bottom:8px;
   color:var(--muted);
-  font-size:.72rem;
+  font-size:.68rem;
   font-weight:800;
-  letter-spacing:.045em;
+  letter-spacing:.04em;
   text-transform:uppercase;
 }
 .attempt-control-buttons{
@@ -4084,7 +4087,7 @@ textarea{resize:vertical}
 }
 .attempt-control-panel .time-extension-controls{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:7px;
   width:100%;
 }
@@ -4096,6 +4099,9 @@ textarea{resize:vertical}
   min-width:0;
   min-height:40px;
   white-space:nowrap;
+}
+.attempt-control-panel .time-extension-controls #addCustomTimeBtn{
+  grid-column:1 / -1;
 }
 .attempt-control-danger{
   background:#fffafa;
@@ -4117,7 +4123,7 @@ textarea{resize:vertical}
     padding:10px;
   }
   .attempt-control-panel .time-extension-controls{
-    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
 @media(max-width:430px){
@@ -4129,7 +4135,10 @@ textarea{resize:vertical}
     padding-right:10px;
   }
   .attempt-control-panel .time-extension-controls{
-    grid-template-columns:1fr;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .attempt-control-panel .time-extension-controls #addCustomTimeBtn{
+    grid-column:1 / -1;
   }
 }
 
