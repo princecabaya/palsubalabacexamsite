@@ -3828,6 +3828,16 @@
       return;
     }
 
+    if ((!questions || questions.length === 0) && Array.isArray(exam.draft_payload?.questions)) {
+      const fallbackQuestions = exam.draft_payload.questions.map((q,index)=>({
+        ...q,
+        position: index + 1,
+        section_title: q.section_title || "Part 1"
+      }));
+      renderExamPreviewQuestions(questionsNode, fallbackQuestions);
+      return;
+    }
+
     renderExamPreviewQuestions(questionsNode, questions || []);
   }
 
@@ -4138,6 +4148,27 @@
   });
 
   async function updateExamStatus(examId, status) {
+    if (status === "published") {
+      const { data, error } = await db.rpc("admin_publish_exam_from_draft", {
+        p_exam_id: examId
+      });
+
+      if (error) {
+        const missing = /admin_publish_exam_from_draft|function.*does not exist|schema cache|PGRST202/i
+          .test(String(error.message || error));
+        alert(
+          missing
+            ? "Publishing could not synchronize the latest autosaved draft. Run supabase-upgrade-publish-draft-materialization.sql once in Supabase SQL Editor, refresh the dashboard, then publish again."
+            : `Could not publish examination: ${error.message}`
+        );
+        return;
+      }
+
+      alert(`Exam published successfully with ${data?.question_count ?? "the saved"} question(s).`);
+      await loadExams();
+      return;
+    }
+
     const { error } = await db
       .from("exams")
       .update({ status })
