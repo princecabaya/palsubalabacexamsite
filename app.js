@@ -105,6 +105,20 @@
   let speechLastLoudAt = 0;
   let speechPeakRms = 0;
   let microphoneNoiseFloor = 0.01;
+  let speechMediaRecorder = null;
+  let speechRecorderMimeType = "";
+  let speechRollingChunks = [];
+  let speechCaptureChunks = [];
+  let speechCaptureActive = false;
+  let speechCaptureFinalizing = false;
+  let speechCaptureStartedEpoch = 0;
+  let speechCaptureMaxTimer = null;
+  let speechUploadCooldownUntil = 0;
+  let speechUploadInFlight = false;
+  const SPEECH_PREBUFFER_CHUNKS = 4;
+  const SPEECH_RECORDER_SLICE_MS = 500;
+  const SPEECH_CLIP_MAX_MS = 12000;
+  const SPEECH_UPLOAD_COOLDOWN_MS = 10000;
   let examFlagCounts = { restricted: 0, focus: 0, speech: 0 };
   let speechFlagTimer = null;
   const pendingAnswerSaves = new Map();
@@ -689,6 +703,204 @@
     }
   }
 
+  function supportedSpeechMimeType() {
+    if (!window.MediaRecorder) return "";
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+      "audio/ogg"
+    ];
+    return candidates.find(type => {
+      try { return MediaRecorder.isTypeSupported(type); } catch (_) { return false; }
+    }) || "";
+  }
+
+  function startSpeechRecorder() {
+    if (!microphoneStream?.active || !window.MediaRecorder) return false;
+    if (speechMediaRecorder && speechMediaRecorder.state !== "inactive") return true;
+
+    try {
+      speechRecorderMimeType = supportedSpeechMimeType();
+      speechMediaRecorder = speechRecorderMimeType
+        ? new MediaRecorder(microphoneStream, { mimeType: speechRecorderMimeType, audioBitsPerSecond: 32000 })
+        : new MediaRecorder(microphoneStream);
+
+      speechRecorderMimeType = speechMediaRecorder.mimeType || speechRecorderMimeType || "audio/webm";
+      speechRollingChunks = [];
+      speechCaptureChunks = [];
+      speechCaptureActive = false;
+      speechCaptureFinalizing = false;
+
+      speechMediaRecorder.ondataavailable = (event) => {
+        if (!event.data || !event.data.size) return;
+
+        if (speechCaptureActive || speechCaptureFinalizing) {
+          speechCaptureChunks.push(event.data);
+          return;
+        }
+
+        speechRollingChunks.push(event.data);
+        if (speechRollingChunks.length > SPEECH_PREBUFFER_CHUNKS) {
+          speechRollingChunks.splice(0, speechRollingChunks.length - SPEECH_PREBUFFER_CHUNKS);
+        }
+      };
+
+      speechMediaRecorder.onerror = (event) => {
+        console.warn("Speech recorder error:", event?.error || event);
+      };
+
+      speechMediaRecorder.start(SPEECH_RECORDER_SLICE_MS);
+      return true;
+    } catch (error) {
+      console.warn("Speech clip recording unavailable:", error);
+      speechMediaRecorder = null;
+      speechRecorderMimeType = "";
+      return false;
+    }
+  }
+
+  function beginSpeechCapture() {
+    if (speechCaptureActive || speechCaptureFinalizing) return false;
+    if (Date.now() < speechUploadCooldownUntil) return false;
+    if (!speechMediaRecorder || speechMediaRecorder.state === "inactive") {
+      if (!startSpeechRecorder()) return false;
+    }
+
+    speechCaptureChunks = [...speechRollingChunks];
+    speechRollingChunks = [];
+    speechCaptureActive = true;
+    speechCaptureFinalizing = false;
+    speechCaptureStartedEpoch = Date.now();
+
+    clearTimeout(speechCaptureMaxTimer);
+    speechCaptureMaxTimer = setTimeout(() => {
+      if (speechCaptureActive) finishSpeechSegment(performance.now(), true);
+    }, SPEECH_CLIP_MAX_MS);
+
+    updateMicrophoneStatus("Possible speech • recording clip");
+    return true;
+  }
+
+  function discardSpeechCapture() {
+    clearTimeout(speechCaptureMaxTimer);
+    speechCaptureMaxTimer = null;
+    speechCaptureActive = false;
+    speechCaptureFinalizing = false;
+    speechCaptureChunks = [];
+    speechCaptureStartedEpoch = 0;
+  }
+
+  async function finalizeSpeechCapture({ durationSeconds, peakLevel }) {
+    if (!speechCaptureActive && !speechCaptureFinalizing) return;
+
+    clearTimeout(speechCaptureMaxTimer);
+    speechCaptureMaxTimer = null;
+    speechCaptureFinalizing = true;
+    speechCaptureActive = false;
+
+    try {
+      if (speechMediaRecorder?.state === "recording") {
+        try { speechMediaRecorder.requestData(); } catch (_) {}
+        await new Promise(resolve => setTimeout(resolve, 120));
+      }
+
+      const chunks = speechCaptureChunks.slice();
+      speechCaptureChunks = [];
+      speechCaptureFinalizing = false;
+
+      if (!chunks.length) return;
+
+      const mimeType = (speechRecorderMimeType || chunks[0]?.type || "audio/webm").split(";")[0];
+      const blob = new Blob(chunks, { type: mimeType });
+      if (!blob.size) return;
+
+      const prebufferSeconds = Math.min(
+        2,
+        Math.max(0, (SPEECH_PREBUFFER_CHUNKS * SPEECH_RECORDER_SLICE_MS) / 1000)
+      );
+
+      speechUploadCooldownUntil = Date.now() + SPEECH_UPLOAD_COOLDOWN_MS;
+      await uploadSpeechClip(blob, {
+        mimeType,
+        durationSeconds,
+        peakLevel,
+        prebufferSeconds
+      });
+    } catch (error) {
+      console.warn("Could not finalize speech clip:", error);
+    } finally {
+      speechCaptureFinalizing = false;
+      speechCaptureStartedEpoch = 0;
+    }
+  }
+
+  async function uploadSpeechClip(blob, { mimeType, durationSeconds, peakLevel, prebufferSeconds }) {
+    if (!attempt?.attempt_token || submitted || speechUploadInFlight) return false;
+    speechUploadInFlight = true;
+
+    try {
+      const audioBase64 = arrayBufferToBase64(await blob.arrayBuffer());
+      const { data, error } = await db.functions.invoke("capture-speech-clip", {
+        body: {
+          attempt_token: attempt.attempt_token,
+          audio_base64: audioBase64,
+          mime_type: mimeType,
+          duration_seconds: Number(durationSeconds || 0),
+          peak_level: Number(peakLevel || 0),
+          prebuffer_seconds: Number(prebufferSeconds || 0)
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      await logEvent("speech_clip_saved", {
+        clip_id: data?.clip_id || null,
+        transcription_status: data?.transcription_status || "unknown",
+        duration_seconds: Number(durationSeconds || 0),
+        prebuffer_seconds: Number(prebufferSeconds || 0)
+      });
+      return true;
+    } catch (error) {
+      console.warn("Speech clip upload/transcription failed:", error);
+      await logEvent("speech_clip_failed", {
+        message: String(error?.message || error).slice(0, 300),
+        duration_seconds: Number(durationSeconds || 0)
+      });
+      return false;
+    } finally {
+      speechUploadInFlight = false;
+    }
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+    }
+    return btoa(binary);
+  }
+
+  function stopSpeechRecorder() {
+    clearTimeout(speechCaptureMaxTimer);
+    speechCaptureMaxTimer = null;
+    speechCaptureActive = false;
+    speechCaptureFinalizing = false;
+    speechRollingChunks = [];
+    speechCaptureChunks = [];
+    speechCaptureStartedEpoch = 0;
+
+    if (speechMediaRecorder && speechMediaRecorder.state !== "inactive") {
+      try { speechMediaRecorder.stop(); } catch (_) {}
+    }
+    speechMediaRecorder = null;
+    speechRecorderMimeType = "";
+  }
+
   async function requestMicrophone() {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("This browser does not support microphone access.");
@@ -784,7 +996,12 @@
     speechLastLoudAt = 0;
     speechPeakRms = 0;
     microphoneNoiseFloor = isIOSBrowser() ? 0.006 : 0.01;
-    updateMicrophoneStatus(isIOSBrowser() ? "Listening • iPhone tuned" : "Listening locally");
+    const recordingReady = startSpeechRecorder();
+    updateMicrophoneStatus(
+      recordingReady
+        ? (isIOSBrowser() ? "Listening • speech clips enabled" : "Listening • speech clips enabled")
+        : (isIOSBrowser() ? "Listening • iPhone tuned" : "Listening locally")
+    );
 
     const monitor = () => {
       if (!microphoneAnalyser || !microphoneStream?.active || submitted) return;
@@ -827,7 +1044,8 @@
         const activationMs = isIOSBrowser() ? 650 : 1200;
         if (!speechActiveStartedAt && now - speechCandidateStartedAt >= activationMs) {
           speechActiveStartedAt = speechCandidateStartedAt;
-          updateMicrophoneStatus("Possible speech detected");
+          const recordingStarted = beginSpeechCapture();
+          updateMicrophoneStatus(recordingStarted ? "Possible speech • recording clip" : "Possible speech detected");
         }
       } else {
         const candidateResetMs = isIOSBrowser() ? 300 : 450;
@@ -849,19 +1067,33 @@
     microphoneMonitorFrame = requestAnimationFrame(monitor);
   }
 
-  function finishSpeechSegment(now = performance.now()) {
+  function finishSpeechSegment(now = performance.now(), forcedByMaxLength = false) {
     if (!speechActiveStartedAt) return;
 
-    const endedAt = Math.max(speechLastLoudAt || now, speechActiveStartedAt);
+    const endedAt = forcedByMaxLength
+      ? now
+      : Math.max(speechLastLoudAt || now, speechActiveStartedAt);
     const durationMs = Math.max(0, endedAt - speechActiveStartedAt);
 
     const minimumDurationMs = isIOSBrowser() ? 650 : 1200;
     if (durationMs >= minimumDurationMs) {
+      const durationSeconds = Number((durationMs / 1000).toFixed(1));
+      const peakLevel = Number(speechPeakRms.toFixed(4));
+      const recordingEligible = Boolean(speechCaptureActive || speechCaptureFinalizing);
+
       logEvent("possible_speech_detected", {
-        duration_seconds: Number((durationMs / 1000).toFixed(1)),
-        peak_level: Number(speechPeakRms.toFixed(4)),
-        detection: isIOSBrowser() ? "local_audio_level_ios_tuned" : "local_audio_level_only"
+        duration_seconds: durationSeconds,
+        peak_level: peakLevel,
+        detection: isIOSBrowser() ? "local_audio_level_ios_tuned" : "local_audio_level_only",
+        triggered_audio_clip: recordingEligible,
+        max_length_reached: Boolean(forcedByMaxLength)
       });
+
+      if (recordingEligible) {
+        finalizeSpeechCapture({ durationSeconds, peakLevel });
+      }
+    } else if (speechCaptureActive || speechCaptureFinalizing) {
+      discardSpeechCapture();
     }
 
     speechCandidateStartedAt = 0;
@@ -870,7 +1102,7 @@
     speechPeakRms = 0;
 
     if (microphoneStream?.active && !submitted) {
-      updateMicrophoneStatus(isIOSBrowser() ? "Listening • iPhone tuned" : "Listening locally");
+      updateMicrophoneStatus("Listening • speech clips enabled");
     }
   }
 
@@ -889,6 +1121,7 @@
   async function stopMicrophoneMonitoring() {
     finishSpeechSegment();
     stopSpeechAnalysisOnly();
+    stopSpeechRecorder();
 
     for (const track of microphoneStream?.getTracks?.() || []) {
       try { track.stop(); } catch (_) {}
