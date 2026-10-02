@@ -4019,3 +4019,116 @@ textarea{resize:vertical}
     min-height:220px;
   }
 }
+
+
+/* Organized student attempt controls */
+.attempt-drawer-header{
+  display:block;
+  padding:18px 20px 16px;
+}
+.attempt-student-heading{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+.attempt-student-identity{
+  min-width:0;
+  flex:1;
+}
+.attempt-student-identity h2{
+  margin:0;
+  line-height:1.2;
+  overflow-wrap:break-word;
+}
+.attempt-student-identity p{
+  margin:.35rem 0 0;
+  line-height:1.45;
+}
+.attempt-close-btn{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+.attempt-control-panel{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  width:100%;
+  margin-top:16px;
+}
+.attempt-control-group{
+  min-width:0;
+  padding:11px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#f8fafc;
+}
+.attempt-control-label{
+  display:block;
+  margin-bottom:8px;
+  color:var(--muted);
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.045em;
+  text-transform:uppercase;
+}
+.attempt-control-buttons{
+  display:flex;
+  align-items:stretch;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.attempt-control-buttons button{
+  flex:1 1 150px;
+  min-height:40px;
+}
+.attempt-control-panel .time-extension-controls{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:7px;
+  width:100%;
+}
+.attempt-control-panel .time-extension-controls.hidden{
+  display:none;
+}
+.attempt-control-panel .time-extension-controls button{
+  width:100%;
+  min-width:0;
+  min-height:40px;
+  white-space:nowrap;
+}
+.attempt-control-danger{
+  background:#fffafa;
+  border-color:#fecaca;
+}
+@media(max-width:700px){
+  .attempt-drawer-header{
+    padding:14px;
+  }
+  .attempt-student-heading{
+    gap:10px;
+  }
+  .attempt-control-panel{
+    grid-template-columns:1fr;
+    gap:9px;
+    margin-top:12px;
+  }
+  .attempt-control-group{
+    padding:10px;
+  }
+  .attempt-control-panel .time-extension-controls{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+@media(max-width:430px){
+  .attempt-student-heading{
+    align-items:flex-start;
+  }
+  .attempt-close-btn{
+    padding-left:10px;
+    padding-right:10px;
+  }
+  .attempt-control-panel .time-extension-controls{
+    grid-template-columns:1fr;
+  }
+}
