@@ -4603,3 +4603,39 @@ textarea{resize:vertical}
   background:#fffafa;
   color:#b91c1c;
 }
+
+
+/* Objective score before full release */
+.objective-score-panel{
+  display:grid;
+  gap:10px;
+  margin:14px 0;
+  padding:16px;
+  border:1px solid #bfdbfe;
+  border-radius:14px;
+  background:#eff6ff;
+}
+.objective-score-panel>div{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.objective-score-label{
+  font-size:.78rem;
+  font-weight:800;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:#475569;
+}
+#objectiveScoreValue{
+  font-size:1.65rem;
+  line-height:1;
+}
+#objectiveScorePercent{
+  font-weight:700;
+}
+.objective-score-panel p{
+  margin:0;
+  line-height:1.45;
+}
