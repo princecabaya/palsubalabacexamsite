@@ -1130,6 +1130,68 @@
     await loadAttemptMessageHistory(attempt);
   }
 
+  async function sendTeacherLiveCameraMessage() {
+    const attempt = currentDetailAttempt;
+    const input = $("teacherLiveMessageInput");
+    const button = $("sendTeacherLiveMessageBtn");
+    const status = $("teacherLiveMessageStatus");
+    if (!attempt || !input || !button || !status) return;
+
+    if (attempt.status !== "active") {
+      status.textContent = "Messaging is available only during an active attempt.";
+      status.classList.add("error");
+      return;
+    }
+
+    const message = input.value.trim();
+    if (!message) {
+      status.textContent = "Enter a message first.";
+      status.classList.add("error");
+      input.focus();
+      return;
+    }
+    if (message.length > 300) {
+      status.textContent = "Message must be 300 characters or fewer.";
+      status.classList.add("error");
+      return;
+    }
+
+    button.disabled = true;
+    status.classList.remove("error","success");
+    status.textContent = "Sending…";
+
+    const { error } = await db.rpc("admin_send_attempt_message", {
+      p_attempt_id: attempt.id,
+      p_message: message
+    });
+
+    button.disabled = false;
+
+    if (error) {
+      const missing = /admin_send_attempt_message|function.*does not exist|schema cache/i.test(String(error.message || ""));
+      status.textContent = missing
+        ? "Messaging is not installed yet. Run supabase-upgrade-attempt-messages.sql."
+        : error.message;
+      status.classList.add("error");
+      return;
+    }
+
+    input.value = "";
+    status.textContent = "Message sent.";
+    status.classList.add("success");
+
+    const mainInput = $("teacherAttemptMessage");
+    if (mainInput) mainInput.value = "";
+    await loadAttemptMessageHistory(attempt);
+
+    setTimeout(() => {
+      if (status.textContent === "Message sent.") {
+        status.textContent = "";
+        status.classList.remove("success");
+      }
+    }, 3000);
+  }
+
   function applyAttemptMessagePreset(event) {
     const button = event.target.closest(".message-preset");
     if (!button) return;
@@ -4805,6 +4867,13 @@
     const placeholder = $("teacherLiveCameraPlaceholder");
     modal?.classList.remove("hidden");
     placeholder?.classList.remove("hidden");
+    const liveMessageInput = $("teacherLiveMessageInput");
+    const liveMessageStatus = $("teacherLiveMessageStatus");
+    if (liveMessageInput) liveMessageInput.value = "";
+    if (liveMessageStatus) {
+      liveMessageStatus.textContent = "";
+      liveMessageStatus.classList.remove("error","success");
+    }
     setTeacherLiveCameraStatus("Preparing secure peer-to-peer request…");
 
     try {
@@ -5066,6 +5135,13 @@
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("requestLiveCameraBtn")?.addEventListener("click", requestTeacherLiveCamera);
   $("closeTeacherLiveCameraBtn")?.addEventListener("click", () => endTeacherLiveCamera({ notifyServer:true }));
+  $("sendTeacherLiveMessageBtn")?.addEventListener("click", sendTeacherLiveCameraMessage);
+  $("teacherLiveMessageInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendTeacherLiveCameraMessage();
+    }
+  });
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
   $("permitEditAttemptBtn")?.addEventListener("click", permitEditingAfterSubmission);
   $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
