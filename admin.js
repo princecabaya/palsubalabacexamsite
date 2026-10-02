@@ -22,6 +22,9 @@
   const expandedExamStatusGroups = new Set(["published","draft"]);
   const expandedAttemptStatusGroups = new Set(["active"]);
   let currentDetailAttempt = null;
+  let teacherLivePeer = null;
+  let teacherLiveSessionId = null;
+  let teacherLivePollHandle = null;
   let currentProctorPhotos = [];
   let proctorAssignments = [];
   let proctorCandidates = [];
@@ -964,6 +967,9 @@
     if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
     const permitEditBtn = $("permitEditAttemptBtn");
     if (permitEditBtn) permitEditBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
+
+    const liveCameraBtn = $("requestLiveCameraBtn");
+    if (liveCameraBtn) liveCameraBtn.classList.toggle("hidden", a.status !== "active" || proctorOnly);
 
     const unlockBtn = $("unlockSessionBtn");
     if (unlockBtn) {
@@ -4535,6 +4541,134 @@
     await refreshAttempts();
   }
 
+  function waitForTeacherIceGathering(pc, timeoutMs = 8000) {
+    if (!pc || pc.iceGatheringState === "complete") return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => {
+        pc.removeEventListener("icegatheringstatechange", check);
+        clearTimeout(timer);
+        resolve();
+      };
+      const check = () => { if (pc.iceGatheringState === "complete") done(); };
+      const timer = setTimeout(done, timeoutMs);
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+  }
+
+  function setTeacherLiveCameraStatus(message) {
+    const node = $("teacherLiveCameraStatus");
+    if (node) node.textContent = message;
+  }
+
+  function stopTeacherLiveCameraLocal() {
+    clearInterval(teacherLivePollHandle);
+    teacherLivePollHandle = null;
+    try { teacherLivePeer?.close(); } catch (_) {}
+    teacherLivePeer = null;
+    const video = $("teacherLiveCameraVideo");
+    if (video) video.srcObject = null;
+    $("teacherLiveCameraPlaceholder")?.classList.remove("hidden");
+  }
+
+  async function endTeacherLiveCamera({ notifyServer = true } = {}) {
+    const sessionId = teacherLiveSessionId;
+    teacherLiveSessionId = null;
+    stopTeacherLiveCameraLocal();
+    $("teacherLiveCameraModal")?.classList.add("hidden");
+    if (notifyServer && sessionId) {
+      await db.rpc("admin_end_live_camera", { p_session_id: sessionId });
+    }
+  }
+
+  async function pollTeacherLiveCameraSession() {
+    if (!teacherLiveSessionId || !teacherLivePeer) return;
+    const { data, error } = await db.rpc("admin_get_live_camera_session", {
+      p_session_id: teacherLiveSessionId
+    });
+    if (error || !data) return;
+
+    const status = String(data.status || "");
+    if (status === "accepted" && data.answer_sdp && !teacherLivePeer.currentRemoteDescription) {
+      try {
+        await teacherLivePeer.setRemoteDescription({ type:"answer", sdp:data.answer_sdp });
+        setTeacherLiveCameraStatus("Student accepted. Connecting live video…");
+      } catch (error) {
+        setTeacherLiveCameraStatus(`Could not complete connection: ${error?.message || error}`);
+      }
+    } else if (status === "declined") {
+      setTeacherLiveCameraStatus("Student declined the live camera request.");
+      setTimeout(() => endTeacherLiveCamera({ notifyServer:false }), 1800);
+    } else if (status === "expired") {
+      setTeacherLiveCameraStatus("Live camera request expired.");
+      setTimeout(() => endTeacherLiveCamera({ notifyServer:false }), 1800);
+    } else if (status === "ended") {
+      setTeacherLiveCameraStatus("Live camera session ended.");
+      setTimeout(() => endTeacherLiveCamera({ notifyServer:false }), 1200);
+    }
+  }
+
+  async function requestTeacherLiveCamera() {
+    const attempt = currentDetailAttempt;
+    if (!attempt || attempt.status !== "active") {
+      alert("Live camera can only be requested for an active attempt.");
+      return;
+    }
+
+    await endTeacherLiveCamera({ notifyServer:true });
+
+    const modal = $("teacherLiveCameraModal");
+    const video = $("teacherLiveCameraVideo");
+    const placeholder = $("teacherLiveCameraPlaceholder");
+    modal?.classList.remove("hidden");
+    placeholder?.classList.remove("hidden");
+    setTeacherLiveCameraStatus("Preparing secure peer-to-peer request…");
+
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+      teacherLivePeer = pc;
+
+      pc.addTransceiver("video", { direction:"recvonly" });
+      pc.addEventListener("track", event => {
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
+        if (video) {
+          video.srcObject = stream;
+          video.play().catch(()=>{});
+        }
+        placeholder?.classList.add("hidden");
+        setTeacherLiveCameraStatus("Live camera connected.");
+        if (teacherLiveSessionId) {
+          db.rpc("admin_mark_live_camera_connected", { p_session_id: teacherLiveSessionId }).catch(()=>{});
+        }
+      });
+      pc.addEventListener("connectionstatechange", () => {
+        if (pc.connectionState === "failed") setTeacherLiveCameraStatus("Live connection failed. Try requesting again.");
+        if (pc.connectionState === "disconnected") setTeacherLiveCameraStatus("Live connection interrupted.");
+      });
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForTeacherIceGathering(pc);
+
+      const { data, error } = await db.rpc("admin_request_live_camera", {
+        p_attempt_id: attempt.id,
+        p_offer_sdp: pc.localDescription?.sdp || offer.sdp
+      });
+      if (error) throw error;
+
+      teacherLiveSessionId = data?.id || null;
+      if (!teacherLiveSessionId) throw new Error("Live camera session could not be created.");
+
+      setTeacherLiveCameraStatus("Waiting for the student to allow live camera viewing…");
+      teacherLivePollHandle = setInterval(() => pollTeacherLiveCameraSession().catch(()=>{}), 1200);
+      pollTeacherLiveCameraSession().catch(()=>{});
+    } catch (error) {
+      stopTeacherLiveCameraLocal();
+      setTeacherLiveCameraStatus(`Could not start live camera request: ${error?.message || error}`);
+    }
+  }
+
   async function reopenCurrentAttempt() {
     const a = currentDetailAttempt;
     if (!a || a.status !== "submitted") return;
@@ -4744,6 +4878,8 @@
   $("teacherMessageSection")?.addEventListener("click", applyAttemptMessagePreset);
 
   $("refreshBtn").addEventListener("click", refreshAttempts);
+  $("requestLiveCameraBtn")?.addEventListener("click", requestTeacherLiveCamera);
+  $("closeTeacherLiveCameraBtn")?.addEventListener("click", () => endTeacherLiveCamera({ notifyServer:true }));
   $("reopenAttemptBtn")?.addEventListener("click", reopenCurrentAttempt);
   $("permitEditAttemptBtn")?.addEventListener("click", permitEditingAfterSubmission);
   $("unlockSessionBtn")?.addEventListener("click", unlockCurrentAttemptSession);
