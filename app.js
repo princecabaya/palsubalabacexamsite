@@ -1754,10 +1754,13 @@
   }
 
   function startAttemptMessagePolling() {
-    clearInterval(attemptMessagePollHandle);
+    stopAttemptMessagePolling();
     lastAttemptMessageAt = null;
     hideTeacherLiveMessage();
     if (!attempt?.attempt_token || submitted) return;
+
+    // Start both teacher-message polling and live-camera request polling.
+    startLiveCameraPolling();
     pollAttemptMessages({ initial: true });
     attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 3000);
   }
