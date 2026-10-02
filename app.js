@@ -46,6 +46,7 @@
       ["student","idle","Waiting"],
       ["camera","idle","Not checked"],
       ["microphone","idle","Not checked"],
+      ["notifications","idle","Not checked"],
       ["session","idle","Not checked"]
     ].forEach(([key,state,detail]) => setPreflightStatus(key,state,detail));
   }
@@ -88,6 +89,11 @@
   let pendingLiveCameraRequest = null;
   let lastAttemptMessageAt = null;
   let suppressBlurUntil = 0;
+  let notificationRegistration = null;
+  let lastNotifiedLiveCameraRequestId = null;
+  let awayNotificationTimer = null;
+  let awayNotificationSent = false;
+  const AWAY_NOTIFICATION_DELAY_MS = 15000;
   const queuedEvents = [];
   let pendingIdentity = null;
   let cameraStream = null;
@@ -142,6 +148,136 @@
     "keyboard_shortcut_blocked","developer_tools_shortcut_attempt","reload_shortcut_blocked",
     "print_attempt","printscreen_key_detected","leave_or_reload_attempt","in_exam_link_navigation_blocked"
   ]);
+
+  async function registerExamNotificationServiceWorker() {
+    if (!("serviceWorker" in navigator)) return null;
+    if (notificationRegistration) return notificationRegistration;
+    try {
+      notificationRegistration = await navigator.serviceWorker.register("./exam-notifications-sw.js");
+      await navigator.serviceWorker.ready;
+      return notificationRegistration;
+    } catch (error) {
+      console.warn("Notification service worker registration failed:", error);
+      return null;
+    }
+  }
+
+  async function ensureNotificationsEnabled({ requirePermission = true } = {}) {
+    const rowSupported = "Notification" in window;
+    if (!rowSupported) {
+      setPreflightStatus("notifications", "warning", "Not supported by this browser");
+      return { supported: false, granted: false, canContinue: !requirePermission };
+    }
+
+    await registerExamNotificationServiceWorker();
+
+    if (Notification.permission === "granted") {
+      setPreflightStatus("notifications", "ready", "Allowed");
+      return { supported: true, granted: true, canContinue: true };
+    }
+
+    if (Notification.permission === "denied") {
+      setPreflightStatus("notifications", "error", "Blocked in browser settings");
+      return { supported: true, granted: false, canContinue: false };
+    }
+
+    setPreflightStatus("notifications", "checking", "Requesting permission");
+    let permission = "default";
+    try {
+      permission = await Notification.requestPermission();
+    } catch (error) {
+      console.warn("Notification permission request failed:", error);
+    }
+
+    if (permission === "granted") {
+      setPreflightStatus("notifications", "ready", "Allowed");
+      return { supported: true, granted: true, canContinue: true };
+    }
+
+    setPreflightStatus(
+      "notifications",
+      permission === "denied" ? "error" : "warning",
+      permission === "denied" ? "Blocked in browser settings" : "Permission not granted"
+    );
+    return { supported: true, granted: false, canContinue: false };
+  }
+
+  async function showExamNotification(title, {
+    body = "",
+    tag = "exam-guard",
+    data = {},
+    actions = [],
+    requireInteraction = false,
+    vibrate = [180, 80, 180]
+  } = {}) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return false;
+
+    const options = {
+      body,
+      tag,
+      data,
+      renotify: true,
+      requireInteraction,
+      vibrate
+    };
+
+    try {
+      const registration = await registerExamNotificationServiceWorker();
+      if (registration?.showNotification) {
+        try {
+          await registration.showNotification(title, { ...options, actions });
+        } catch (_) {
+          await registration.showNotification(title, options);
+        }
+        return true;
+      }
+
+      const notification = new Notification(title, options);
+      notification.onclick = () => {
+        try { window.focus(); } catch (_) {}
+        notification.close();
+      };
+      return true;
+    } catch (error) {
+      console.warn("Could not show browser notification:", error);
+      return false;
+    }
+  }
+
+  function vibrateStudent(pattern = [160, 80, 160]) {
+    if (!navigator.vibrate) return;
+    try { navigator.vibrate(pattern); } catch (_) {}
+  }
+
+  function scheduleAwayNotification() {
+    clearTimeout(awayNotificationTimer);
+    awayNotificationTimer = null;
+    awayNotificationSent = false;
+    if (!attempt || submitted || !document.hidden) return;
+
+    awayNotificationTimer = setTimeout(async () => {
+      if (!attempt || submitted || !document.hidden) return;
+      awayNotificationSent = true;
+      vibrateStudent([220, 100, 220, 100, 220]);
+      await showExamNotification("Return to Exam Guard", {
+        body: "You have been away from the examination page for an extended period. Return to the exam now.",
+        tag: "exam-away-reminder",
+        data: { kind: "away_reminder" },
+        actions: [{ action: "open-exam", title: "Return to Exam" }],
+        requireInteraction: true,
+        vibrate: [220, 100, 220, 100, 220]
+      });
+      await logEvent("away_notification_sent", {
+        away_seconds: Number((AWAY_NOTIFICATION_DELAY_MS / 1000).toFixed(0))
+      });
+    }, AWAY_NOTIFICATION_DELAY_MS);
+  }
+
+  function clearAwayNotificationTimer() {
+    clearTimeout(awayNotificationTimer);
+    awayNotificationTimer = null;
+    awayNotificationSent = false;
+  }
 
   function clearExamBrowserState({ keepCurrentToken = false, keepDeviceSession = true } = {}) {
     const currentToken = keepCurrentToken ? sessionStorage.getItem("exam_guard_token") : null;
@@ -1637,6 +1773,17 @@
       return;
     }
 
+    const notificationReady = await ensureNotificationsEnabled({ requirePermission: true });
+    if (notificationReady.supported && !notificationReady.granted) {
+      msg.textContent = Notification.permission === "denied"
+        ? "Notifications are blocked. Enable notifications for this site in your browser/site settings, then try again."
+        : "Please allow browser notifications before entering the examination.";
+      return;
+    }
+    if (!notificationReady.supported) {
+      msg.textContent = "This browser does not support exam notifications. You may continue, but live-camera and teacher-message alerts cannot appear as browser notifications.";
+    }
+
     if (!attempt) {
       // Remove stale data from older completed/deleted attempts before checking a new login.
       clearExamBrowserState();
@@ -1647,6 +1794,15 @@
     setPreflightStatus("student","checking","Checking");
     setPreflightStatus("camera","idle","Not checked");
     setPreflightStatus("microphone","idle","Not checked");
+    if ("Notification" in window && Notification.permission === "granted") {
+      setPreflightStatus("notifications","ready","Allowed");
+    } else if ("Notification" in window && Notification.permission === "denied") {
+      setPreflightStatus("notifications","error","Blocked in browser settings");
+    } else if (!("Notification" in window)) {
+      setPreflightStatus("notifications","warning","Not supported by this browser");
+    } else {
+      setPreflightStatus("notifications","idle","Not checked");
+    }
     setPreflightStatus("session","idle","Not checked");
     $("startBtn").disabled = true;
 
@@ -1734,9 +1890,16 @@
     banner.classList.remove("teacher-message-arrive");
     void banner.offsetWidth;
     banner.classList.add("teacher-message-arrive");
-    if (navigator.vibrate) {
-      try { navigator.vibrate([100,60,100]); } catch (_) {}
-    }
+
+    vibrateStudent([180,80,180,80,240]);
+    showExamNotification("Message from Your Teacher", {
+      body: String(item.message).slice(0, 300),
+      tag: "teacher-live-message",
+      data: { kind: "teacher_message" },
+      actions: [{ action: "open-exam", title: "Open Exam" }],
+      requireInteraction: document.hidden,
+      vibrate: [180,80,180,80,240]
+    }).catch(()=>{});
   }
 
   function showRestoreAnswersPrompt(item) {
@@ -1891,6 +2054,7 @@
     studentLivePeer = null;
     studentLiveSessionId = null;
     pendingLiveCameraRequest = null;
+    lastNotifiedLiveCameraRequestId = null;
     $("liveCameraRequestModal")?.classList.add("hidden");
   }
 
@@ -1909,7 +2073,22 @@
     if (data.status === "requested" && data.id !== studentLiveSessionId) {
       pendingLiveCameraRequest = data;
       $("liveCameraRequestModal")?.classList.remove("hidden");
-      if (navigator.vibrate) { try { navigator.vibrate([120,80,120]); } catch (_) {} }
+
+      if (data.id !== lastNotifiedLiveCameraRequestId) {
+        lastNotifiedLiveCameraRequestId = data.id;
+        vibrateStudent([250,100,250,100,350]);
+        showExamNotification("Live Camera Request", {
+          body: "Your teacher is requesting a temporary live camera check.",
+          tag: `live-camera-${data.id}`,
+          data: { kind: "live_camera", session_id: data.id },
+          actions: [
+            { action: "allow-live-camera", title: "Allow Live Camera" },
+            { action: "open-exam", title: "Open Exam" }
+          ],
+          requireInteraction: true,
+          vibrate: [250,100,250,100,350]
+        }).catch(()=>{});
+      }
     } else if (["ended","expired","declined"].includes(String(data.status))) {
       closeStudentLiveCameraConnection();
     }
@@ -2000,6 +2179,7 @@
 
   function stopAttemptMessagePolling() {
     stopLiveCameraPolling();
+    clearAwayNotificationTimer();
     clearInterval(attemptMessagePollHandle);
     attemptMessagePollHandle = null;
   }
@@ -3546,14 +3726,39 @@
   $("restoreLocalAnswersBtn")?.addEventListener("click", restoreLocalStoredAnswers);
   $("submitBtn").addEventListener("click", () => submitExam(false));
 
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", event => {
+      const payload = event.data || {};
+      if (payload.type !== "exam-notification-action") return;
+
+      try { window.focus(); } catch (_) {}
+
+      if (payload.action === "allow-live-camera" && pendingLiveCameraRequest) {
+        $("liveCameraRequestModal")?.classList.remove("hidden");
+        acceptLiveCameraRequest().catch(()=>{});
+        return;
+      }
+
+      if (payload.data?.kind === "live_camera" && pendingLiveCameraRequest) {
+        $("liveCameraRequestModal")?.classList.remove("hidden");
+        $("acceptLiveCameraBtn")?.focus();
+      }
+    });
+  }
+
   // Proctoring signals.
   document.addEventListener("visibilitychange", () => {
     if (!attempt || submitted) return;
-    if (document.hidden) emergencySnapshotCurrentAnswers();
+    if (document.hidden) {
+      emergencySnapshotCurrentAnswers();
+      scheduleAwayNotification();
+    } else {
+      clearAwayNotificationTimer();
+      flushEvents();
+    }
     logEvent(document.hidden ? "tab_or_window_hidden" : "tab_or_window_visible", {
       state: document.visibilityState
     });
-    if (!document.hidden) flushEvents();
   });
 
   window.addEventListener("blur", () => {
