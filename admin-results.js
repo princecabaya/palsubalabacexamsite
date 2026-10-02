@@ -25,6 +25,21 @@
     if (!row) return;
 
     const opening = row.classList.contains("hidden");
+
+    // The exam-title dropdown is the single results view for ordinary browsing.
+    // Hide the legacy lower results panel so the same exam is not rendered twice.
+    if (opening && !document.querySelector("#gradingReviewPanel:not(.hidden)")) {
+      panel.classList.add("hidden");
+      panel.dataset.examId = "";
+      panel.dataset.examCode = "";
+      panel.dataset.examTitle = "";
+      const workspace = $("manageWorkspace");
+      workspace?.classList.remove("review-mode", "split-active");
+      if ($("examPreviewPanel")?.classList.contains("hidden")) {
+        $("manageRightPane")?.classList.add("hidden");
+      }
+    }
+
     examRows.querySelectorAll(".exam-takers-row").forEach(other => {
       if (other !== row) other.classList.add("hidden");
     });
@@ -37,6 +52,8 @@
 
     if (opening) {
       await loadInlineExamTakers(exam, row);
+    } else if (!document.querySelector("#gradingReviewPanel:not(.hidden)")) {
+      panel.classList.add("hidden");
     }
   });
 
