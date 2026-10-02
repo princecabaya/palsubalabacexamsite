@@ -4464,3 +4464,67 @@ textarea{resize:vertical}
     grid-template-columns:repeat(3,minmax(0,1fr));
   }
 }
+
+
+/* 3x3 live proctoring pager */
+.group-live-pager{
+  display:grid;
+  grid-template-columns:auto minmax(160px,1fr) auto;
+  align-items:center;
+  gap:10px;
+  margin:0 0 12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+}
+.group-live-page-status{
+  display:grid;
+  justify-items:center;
+  gap:2px;
+  text-align:center;
+}
+.group-live-page-status strong{
+  font-size:.9rem;
+}
+.group-live-page-status span{
+  font-size:.76rem;
+}
+.group-live-swipe-surface{
+  touch-action:pan-y;
+  overscroll-behavior-x:contain;
+}
+.group-live-proctor-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.group-live-student-card{
+  display:flex;
+  flex-direction:column;
+}
+.group-live-video-stage{
+  min-height:0;
+}
+@media(max-width:1100px){
+  .group-live-proctor-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:700px){
+  .group-live-pager{
+    grid-template-columns:1fr 1fr;
+  }
+  .group-live-page-status{
+    grid-column:1 / -1;
+    grid-row:1;
+  }
+  #groupLivePrevPageBtn{grid-column:1}
+  #groupLiveNextPageBtn{grid-column:2}
+  .group-live-proctor-grid{
+    grid-template-columns:1fr;
+  }
+}
+@media(min-width:1500px){
+  .group-live-proctor-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
