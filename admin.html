@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20261002-1150">
+  <link rel="stylesheet" href="style.css?v=20261002-1245">
 </head>
 <body>
   <main class="shell wide">
@@ -321,6 +321,40 @@
                 <span class="muted">The message appears on the student's active exam screen.</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div id="groupLiveProctorPanel" class="group-live-proctor-panel hidden" role="dialog" aria-modal="true" aria-labelledby="groupLiveProctorTitle">
+          <div class="group-live-proctor-shell">
+            <header class="group-live-proctor-header">
+              <div>
+                <span class="eyebrow">Multi-Student Live Proctoring</span>
+                <h2 id="groupLiveProctorTitle">Live Proctoring</h2>
+                <p id="groupLiveProctorMeta" class="muted">Requesting live cameras from active students…</p>
+              </div>
+              <div class="group-live-proctor-header-actions">
+                <button id="refreshGroupLiveBtn" type="button">Refresh Requests</button>
+                <button id="closeGroupLiveProctorBtn" type="button">Close</button>
+              </div>
+            </header>
+
+            <section class="group-live-broadcast">
+              <div>
+                <strong>Message all active students</strong>
+                <span class="muted">Send one teacher message to every active attempt in this examination.</span>
+              </div>
+              <div class="group-live-broadcast-compose">
+                <textarea id="groupBroadcastMessage" rows="2" maxlength="300" placeholder="Type a message for all active students…"></textarea>
+                <button id="sendGroupBroadcastBtn" type="button" class="primary">Send to All</button>
+              </div>
+              <span id="groupBroadcastStatus" class="message-inline" role="status"></span>
+            </section>
+
+            <div id="groupLiveProctorGrid" class="group-live-proctor-grid"></div>
+
+            <footer class="group-live-proctor-footer muted">
+              Live video is peer-to-peer and is not recorded by this feature. Each student must allow the teacher's live-camera request.
+            </footer>
           </div>
         </div>
 
@@ -804,7 +838,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="admin.js?v=20261002-1140"></script>
+  <script src="admin.js?v=20261002-1245"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260930-1705"></script>
   <script src="admin-analysis.js?v=20260928-2302"></script>
