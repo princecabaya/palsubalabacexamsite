@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Test Analysis Report | Exam Guard</title>
+  <link rel="stylesheet" href="style.css?v=20261002-1600">
+</head>
+<body class="analysis-report-page">
+  <main class="analysis-report-shell">
+    <header class="analysis-report-header">
+      <div>
+        <span class="eyebrow">Exam Guard • Test Analysis</span>
+        <h1 id="analysisReportTitle">Test Analysis Report</h1>
+        <p id="analysisReportMeta" class="muted">Loading examination data…</p>
+      </div>
+      <div class="analysis-report-toolbar">
+        <button id="analysisBackBtn" type="button">← Dashboard</button>
+        <button id="analysisRefreshBtn" type="button">Refresh Analysis</button>
+        <button id="analysisCsvBtn" type="button">Download CSV</button>
+        <button id="analysisPrintBtn" class="primary" type="button">Print Report</button>
+      </div>
+    </header>
+
+    <section id="analysisLoadingCard" class="card analysis-loading-card">
+      <strong>Preparing test analysis…</strong>
+      <p id="analysisPageStatus" class="muted">Checking your teacher session and loading finalized responses.</p>
+    </section>
+
+    <section id="analysisReportContent" class="hidden">
+      <section id="testAnalysisCautions" class="analysis-cautions"></section>
+
+      <section class="card analysis-section">
+        <div class="analysis-section-head">
+          <div>
+            <span class="eyebrow">01</span>
+            <h2>Descriptive Statistics</h2>
+          </div>
+          <p class="muted">Summary of finalized submitted attempts included in this analysis.</p>
+        </div>
+        <div class="result-summary analysis-metrics analysis-report-metrics">
+          <div class="metric-card"><span>Analyzed N</span><strong id="analysisN">—</strong></div>
+          <div class="metric-card"><span>Mean</span><strong id="analysisMean">—</strong></div>
+          <div class="metric-card"><span>Median</span><strong id="analysisMedian">—</strong></div>
+          <div class="metric-card"><span>SD</span><strong id="analysisSd">—</strong></div>
+          <div class="metric-card"><span>Minimum</span><strong id="analysisMin">—</strong></div>
+          <div class="metric-card"><span>Maximum</span><strong id="analysisMax">—</strong></div>
+        </div>
+      </section>
+
+      <section class="card analysis-section">
+        <div class="analysis-section-head">
+          <div>
+            <span class="eyebrow">02</span>
+            <h2>Reliability</h2>
+          </div>
+          <p id="analysisReliabilityNote" class="muted"></p>
+        </div>
+        <div class="result-summary analysis-metrics analysis-report-metrics">
+          <div class="metric-card"><span>Cronbach's α</span><strong id="analysisAlpha">—</strong></div>
+          <div class="metric-card"><span>KR-20</span><strong id="analysisKr20">—</strong></div>
+          <div class="metric-card"><span>SEM</span><strong id="analysisSem">—</strong></div>
+          <div class="metric-card"><span>Split-half</span><strong id="analysisSplitHalf">—</strong></div>
+        </div>
+      </section>
+
+      <section class="card analysis-section">
+        <div class="analysis-section-head">
+          <div>
+            <span class="eyebrow">03</span>
+            <h2>Validity-Related Evidence</h2>
+          </div>
+          <p class="muted">Item-functioning and internal-structure indicators; these do not by themselves establish content, criterion, or construct validity.</p>
+        </div>
+        <div class="result-summary analysis-metrics analysis-report-metrics">
+          <div class="metric-card"><span>Positive Item-Total</span><strong id="analysisPositiveDiscrimination">—</strong></div>
+          <div class="metric-card"><span>Negative Item-Total</span><strong id="analysisNegativeDiscrimination">—</strong></div>
+          <div class="metric-card"><span>Mean Item Difficulty</span><strong id="analysisMeanDifficulty">—</strong></div>
+          <div class="metric-card"><span>Flagged Items</span><strong id="analysisFlaggedItems">—</strong></div>
+        </div>
+      </section>
+
+      <section class="card analysis-section">
+        <div class="analysis-section-head">
+          <div>
+            <span class="eyebrow">04</span>
+            <h2>Item Analysis</h2>
+          </div>
+          <p class="muted">Difficulty, corrected item-total correlation, alpha-if-deleted, and review flags.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="analysis-item-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Type</th>
+                <th>Max</th>
+                <th>Difficulty / Mean Fraction</th>
+                <th>Corrected Item-Total r</th>
+                <th>Alpha if Deleted</th>
+                <th>Flag</th>
+              </tr>
+            </thead>
+            <tbody id="analysisItemRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card analysis-section">
+        <div class="analysis-section-head">
+          <div>
+            <span class="eyebrow">05</span>
+            <h2>Distractor Analysis</h2>
+          </div>
+          <p class="muted">Selection frequency and functioning of multiple-choice distractors.</p>
+        </div>
+        <div id="analysisDistractorReport"></div>
+      </section>
+
+      <footer class="analysis-report-footer muted">
+        Generated from finalized Exam Guard submissions. Interpret coefficients in context, especially when sample size is small.
+      </footer>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="test-analysis.js?v=20261002-1600"></script>
+</body>
+</html>
