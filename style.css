@@ -4132,3 +4132,86 @@ textarea{resize:vertical}
     grid-template-columns:1fr;
   }
 }
+
+
+/* Triggered speech clips */
+.speech-clip-list{
+  display:grid;
+  gap:12px;
+  margin-top:12px;
+}
+.speech-clip-card{
+  position:relative;
+  display:grid;
+  gap:10px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+}
+.speech-clip-select{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:.8rem;
+  cursor:pointer;
+}
+.speech-clip-select input{
+  width:16px;
+  height:16px;
+}
+.speech-clip-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.speech-clip-head>div{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.speech-clip-head span{
+  font-size:.78rem;
+  color:var(--muted);
+}
+.speech-evidence-badge{
+  position:static;
+  flex:0 0 auto;
+}
+.speech-clip-card audio{
+  width:100%;
+  min-height:38px;
+}
+.speech-transcript{
+  padding:10px 11px;
+  border:1px solid #e2e8f0;
+  border-radius:10px;
+  background:#f8fafc;
+}
+.speech-transcript strong{
+  display:block;
+  margin-bottom:5px;
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.speech-transcript p{
+  margin:0;
+  line-height:1.5;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.speech-transcript .muted{
+  display:block;
+  margin-top:6px;
+  font-size:.76rem;
+}
+.speech-clip-retention{
+  font-size:.76rem;
+}
+@media(max-width:520px){
+  .speech-clip-head{
+    flex-direction:column;
+  }
+}
