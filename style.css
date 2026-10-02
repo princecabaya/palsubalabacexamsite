@@ -4215,3 +4215,61 @@ textarea{resize:vertical}
     flex-direction:column;
   }
 }
+
+
+/* Live camera message composer */
+.teacher-live-message-box{
+  margin-top:10px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+}
+.teacher-live-message-box>label{
+  display:block;
+  margin-bottom:7px;
+  font-size:.82rem;
+  font-weight:800;
+  color:#1f2937;
+}
+.teacher-live-message-compose{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;
+  align-items:stretch;
+}
+.teacher-live-message-compose textarea{
+  width:100%;
+  min-height:54px;
+  max-height:110px;
+  resize:vertical;
+  margin:0;
+}
+.teacher-live-message-compose button{
+  min-width:86px;
+  align-self:stretch;
+}
+.teacher-live-message-footer{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  min-height:25px;
+  margin-top:6px;
+  font-size:.75rem;
+}
+.teacher-live-message-footer .message-inline{
+  margin:0;
+  font-weight:700;
+}
+@media(max-width:520px){
+  .teacher-live-message-compose{
+    grid-template-columns:1fr;
+  }
+  .teacher-live-message-compose button{
+    width:100%;
+  }
+  .teacher-live-message-footer{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:2px;
+  }
+}
