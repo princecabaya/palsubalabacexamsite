@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20260930-1745">
+  <link rel="stylesheet" href="style.css?v=20261002-1030">
 </head>
 <body>
   <main class="shell wide">
@@ -93,6 +93,7 @@
               <button id="reopenAttemptBtn" type="button" class="hidden">Reopen & Continue</button>
               <button id="permitEditAttemptBtn" type="button" class="primary hidden">Permit Editing After Submission</button>
               <button id="unlockSessionBtn" type="button" class="hidden">Unlock Active Session</button>
+              <button id="requestLiveCameraBtn" type="button" class="primary hidden">Request Live Camera</button>
               <div id="timeExtensionControls" class="row time-extension-controls hidden">
                 <button id="add30MinBtn" type="button">+30 min</button>
                 <button id="add60MinBtn" type="button">+1 hour</button>
@@ -246,6 +247,24 @@
               </div>
             </details>
           </div>
+        <div id="teacherLiveCameraModal" class="teacher-live-camera-modal hidden" role="dialog" aria-modal="true" aria-labelledby="teacherLiveCameraTitle">
+          <div class="teacher-live-camera-card">
+            <div class="teacher-live-camera-head">
+              <div>
+                <span class="eyebrow">Temporary Live Proctoring</span>
+                <h2 id="teacherLiveCameraTitle">Live Camera</h2>
+                <p id="teacherLiveCameraStatus" class="muted">Preparing request…</p>
+              </div>
+              <button id="closeTeacherLiveCameraBtn" type="button">Close</button>
+            </div>
+            <div class="teacher-live-camera-stage">
+              <video id="teacherLiveCameraVideo" autoplay playsinline></video>
+              <div id="teacherLiveCameraPlaceholder" class="teacher-live-camera-placeholder">Waiting for the student to accept the live camera request…</div>
+            </div>
+            <p class="muted teacher-live-camera-note">Live video is peer-to-peer and is not recorded by this feature. The session automatically expires after 10 minutes.</p>
+          </div>
+        </div>
+
         </aside>
       </section>
 
@@ -726,7 +745,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260928-2030"></script>
-  <script src="admin.js?v=20261002-0955"></script>
+  <script src="admin.js?v=20261002-1030"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20260930-1705"></script>
   <script src="admin-analysis.js?v=20260928-2302"></script>
