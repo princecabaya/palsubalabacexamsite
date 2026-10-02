@@ -18,8 +18,8 @@ declare
   v_student public.students%rowtype;
   v_report jsonb;
 begin
-  select a.*, e.*, s.*
-  into v_attempt, v_exam, v_student
+  select a.id
+  into v_attempt_id
   from public.attempts a
   join public.exams e on e.id = a.exam_id
   join public.students s on s.id = a.student_id
@@ -30,9 +30,21 @@ begin
   order by a.submitted_at desc nulls last, a.started_at desc
   limit 1;
 
-  if v_attempt.id is null then
+  if v_attempt_id is null then
     raise exception 'No submitted exam result was found for this Exam Code and Student ID.';
   end if;
+
+  select * into v_attempt
+  from public.attempts
+  where id = v_attempt_id;
+
+  select * into v_exam
+  from public.exams
+  where id = v_attempt.exam_id;
+
+  select * into v_student
+  from public.students
+  where id = v_attempt.student_id;
 
   v_results_released := coalesce(v_exam.results_released, false);
 
