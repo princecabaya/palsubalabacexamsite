@@ -26,6 +26,7 @@
   let teacherLiveSessionId = null;
   let teacherLivePollHandle = null;
   let currentProctorPhotos = [];
+  let currentSpeechClips = [];
   let proctorAssignments = [];
   let proctorCandidates = [];
   const myProctoredExamIds = new Set();
@@ -957,6 +958,8 @@
     if (remoteSubmitBtn) remoteSubmitBtn.classList.toggle("hidden", a.status !== "active");
     const photoDetails = $("proctorPhotosSection");
     if (photoDetails && "open" in photoDetails) photoDetails.open = false;
+    const speechDetails = $("speechClipsSection");
+    if (speechDetails && "open" in speechDetails) speechDetails.open = false;
     const eventDetails = $("eventDetailsSection");
     if (eventDetails && "open" in eventDetails) eventDetails.open = false;
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
@@ -987,6 +990,7 @@
     }
 
     $("proctorPhotoEvidenceActions")?.classList.toggle("hidden", proctorOnly);
+    $("speechClipEvidenceActions")?.classList.toggle("hidden", proctorOnly);
 
     const messageSection = $("teacherMessageSection");
     if (messageSection && "open" in messageSection) messageSection.open = a.status === "active";
@@ -1010,6 +1014,7 @@
     await Promise.all([
       loadSavedResponses(a),
       loadProctorPhotos(a),
+      loadSpeechClips(a),
       loadAttemptMessageHistory(a)
     ]);
 
@@ -1262,7 +1267,7 @@
     const action = saved ? "preserve" : "release";
     const message = saved
       ? `Preserve ${targetIds.length} selected photo${targetIds.length === 1 ? "" : "s"} as examination evidence? These photos will no longer be deleted by the normal 7-day cleanup until you release them.`
-      : `Release ${targetIds.length} preserved photo${targetIds.length === 1 ? "" : "s"}? They will return to the normal retention policy and may be deleted by the next cleanup if already older than 24 hours.`;
+      : `Release ${targetIds.length} preserved photo${targetIds.length === 1 ? "" : "s"}? They will return to the normal retention policy and may be deleted by the next cleanup if already older than 7 days.`;
 
     if (!confirm(message)) return;
 
@@ -1287,6 +1292,179 @@
     }
 
     await loadProctorPhotos(currentDetailAttempt);
+  }
+
+
+  async function loadSpeechClips(attempt) {
+    const list = $("speechClipList");
+    const note = $("speechClipsNote");
+    const count = $("speechClipsCount");
+    if (!list || !note || !count) return;
+
+    list.innerHTML = '<p class="muted">Loading speech clips…</p>';
+    count.textContent = "Loading…";
+    currentSpeechClips = [];
+    updateSpeechClipSelection();
+
+    try {
+      const { data, error } = await db.functions.invoke("list-speech-clips", {
+        body: { attempt_id: attempt.id }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const clips = data?.clips || [];
+      currentSpeechClips = clips;
+      count.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
+      if ($("summarySpeechClips")) $("summarySpeechClips").textContent = String(clips.length);
+
+      if (!clips.length) {
+        note.textContent = "No unexpired or preserved triggered speech clips are available for this attempt.";
+        list.innerHTML = '<p class="muted">No speech clips available.</p>';
+        updateSpeechClipSelection();
+        return;
+      }
+
+      const evidenceCount = clips.filter(c => c.evidence_saved).length;
+      const completedCount = clips.filter(c => c.transcription_status === "completed").length;
+      note.textContent = evidenceCount
+        ? `${completedCount} transcribed • ${evidenceCount} preserved as evidence`
+        : `${completedCount} transcribed • ordinary clips expire after 7 days`;
+
+      list.innerHTML = "";
+
+      for (const clip of clips) {
+        const card = document.createElement("article");
+        card.className = "speech-clip-card";
+        card.dataset.clipId = clip.id;
+        card.dataset.evidenceSaved = clip.evidence_saved ? "true" : "false";
+
+        const selectLabel = document.createElement("label");
+        selectLabel.className = "speech-clip-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "speech-clip-checkbox";
+        checkbox.value = clip.id;
+        checkbox.addEventListener("change", updateSpeechClipSelection);
+        const selectText = document.createElement("span");
+        selectText.textContent = "Select";
+        selectLabel.append(checkbox, selectText);
+
+        const head = document.createElement("div");
+        head.className = "speech-clip-head";
+        const duration = Number(clip.duration_seconds || 0);
+        const statusLabel = clip.transcription_status === "completed"
+          ? "Transcribed"
+          : clip.transcription_status === "no_speech"
+            ? "No clear speech"
+            : clip.transcription_status === "failed"
+              ? "Transcription failed"
+              : "Transcribing";
+        head.innerHTML = `
+          <div>
+            <strong>${escapeHtml(fmt(clip.captured_at))}</strong>
+            <span>${escapeHtml(duration ? `${duration.toFixed(1)} sec` : "Short clip")} • ${escapeHtml(statusLabel)}</span>
+          </div>
+          ${clip.evidence_saved ? '<span class="proctor-evidence-badge speech-evidence-badge">Evidence</span>' : ""}
+        `;
+
+        const audio = document.createElement("audio");
+        audio.controls = true;
+        audio.preload = "none";
+        audio.src = clip.url;
+
+        const transcript = document.createElement("div");
+        transcript.className = "speech-transcript";
+        const transcriptText = String(clip.transcript || "").trim();
+        if (clip.transcription_status === "completed" && transcriptText) {
+          transcript.innerHTML = `
+            <strong>Transcript</strong>
+            <p>${escapeHtml(transcriptText)}</p>
+            ${clip.transcription_language ? `<span class="muted">Detected language: ${escapeHtml(clip.transcription_language)}</span>` : ""}
+          `;
+        } else if (clip.transcription_status === "no_speech") {
+          transcript.innerHTML = '<strong>Transcript</strong><p class="muted">No clear speech was recognized in this clip.</p>';
+        } else if (clip.transcription_status === "failed") {
+          transcript.innerHTML = `<strong>Transcript</strong><p class="muted">Transcription unavailable${clip.transcription_error ? `: ${escapeHtml(clip.transcription_error)}` : "."}</p>`;
+        } else {
+          transcript.innerHTML = '<strong>Transcript</strong><p class="muted">Transcription is pending.</p>';
+        }
+
+        const retention = document.createElement("div");
+        retention.className = "speech-clip-retention muted";
+        retention.textContent = clip.evidence_saved
+          ? `Preserved as evidence${clip.evidence_saved_at ? ` • ${fmt(clip.evidence_saved_at)}` : ""}`
+          : `Expires ${fmt(clip.expires_at)}`;
+
+        card.append(selectLabel, head, audio, transcript, retention);
+        list.appendChild(card);
+      }
+
+      updateSpeechClipSelection();
+    } catch (error) {
+      console.warn("Could not load speech clips:", error);
+      count.textContent = "Unavailable";
+      if ($("summarySpeechClips")) $("summarySpeechClips").textContent = "—";
+      note.textContent = "Speech clips could not be loaded.";
+      list.innerHTML = `<p class="muted">${escapeHtml(error?.message || String(error))}</p>`;
+      updateSpeechClipSelection();
+    }
+  }
+
+  function getSelectedSpeechClipIds() {
+    return [...document.querySelectorAll(".speech-clip-checkbox:checked")]
+      .map(input => input.value)
+      .filter(Boolean);
+  }
+
+  function updateSpeechClipSelection() {
+    const selectedIds = getSelectedSpeechClipIds();
+    const selection = $("speechClipSelection");
+    const saveBtn = $("saveSelectedSpeechEvidenceBtn");
+    const releaseBtn = $("releaseSelectedSpeechEvidenceBtn");
+
+    if (selection) selection.textContent = `${selectedIds.length} selected`;
+
+    const selected = currentSpeechClips.filter(c => selectedIds.includes(c.id));
+    if (saveBtn) saveBtn.disabled = !selected.some(c => !c.evidence_saved);
+    if (releaseBtn) releaseBtn.disabled = !selected.some(c => c.evidence_saved);
+  }
+
+  async function setSelectedSpeechEvidence(saved) {
+    const ids = getSelectedSpeechClipIds();
+    if (!ids.length || !currentDetailAttempt) return;
+
+    const targetIds = currentSpeechClips
+      .filter(c => ids.includes(c.id) && Boolean(c.evidence_saved) !== saved)
+      .map(c => c.id);
+    if (!targetIds.length) return;
+
+    const action = saved ? "preserve" : "release";
+    const ok = confirm(saved
+      ? `Preserve ${targetIds.length} selected speech clip${targetIds.length === 1 ? "" : "s"} as examination evidence? Preserved clips are excluded from normal cleanup until released.`
+      : `Release ${targetIds.length} preserved speech clip${targetIds.length === 1 ? "" : "s"}? They will return to the normal 7-day retention policy.`
+    );
+    if (!ok) return;
+
+    const saveBtn = $("saveSelectedSpeechEvidenceBtn");
+    const releaseBtn = $("releaseSelectedSpeechEvidenceBtn");
+    if (saveBtn) saveBtn.disabled = true;
+    if (releaseBtn) releaseBtn.disabled = true;
+
+    const { data, error } = await db.rpc("set_proctor_speech_evidence", {
+      p_clip_ids: targetIds,
+      p_saved: saved
+    });
+
+    if (error) {
+      alert(`Could not ${action} selected speech evidence: ${error.message}`);
+      updateSpeechClipSelection();
+      return;
+    }
+
+    if (!data) alert("No speech clips were updated. They may no longer be available.");
+    await loadSpeechClips(currentDetailAttempt);
   }
 
 
@@ -4872,6 +5050,8 @@
 
   $("saveSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(true));
   $("releaseSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(false));
+  $("saveSelectedSpeechEvidenceBtn")?.addEventListener("click", () => setSelectedSpeechEvidence(true));
+  $("releaseSelectedSpeechEvidenceBtn")?.addEventListener("click", () => setSelectedSpeechEvidence(false));
 
   $("assignProctorBtn")?.addEventListener("click", assignSelectedProctor);
   $("reloadProctorsBtn")?.addEventListener("click", loadProctorManagement);
