@@ -4588,12 +4588,18 @@
     if (error || !data) return;
 
     const status = String(data.status || "");
-    if (status === "accepted" && data.answer_sdp && !teacherLivePeer.currentRemoteDescription) {
+    if (status === "requested") {
+      setTeacherLiveCameraStatus("Request sent. Waiting for the student page to receive and accept it…");
+    } else if (status === "accepted" && data.answer_sdp && !teacherLivePeer.currentRemoteDescription) {
       try {
         await teacherLivePeer.setRemoteDescription({ type:"answer", sdp:data.answer_sdp });
-        setTeacherLiveCameraStatus("Student accepted. Connecting live video…");
+        setTeacherLiveCameraStatus("Student accepted. Establishing the live video connection…");
       } catch (error) {
-        setTeacherLiveCameraStatus(`Could not complete connection: ${error?.message || error}`);
+        setTeacherLiveCameraStatus(`Student accepted, but WebRTC setup failed: ${error?.message || error}`);
+      }
+    } else if (status === "accepted" && teacherLivePeer.currentRemoteDescription) {
+      if (teacherLivePeer.connectionState !== "connected") {
+        setTeacherLiveCameraStatus("Student accepted. Waiting for the peer-to-peer video connection…");
       }
     } else if (status === "declined") {
       setTeacherLiveCameraStatus("Student declined the live camera request.");
