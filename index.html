@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard</title>
-  <link rel="stylesheet" href="style.css?v=20260930-1825">
+  <link rel="stylesheet" href="style.css?v=20261002-1015">
 </head>
 <body>
   <div id="watermark" class="watermark" aria-hidden="true"></div>
@@ -36,7 +36,7 @@
 
       <label class="check">
         <input type="checkbox" id="consentBox">
-        <span>I understand that exam-behavior events will be recorded, the front camera will take a proctoring photo, and the microphone will be used only to detect possible speech events. Microphone audio is not recorded or uploaded. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
+        <span>I understand that exam-behavior events will be recorded, the front camera will take proctoring photos, and an authorized teacher may request a temporary live camera check during an active exam. A live view begins only after you accept the request. The microphone will be used only to detect possible speech events. Microphone audio is not recorded or uploaded. Photos are normally deleted after 24 hours; an authorized teacher may preserve selected photos longer when needed for examination review or evidence.</span>
       </label>
 
       <section class="exam-preflight" aria-label="Exam entry readiness">
@@ -188,6 +188,19 @@
         </div>
       </div>
 
+      <div id="liveCameraRequestModal" class="live-camera-request-modal hidden" role="dialog" aria-modal="true" aria-labelledby="liveCameraRequestTitle">
+        <div class="live-camera-request-card">
+          <div class="live-camera-request-icon">📹</div>
+          <h2 id="liveCameraRequestTitle">Teacher Requests Live Camera</h2>
+          <p>Your teacher is requesting a temporary live view of your front camera for exam monitoring.</p>
+          <p class="muted">The live video is not recorded by this feature. Your regular proctoring photos continue separately.</p>
+          <div class="live-camera-request-actions">
+            <button id="acceptLiveCameraBtn" type="button" class="primary">Allow Live Camera</button>
+            <button id="declineLiveCameraBtn" type="button">Not Now</button>
+          </div>
+        </div>
+      </div>
+
       <div id="warningBar" class="warning hidden" role="alert"></div>
 
       <form id="examForm" class="question-list"></form>
@@ -334,7 +347,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20260929-0050"></script>
-  <script src="app.js?v=20261001-1425"></script>
+  <script src="app.js?v=20261002-1015"></script>
   <script src="student-feedback.js?v=20260929-0050"></script>
 </body>
 </html>
