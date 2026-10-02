@@ -543,7 +543,31 @@
     setTimeout(() => popup.print(), 250);
   }
 
-  $("openTestAnalysisBtn")?.addEventListener("click", computeAnalysis);
+  $("openTestAnalysisBtn")?.addEventListener("click", () => {
+    const examId = $("examResultsPanel")?.dataset.examId || "";
+    if (!examId) {
+      const status = $("testAnalysisStatus");
+      if (status) {
+        status.textContent = "Open an exam result first.";
+        status.classList.add("error");
+      }
+      return;
+    }
+
+    const popup = window.open(
+      "test-analysis.html?exam_id=" + encodeURIComponent(examId),
+      "_blank",
+      "noopener"
+    );
+
+    if (!popup) {
+      const status = $("testAnalysisStatus");
+      if (status) {
+        status.textContent = "Your browser blocked the Test Analysis tab. Allow pop-ups for this site and try again.";
+        status.classList.add("error");
+      }
+    }
+  });
   $("closeTestAnalysisBtn")?.addEventListener("click", () => $("testAnalysisPanel")?.classList.add("hidden"));
   $("downloadTestAnalysisCsvBtn")?.addEventListener("click", downloadCsv);
   $("printTestAnalysisBtn")?.addEventListener("click", printReport);
