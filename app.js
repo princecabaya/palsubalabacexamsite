@@ -21,9 +21,9 @@
     const note = $("mobileMonitoringNote");
     if (!note) return;
     if (isIOSBrowser()) {
-      note.textContent = "iPhone/iPad note: Safari does not expose system screenshot events to webpages. Screenshot detection is unavailable; focus, restricted actions, camera, and microphone monitoring remain active.";
+      note.textContent = "Exam monitoring is active on this device.";
       note.classList.remove("hidden");
-      note.title = "System screenshots taken with the iPhone buttons cannot be reliably detected by Safari.";
+      note.title = "Exam monitoring is active.";
     } else {
       note.classList.add("hidden");
       note.textContent = "";
