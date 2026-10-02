@@ -1274,6 +1274,33 @@
     }
   }
 
+  function hideObjectiveScorePanel() {
+    $("objectiveScorePanel")?.classList.add("hidden");
+  }
+
+  function showObjectiveScorePanel(score, maxScore, { released = false } = {}) {
+    const panel = $("objectiveScorePanel");
+    const value = $("objectiveScoreValue");
+    const percent = $("objectiveScorePercent");
+    const note = $("objectiveScoreNote");
+    if (!panel || !value || !percent || !note) return;
+
+    const s = Number(score);
+    const m = Number(maxScore);
+    const hasScore = Number.isFinite(s) && Number.isFinite(m);
+
+    value.textContent = hasScore ? `${s}/${m}` : "Score pending";
+    percent.textContent = hasScore && m > 0
+      ? `${((s / m) * 100).toFixed(2).replace(/\.00$/, "")}%`
+      : "—";
+
+    note.textContent = released
+      ? "Your full results have been released. The item-by-item review is available below."
+      : "Your objective score is available now. Item-by-item correct/incorrect results and answer keys remain hidden until your teacher releases the full results.";
+
+    panel.classList.remove("hidden");
+  }
+
   $("viewResultBtn")?.addEventListener("click", async () => {
     const examCode = $("examCode").value.trim();
     const studentNo = $("studentNo").value.trim();
@@ -1296,20 +1323,29 @@
     button.disabled = false;
 
     if (error || !data) {
-      const message = error?.message || "No submitted result was found.";
-      msg.textContent = /not yet released/i.test(message)
-        ? "Your exam was submitted, but your teacher has not released the score/results yet."
-        : message;
+      msg.textContent = error?.message || "No submitted result was found.";
       return;
     }
 
     loginView.classList.add("hidden");
     examView.classList.add("hidden");
     doneView.classList.remove("hidden");
-    $("doneText").textContent = data.grading_status === "approved"
-      ? "Your latest teacher-approved score is shown below."
-      : "Your latest submitted result is shown below. Some constructed-response scores may still be awaiting teacher review.";
     $("aiFeedbackPanel")?.classList.add("hidden");
+
+    const detailsReleased = data.results_released !== false;
+    showObjectiveScorePanel(data.score ?? null, data.max_score ?? null, { released: detailsReleased });
+
+    if (!detailsReleased) {
+      $("doneText").textContent =
+        "Your objective score is shown below. Correct/incorrect items and answer keys will remain hidden until your teacher releases the full results.";
+      $("resultReportPanel")?.classList.add("hidden");
+      $("flexScorePanel")?.classList.add("hidden");
+      return;
+    }
+
+    $("doneText").textContent = data.grading_status === "approved"
+      ? "Your latest teacher-approved result is shown below."
+      : "Your released result is shown below. Some constructed-response scores may still be awaiting teacher review.";
     window.ExamReport?.showStudentReport?.(data);
     updateFlexScoreContext({
       score: data.score ?? null,
@@ -3629,19 +3665,20 @@
     const fixedTimer = $("fixedRemainingTime");
     if (fixedTimer) fixedTimer.textContent = "00:00";
 
+    const objectiveResult = Array.isArray(data) ? data[0] : data;
     $("doneText").textContent =
-      "Your exam has been submitted successfully. Your score and correct answers will be available only after your teacher releases the results.";
+      "Your exam has been submitted successfully. Your objective score is shown below. Correct/incorrect items and answer keys will be available only after your teacher releases the full results.";
 
-    // Keep student-facing score/report features hidden until the teacher releases results.
+    showObjectiveScorePanel(
+      objectiveResult?.score ?? null,
+      objectiveResult?.max_score ?? null,
+      { released: false }
+    );
+
+    // Keep item-by-item review, answer keys, AI feedback, and celebration tools hidden until release.
     $("resultReportPanel")?.classList.add("hidden");
     $("aiFeedbackPanel")?.classList.add("hidden");
     $("flexScorePanel")?.classList.add("hidden");
-    updateFlexScoreContext({
-      score: null,
-      maxScore: null,
-      examTitle: attempt?.exam_title || "",
-      studentName: attempt?.student_name || ""
-    });
 
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
