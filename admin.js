@@ -25,6 +25,9 @@
   let teacherLivePeer = null;
   let teacherLiveSessionId = null;
   let teacherLivePollHandle = null;
+  let groupLiveExam = null;
+  const groupLivePeers = new Map();
+  let groupLiveClosing = false;
   let currentProctorPhotos = [];
   let currentSpeechClips = [];
   let proctorAssignments = [];
@@ -611,6 +614,9 @@
               </button>
               <div class="attempt-group-actions">
                 <button type="button" class="exam-excel-btn" title="Download this examination's attempt records as Excel">Excel</button>
+                ${status.key === "active" && group.activeCount
+                  ? '<button type="button" class="group-live-proctor-btn primary" title="Request live cameras from active students and open the multi-student proctoring page">Live Proctor</button>'
+                  : ''}
                 ${status.key === "active" && !group.archived && (currentTeacherProfile?.role === "main_admin" || group.ownerId === currentUserId)
                   ? '<button type="button" class="archive-active-exam-btn danger-outline" title="Close this exam to new entries while preserving all existing attempts and scores">Archive Exam</button>'
                   : ''}
@@ -631,6 +637,11 @@
         header.querySelector(".exam-excel-btn").addEventListener("click", async (event) => {
           event.stopPropagation();
           await exportExamAttemptsExcel(group.key, group.title, group.code, event.currentTarget);
+        });
+
+        header.querySelector(".group-live-proctor-btn")?.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await openGroupLiveProctor(group, event.currentTarget);
         });
 
         header.querySelector(".archive-active-exam-btn")?.addEventListener("click", async (event) => {
@@ -4853,6 +4864,213 @@
     }
   }
 
+  function groupLiveCardId(attemptId) {
+    return "group-live-card-" + attemptId;
+  }
+
+  function renderGroupLiveCard(attempt) {
+    const grid = $("groupLiveProctorGrid");
+    if (!grid || !attempt?.id) return null;
+    let card = document.getElementById(groupLiveCardId(attempt.id));
+    if (card) return card;
+    card = document.createElement("article");
+    card.id = groupLiveCardId(attempt.id);
+    card.className = "group-live-student-card";
+    card.dataset.attemptId = attempt.id;
+    const studentName = escapeHtml(attempt.students?.full_name || "Student");
+    const studentNo = escapeHtml(attempt.students?.student_no || "");
+    card.innerHTML = '<div class="group-live-student-head"><div><strong>' + studentName + '</strong><span>' + studentNo + '</span></div><span class="badge warn group-live-status">Requesting…</span></div>' +
+      '<div class="group-live-video-stage"><video autoplay playsinline></video><div class="group-live-video-placeholder">Waiting for student to allow live camera…</div></div>' +
+      '<div class="group-live-student-message"><textarea rows="2" maxlength="300" placeholder="Message this student…"></textarea><button type="button" class="primary group-live-send-student">Send</button></div>' +
+      '<span class="message-inline group-live-student-message-status" role="status"></span>';
+    const sendBtn = card.querySelector(".group-live-send-student");
+    const input = card.querySelector("textarea");
+    sendBtn?.addEventListener("click", () => sendGroupLiveStudentMessage(attempt.id));
+    input?.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendGroupLiveStudentMessage(attempt.id); }
+    });
+    grid.appendChild(card);
+    return card;
+  }
+
+  function setGroupLiveCardStatus(attemptId, text, tone = "warn") {
+    const badge = document.getElementById(groupLiveCardId(attemptId))?.querySelector(".group-live-status");
+    if (!badge) return;
+    badge.className = "badge " + tone + " group-live-status";
+    badge.textContent = text;
+  }
+
+  async function pollGroupLiveSession(attemptId) {
+    const entry = groupLivePeers.get(attemptId);
+    if (!entry?.sessionId || !entry.pc) return;
+    const { data, error } = await db.rpc("admin_get_live_camera_session", { p_session_id: entry.sessionId });
+    if (error || !data) { setGroupLiveCardStatus(attemptId, "Request error", "warn"); return; }
+    const status = String(data.status || "");
+    if (status === "requested") { setGroupLiveCardStatus(attemptId, "Waiting for student", "warn"); return; }
+    if (status === "accepted" && data.answer_sdp && !entry.pc.currentRemoteDescription) {
+      try { await entry.pc.setRemoteDescription({ type:"answer", sdp:data.answer_sdp }); setGroupLiveCardStatus(attemptId, "Connecting…", "warn"); }
+      catch (error) { console.warn("Group live remote description failed:", error); setGroupLiveCardStatus(attemptId, "Connection failed", "warn"); }
+      return;
+    }
+    if (status === "accepted" && entry.pc.currentRemoteDescription && entry.pc.connectionState !== "connected") { setGroupLiveCardStatus(attemptId, "Connecting…", "warn"); return; }
+    if (status === "connected") { setGroupLiveCardStatus(attemptId, "Live", "ok"); return; }
+    if (["declined","expired","ended","failed"].includes(status)) {
+      clearInterval(entry.pollHandle); entry.pollHandle = null;
+      setGroupLiveCardStatus(attemptId, status === "declined" ? "Declined" : status === "expired" ? "Expired" : "Ended", status === "declined" ? "warn" : "");
+      document.getElementById(groupLiveCardId(attemptId))?.querySelector(".group-live-video-placeholder")?.classList.remove("hidden");
+    }
+  }
+
+  async function startGroupLiveStudent(attempt) {
+    if (!attempt?.id || attempt.status !== "active") return;
+    const existing = groupLivePeers.get(attempt.id);
+    if (existing?.pc && ["connecting","connected"].includes(existing.pc.connectionState)) return;
+    if (existing?.sessionId) {
+      clearInterval(existing.pollHandle); try { existing.pc?.close(); } catch (_) {}
+      try { await db.rpc("admin_end_live_camera", { p_session_id: existing.sessionId }); } catch (_) {}
+      groupLivePeers.delete(attempt.id);
+    }
+    const card = renderGroupLiveCard(attempt);
+    const video = card?.querySelector("video");
+    const placeholder = card?.querySelector(".group-live-video-placeholder");
+    setGroupLiveCardStatus(attempt.id, "Preparing…", "warn");
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      const entry = { attempt, pc, sessionId:null, pollHandle:null };
+      groupLivePeers.set(attempt.id, entry);
+      pc.addTransceiver("video", { direction:"recvonly" });
+      pc.addEventListener("track", event => {
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
+        if (video) { video.srcObject = stream; video.play().catch(()=>{}); }
+        placeholder?.classList.add("hidden");
+        setGroupLiveCardStatus(attempt.id, "Live", "ok");
+        if (entry.sessionId) db.rpc("admin_mark_live_camera_connected", { p_session_id: entry.sessionId }).catch(()=>{});
+      });
+      pc.addEventListener("connectionstatechange", () => {
+        if (pc.connectionState === "connected") setGroupLiveCardStatus(attempt.id, "Live", "ok");
+        else if (pc.connectionState === "failed") setGroupLiveCardStatus(attempt.id, "Connection failed", "warn");
+        else if (pc.connectionState === "disconnected") setGroupLiveCardStatus(attempt.id, "Disconnected", "warn");
+      });
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForTeacherIceGathering(pc);
+      const { data, error } = await db.rpc("admin_request_live_camera", { p_attempt_id: attempt.id, p_offer_sdp: pc.localDescription?.sdp || offer.sdp });
+      if (error) throw error;
+      entry.sessionId = data?.id || null;
+      if (!entry.sessionId) throw new Error("Live camera request did not return a session ID.");
+      setGroupLiveCardStatus(attempt.id, "Waiting for student", "warn");
+      entry.pollHandle = setInterval(() => pollGroupLiveSession(attempt.id).catch(()=>{}), 1800);
+      await pollGroupLiveSession(attempt.id);
+    } catch (error) {
+      console.warn("Group live camera request failed:", error);
+      setGroupLiveCardStatus(attempt.id, "Request failed", "warn");
+      const status = card?.querySelector(".group-live-student-message-status");
+      if (status) { status.textContent = String(error?.message || error); status.classList.add("error"); }
+    }
+  }
+
+  async function openGroupLiveProctor(group, button = null) {
+    const activeAttempts = (group?.attempts || []).filter(a => a.status === "active");
+    if (!activeAttempts.length) { alert("There are no active students in this examination."); return; }
+    await closeGroupLiveProctor({ notifyServer:true });
+    groupLiveExam = { id:group.key, title:group.title, code:group.code, attempts:activeAttempts };
+    const panel = $("groupLiveProctorPanel");
+    const grid = $("groupLiveProctorGrid");
+    const meta = $("groupLiveProctorMeta");
+    const title = $("groupLiveProctorTitle");
+    if (title) title.textContent = group.title || "Live Proctoring";
+    if (meta) meta.textContent = activeAttempts.length + " active student" + (activeAttempts.length === 1 ? "" : "s") + " • " + (group.code || "");
+    if (grid) grid.innerHTML = "";
+    if ($("groupBroadcastMessage")) $("groupBroadcastMessage").value = "";
+    if ($("groupBroadcastStatus")) { $("groupBroadcastStatus").textContent = ""; $("groupBroadcastStatus").classList.remove("error","success"); }
+    panel?.classList.remove("hidden");
+    activeAttempts.forEach(renderGroupLiveCard);
+    const originalText = button?.textContent || "";
+    if (button) { button.disabled = true; button.textContent = "Requesting…"; }
+    const batchSize = 4;
+    for (let i = 0; i < activeAttempts.length; i += batchSize) {
+      await Promise.allSettled(activeAttempts.slice(i, i + batchSize).map(startGroupLiveStudent));
+    }
+    if (button) { button.disabled = false; button.textContent = originalText || "Live Proctor"; }
+  }
+
+  async function refreshGroupLiveRequests() {
+    if (!groupLiveExam) return;
+    const btn = $("refreshGroupLiveBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
+    try {
+      const activeNow = attemptsCache.filter(a => a.status === "active" && String(a.exams?.id || "") === String(groupLiveExam.id));
+      groupLiveExam.attempts = activeNow;
+      const activeIds = new Set(activeNow.map(a => a.id));
+      for (const [attemptId, entry] of Array.from(groupLivePeers.entries())) {
+        if (!activeIds.has(attemptId)) {
+          clearInterval(entry.pollHandle); try { entry.pc?.close(); } catch (_) {}
+          if (entry.sessionId) db.rpc("admin_end_live_camera", { p_session_id: entry.sessionId }).catch(()=>{});
+          groupLivePeers.delete(attemptId); document.getElementById(groupLiveCardId(attemptId))?.remove();
+        }
+      }
+      for (const attempt of activeNow) {
+        renderGroupLiveCard(attempt);
+        const entry = groupLivePeers.get(attempt.id);
+        if (!entry || ["failed","closed","disconnected"].includes(entry.pc?.connectionState || "")) await startGroupLiveStudent(attempt);
+      }
+      if ($("groupLiveProctorMeta")) $("groupLiveProctorMeta").textContent = activeNow.length + " active student" + (activeNow.length === 1 ? "" : "s") + " • " + (groupLiveExam.code || "");
+    } finally { if (btn) { btn.disabled = false; btn.textContent = "Refresh Requests"; } }
+  }
+
+  async function closeGroupLiveProctor({ notifyServer = true } = {}) {
+    if (groupLiveClosing) return;
+    groupLiveClosing = true;
+    try {
+      const jobs = [];
+      for (const entry of groupLivePeers.values()) {
+        clearInterval(entry.pollHandle); try { entry.pc?.close(); } catch (_) {}
+        if (notifyServer && entry.sessionId) jobs.push(db.rpc("admin_end_live_camera", { p_session_id: entry.sessionId }).catch(()=>{}));
+      }
+      groupLivePeers.clear();
+      if (jobs.length) await Promise.allSettled(jobs);
+    } finally {
+      groupLiveExam = null; $("groupLiveProctorPanel")?.classList.add("hidden");
+      if ($("groupLiveProctorGrid")) $("groupLiveProctorGrid").innerHTML = "";
+      groupLiveClosing = false;
+    }
+  }
+
+  async function sendGroupLiveStudentMessage(attemptId) {
+    const entry = groupLivePeers.get(attemptId);
+    const attempt = entry?.attempt || groupLiveExam?.attempts?.find(a => a.id === attemptId);
+    const card = document.getElementById(groupLiveCardId(attemptId));
+    const input = card?.querySelector("textarea");
+    const button = card?.querySelector(".group-live-send-student");
+    const status = card?.querySelector(".group-live-student-message-status");
+    if (!attempt || !input || !button || !status) return;
+    const message = input.value.trim();
+    if (!message) { status.textContent = "Enter a message first."; status.classList.add("error"); return; }
+    button.disabled = true; status.classList.remove("error","success"); status.textContent = "Sending…";
+    const { error } = await db.rpc("admin_send_attempt_message", { p_attempt_id:attempt.id, p_message:message });
+    button.disabled = false;
+    if (error) { status.textContent = error.message; status.classList.add("error"); return; }
+    input.value = ""; status.textContent = "Message sent."; status.classList.add("success");
+    setTimeout(() => { if (status.textContent === "Message sent.") { status.textContent = ""; status.classList.remove("success"); } }, 2500);
+  }
+
+  async function sendGroupBroadcastMessage() {
+    if (!groupLiveExam) return;
+    const input = $("groupBroadcastMessage"); const button = $("sendGroupBroadcastBtn"); const status = $("groupBroadcastStatus");
+    if (!input || !button || !status) return;
+    const message = input.value.trim();
+    if (!message) { status.textContent = "Enter a message first."; status.classList.add("error"); return; }
+    const activeAttempts = (groupLiveExam.attempts || []).filter(a => a.status === "active");
+    if (!activeAttempts.length) { status.textContent = "No active students are available."; status.classList.add("error"); return; }
+    button.disabled = true; status.classList.remove("error","success"); status.textContent = "Sending to " + activeAttempts.length + " students…";
+    const results = await Promise.allSettled(activeAttempts.map(a => db.rpc("admin_send_attempt_message", { p_attempt_id:a.id, p_message:message })));
+    let sent = 0, failed = 0;
+    for (const result of results) { if (result.status === "fulfilled" && !result.value?.error) sent += 1; else failed += 1; }
+    button.disabled = false; if (sent) input.value = "";
+    status.textContent = failed ? ("Sent to " + sent + "; " + failed + " failed.") : ("Message sent to all " + sent + " active students.");
+    status.classList.add(failed ? "error" : "success");
+  }
+
   async function requestTeacherLiveCamera() {
     const attempt = currentDetailAttempt;
     if (!attempt || attempt.status !== "active") {
@@ -5135,6 +5353,15 @@
   $("refreshBtn").addEventListener("click", refreshAttempts);
   $("requestLiveCameraBtn")?.addEventListener("click", requestTeacherLiveCamera);
   $("closeTeacherLiveCameraBtn")?.addEventListener("click", () => endTeacherLiveCamera({ notifyServer:true }));
+  $("closeGroupLiveProctorBtn")?.addEventListener("click", () => closeGroupLiveProctor({ notifyServer:true }));
+  $("refreshGroupLiveBtn")?.addEventListener("click", refreshGroupLiveRequests);
+  $("sendGroupBroadcastBtn")?.addEventListener("click", sendGroupBroadcastMessage);
+  $("groupBroadcastMessage")?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendGroupBroadcastMessage();
+    }
+  });
   $("sendTeacherLiveMessageBtn")?.addEventListener("click", sendTeacherLiveCameraMessage);
   $("teacherLiveMessageInput")?.addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -5157,6 +5384,7 @@
   $("closeDetail").addEventListener("click", closeAttemptDrawer);
   $("signOutBtn").addEventListener("click", async () => {
     clearInterval(pollHandle);
+    await closeGroupLiveProctor({ notifyServer:true });
     await db.auth.signOut();
     location.reload();
   });
