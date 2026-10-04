@@ -80,6 +80,8 @@
   let timerSyncHandle = null;
   let timerDeadlineMs = null;
   let timerExpiryCheckInFlight = false;
+  let timerHasObservedPositiveTime = false;
+  let timerStartupValidated = false;
   let submitted = false;
   let attemptMessagePollHandle = null;
   let pendingRestoreMessage = null;
@@ -2391,7 +2393,7 @@
     watermark.classList.add("active");
 
     renderQuestions(savedResponses);
-    startTimer();
+    await startTimer();
 
     if (restored) {
       warn("Your saved exam session has been restored.");
@@ -3413,12 +3415,19 @@
 
     if (error || !data?.length) return false;
 
-    const nextEnd = new Date(data[0].ends_at).getTime();
-    if (!Number.isFinite(nextEnd)) return false;
+    const rawEnd = data[0]?.ends_at;
+    if (!rawEnd) return false;
+
+    const nextEnd = new Date(rawEnd).getTime();
+    if (!Number.isFinite(nextEnd) || nextEnd <= 0) return false;
 
     const previousEnd = timerDeadlineMs;
     timerDeadlineMs = nextEnd;
-    attempt.ends_at = data[0].ends_at;
+    attempt.ends_at = rawEnd;
+
+    if (nextEnd > Date.now()) {
+      timerHasObservedPositiveTime = true;
+    }
 
     if (announce && previousEnd && nextEnd > previousEnd + 1000) {
       const addedMinutes = Math.round((nextEnd - previousEnd) / 60000);
@@ -3428,15 +3437,58 @@
     return true;
   }
 
-  function startTimer() {
+  async function startTimer() {
     clearInterval(timerHandle);
     clearInterval(timerSyncHandle);
 
-    timerDeadlineMs = new Date(attempt.ends_at).getTime();
     timerExpiryCheckInFlight = false;
+    timerHasObservedPositiveTime = false;
+    timerStartupValidated = false;
+
+    const rawInitialEnd = attempt?.ends_at;
+    const parsedInitialEnd = rawInitialEnd ? new Date(rawInitialEnd).getTime() : NaN;
+    timerDeadlineMs = Number.isFinite(parsedInitialEnd) && parsedInitialEnd > 0
+      ? parsedInitialEnd
+      : null;
+
+    // Validate against the authoritative server deadline BEFORE enabling auto-submit.
+    // A missing/null/zero deadline must never submit a student immediately on entry.
+    const synced = await syncAttemptDeadline({ announce: false });
+    timerStartupValidated = Boolean(synced);
+
+    if (!timerStartupValidated || !Number.isFinite(timerDeadlineMs)) {
+      $("timer").textContent = "--:--";
+      const fixedTimer = $("fixedRemainingTime");
+      if (fixedTimer) fixedTimer.textContent = "--:--";
+      warn("The exam timer could not be verified. Your exam remains open and will NOT be auto-submitted. Please inform the teacher.");
+      await logEvent("timer_startup_validation_failed", {
+        initial_ends_at: rawInitialEnd || null
+      });
+      return;
+    }
+
+    const initialRemaining = timerDeadlineMs - Date.now();
+
+    // If the server returns an already-expired deadline at entry, do not convert
+    // that into an automatic submission. Leave the attempt untouched for teacher review.
+    if (initialRemaining <= 0) {
+      $("timer").textContent = "00:00";
+      const fixedTimer = $("fixedRemainingTime");
+      if (fixedTimer) fixedTimer.textContent = "00:00";
+      warn("The server reports that this exam session has no remaining time. It was NOT submitted automatically. Please contact the teacher.");
+      await logEvent("timer_expired_on_entry_blocked", {
+        ends_at: attempt?.ends_at || null
+      });
+      return;
+    }
+
+    timerHasObservedPositiveTime = true;
 
     const tick = async () => {
-      const ms = Math.max(0, timerDeadlineMs - Date.now());
+      if (!timerStartupValidated || !Number.isFinite(timerDeadlineMs)) return;
+
+      const remainingRaw = timerDeadlineMs - Date.now();
+      const ms = Math.max(0, remainingRaw);
       const total = Math.ceil(ms / 1000);
       const min = Math.floor(total / 60);
       const sec = total % 60;
@@ -3445,31 +3497,42 @@
       const fixedTimer = $("fixedRemainingTime");
       if (fixedTimer) fixedTimer.textContent = $("timer").textContent;
 
-      if (ms <= 0 && !timerExpiryCheckInFlight) {
-        timerExpiryCheckInFlight = true;
+      if (remainingRaw > 0) {
+        timerHasObservedPositiveTime = true;
+        return;
+      }
 
-        // Re-check the authoritative server deadline before auto-submitting.
-        // This prevents a student from being submitted at the old deadline if
-        // the teacher granted extra time moments earlier.
-        const updated = await syncAttemptDeadline({ announce: true });
-        const stillExpired = !updated || timerDeadlineMs <= Date.now();
+      if (timerExpiryCheckInFlight || !timerHasObservedPositiveTime) return;
+      timerExpiryCheckInFlight = true;
 
-        timerExpiryCheckInFlight = false;
+      // Re-check the authoritative server deadline before auto-submitting.
+      const updated = await syncAttemptDeadline({ announce: true });
+      const stillExpired =
+        updated &&
+        Number.isFinite(timerDeadlineMs) &&
+        timerDeadlineMs <= Date.now();
 
-        if (stillExpired) {
-          clearInterval(timerHandle);
-          clearInterval(timerSyncHandle);
-          submitExam(true);
-        }
+      timerExpiryCheckInFlight = false;
+
+      // Auto-submit only when this browser actually observed positive exam time
+      // and that verified countdown later reached zero.
+      if (stillExpired && timerHasObservedPositiveTime) {
+        clearInterval(timerHandle);
+        clearInterval(timerSyncHandle);
+        submitExam(true);
+      } else if (!updated) {
+        warn("Timer verification failed at expiry. Your exam was NOT auto-submitted. Please contact the teacher.");
+        await logEvent("timer_expiry_validation_failed", {
+          last_known_ends_at: attempt?.ends_at || null
+        });
       }
     };
 
-    tick();
-    timerHandle = setInterval(tick, 1000);
+    await tick();
+    timerHandle = setInterval(() => { tick().catch(() => {}); }, 1000);
 
-    // Live-sync the deadline while the attempt is open.
     timerSyncHandle = setInterval(() => {
-      syncAttemptDeadline({ announce: true });
+      syncAttemptDeadline({ announce: true }).catch(() => {});
     }, 10_000);
   }
 
