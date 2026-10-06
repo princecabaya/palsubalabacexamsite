@@ -76,7 +76,7 @@ begin
         v_question_type,
         case
           when jsonb_typeof(v_q->'choices')='array' then
-            array(select jsonb_array_elements_text(v_q->'choices'))
+            v_q->'choices'
           else null
         end,
         nullif(v_q->>'correct_answer',''),
