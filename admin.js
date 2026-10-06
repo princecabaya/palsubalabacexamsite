@@ -122,9 +122,18 @@
 
     teacherWorkspaces = data || [];
     currentTeacherProfile = teacherWorkspaces.find(t => t.user_id === currentUserId) || null;
-    activeWorkspaceOwnerId = currentUserId;
 
     const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    if (isMainAdmin) {
+      const savedWorkspace = sessionStorage.getItem("exam_guard_admin_workspace") || "";
+      const validTeacherIds = new Set(teacherWorkspaces.filter(t => t.is_admin).map(t => String(t.user_id)));
+      activeWorkspaceOwnerId =
+        savedWorkspace === "__all__" || validTeacherIds.has(savedWorkspace)
+          ? savedWorkspace
+          : "__all__";
+    } else {
+      activeWorkspaceOwnerId = currentUserId;
+    }
     $("teacherWorkspaceBar")?.classList.toggle("hidden", !isMainAdmin);
     $("tabTeachersBtn")?.classList.toggle("hidden", !isMainAdmin);
 
@@ -148,10 +157,12 @@
     }
 
     select.value = activeWorkspaceOwnerId;
+    sessionStorage.setItem("exam_guard_admin_workspace", activeWorkspaceOwnerId);
     updateWorkspaceNote();
 
     select.onchange = async () => {
       activeWorkspaceOwnerId = select.value || currentUserId;
+      sessionStorage.setItem("exam_guard_admin_workspace", activeWorkspaceOwnerId);
       editingExamId = null;
       clearExamForm();
       $("examResultsPanel")?.classList.add("hidden");
