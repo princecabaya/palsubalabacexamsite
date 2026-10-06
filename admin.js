@@ -133,6 +133,11 @@
     const select = $("teacherWorkspaceSelect");
     select.innerHTML = "";
 
+    const allOption = document.createElement("option");
+    allOption.value = "__all__";
+    allOption.textContent = "All Teacher Workspaces — Main Admin Overview";
+    select.appendChild(allOption);
+
     for (const teacher of teacherWorkspaces.filter(t => t.is_admin)) {
       const option = document.createElement("option");
       option.value = teacher.user_id;
@@ -167,16 +172,40 @@
     const note = $("teacherWorkspaceNote");
     if (!note) return;
 
-    if (!teacher || activeWorkspaceOwnerId === currentUserId) {
-      note.textContent = "You are viewing your Main Admin examination workspace.";
+    if (activeWorkspaceOwnerId === "__all__") {
+      note.textContent = "Main Admin overview: showing examinations and attempts across all teacher workspaces, including legacy exams without an assigned owner.";
       return;
     }
 
-    note.textContent = `Support view: ${teacher.display_name || teacher.email}. Exams you create while this workspace is selected will belong to this teacher.`;
+    if (!teacher || activeWorkspaceOwnerId === currentUserId) {
+      note.textContent = "You are viewing your Main Admin examination workspace. Legacy exams without an assigned owner are also shown here.";
+      return;
+    }
+
+    note.textContent = `Support view: ${teacher.display_name || teacher.email}. Only examinations assigned to this teacher are shown.`;
   }
 
   function getActiveWorkspaceOwnerId() {
-    return activeWorkspaceOwnerId || currentUserId;
+    return activeWorkspaceOwnerId === "__all__"
+      ? currentUserId
+      : (activeWorkspaceOwnerId || currentUserId);
+  }
+
+  function workspaceMatchesOwner(ownerId) {
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    const selected = activeWorkspaceOwnerId || currentUserId;
+
+    if (!isMainAdmin) {
+      return ownerId === currentUserId;
+    }
+
+    if (selected === "__all__") return true;
+
+    // Older examinations created before multi-teacher ownership may have no owner.
+    // Keep them visible in the Main Admin's own workspace instead of silently hiding them.
+    if (selected === currentUserId && !ownerId) return true;
+
+    return ownerId === selected;
   }
 
   function bindTeacherManagement() {
@@ -469,11 +498,9 @@
       return;
     }
 
-    const workspaceOwnerId = getActiveWorkspaceOwnerId();
-    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
     attemptsCache = (data || []).filter(a => {
-      if (isMainAdmin) {
-        return !workspaceOwnerId || a.exams?.owner_id === workspaceOwnerId;
+      if (currentTeacherProfile?.role === "main_admin") {
+        return workspaceMatchesOwner(a.exams?.owner_id || null);
       }
       return a.exams?.owner_id === currentUserId || isProctorForExam(a.exams?.id);
     });
@@ -518,7 +545,11 @@
     });
 
     if (!filtered.length) {
-      rows.innerHTML = '<tr><td colspan="7">No attempts match this search.</td></tr>';
+      const selected = activeWorkspaceOwnerId || currentUserId;
+      const message = selected === "__all__"
+        ? "No attempts are currently visible across teacher workspaces."
+        : "No attempts are assigned to the selected teacher workspace.";
+      rows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
       return;
     }
 
@@ -3895,11 +3926,9 @@
       return;
     }
 
-    const workspaceOwnerId = getActiveWorkspaceOwnerId();
-    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
     examsCache = (exams || []).filter(e => {
-      if (isMainAdmin) {
-        return !workspaceOwnerId || e.owner_id === workspaceOwnerId;
+      if (currentTeacherProfile?.role === "main_admin") {
+        return workspaceMatchesOwner(e.owner_id || null);
       }
       return e.owner_id === currentUserId || isProctorForExam(e.id);
     });
@@ -3925,7 +3954,11 @@
     body.innerHTML = "";
 
     if (!examsCache.length) {
-      body.innerHTML = `<tr><td colspan="8">No exams found.</td></tr>`;
+      const selected = activeWorkspaceOwnerId || currentUserId;
+      const message = selected === "__all__"
+        ? "No examinations are currently visible across teacher workspaces."
+        : "No examinations are assigned to the selected teacher workspace.";
+      body.innerHTML = `<tr><td colspan="8">${escapeHtml(message)}</td></tr>`;
       return;
     }
 
