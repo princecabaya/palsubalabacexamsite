@@ -4068,6 +4068,7 @@
               <summary>More Actions</summary>
               <div class="exam-more-actions-menu">
                 <button type="button" data-action="closed">Close Exam</button>
+                <button type="button" data-action="draft">Return to Draft</button>
                 <button type="button" data-exam-action="retake">Retake Exam</button>
                 <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
               </div>
