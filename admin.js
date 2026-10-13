@@ -3760,8 +3760,19 @@
     if (!value) return "";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
-    const pad = n => String(n).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: EXAM_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(date);
+
+    const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
   }
 
   function collectExamForm() {
@@ -3903,10 +3914,27 @@
     return { ok: false, message };
   }
 
+  const EXAM_TIME_ZONE = "Asia/Manila";
+  const EXAM_TIME_OFFSET = "+08:00";
+
   function toIsoOrNull(value) {
     if (!value) return null;
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d.toISOString();
+    const raw = String(value).trim();
+
+    // datetime-local fields do not contain a timezone. Treat every exam
+    // schedule entered by faculty as Philippine Standard Time (UTC+8),
+    // regardless of the computer/browser's own timezone setting.
+    const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (localMatch) {
+      const seconds = localMatch[6] || "00";
+      const d = new Date(
+        `${localMatch[1]}-${localMatch[2]}-${localMatch[3]}T${localMatch[4]}:${localMatch[5]}:${seconds}${EXAM_TIME_OFFSET}`
+      );
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    }
+
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
 
   function setCreateMessage(message, isError = false) {
@@ -4632,7 +4660,7 @@
     }
 
     const ok = confirm(
-      `Extend the whole exam window to ${newEnd.toLocaleString()}?\n\n` +
+      `Extend the whole exam window to ${fmtExamTime(newEnd.toISOString())}?\n\n` +
       "This applies to all students. The exam duration will also be increased automatically when necessary so active students can continue until the new closing time."
     );
     if (!ok) return;
@@ -4649,7 +4677,7 @@
 
     const nextDuration = Number(data?.new_duration_minutes || exam.duration_minutes || 0);
     alert(
-      `Exam window extended successfully.\n\nNew closing time: ${newEnd.toLocaleString()}\nNew duration: ${nextDuration} minutes.\n\nActive student timers will pick up the new deadline automatically.`
+      `Exam window extended successfully.\n\nNew closing time: ${fmtExamTime(newEnd.toISOString())}\nNew duration: ${nextDuration} minutes.\n\nActive student timers will pick up the new deadline automatically.`
     );
     await loadExams();
     await refreshAttempts();
@@ -4901,7 +4929,7 @@
 
     const until = data?.permitted_until ? new Date(data.permitted_until) : null;
     alert(
-      `${studentName} may now edit the submitted attempt${until ? ` until ${until.toLocaleString()}` : ""}.\n\n` +
+      `${studentName} may now edit the submitted attempt${until ? ` until ${fmtExamTime(until.toISOString())}` : ""}.\n\n` +
       "Ask the student to enter the same Exam Code and Student ID. Their previous answers will load for editing, and they must submit again when finished."
     );
 
@@ -5520,7 +5548,7 @@
     alert(
       `${amount} minute${amount === 1 ? "" : "s"} added for ${studentName}.` +
       (newEnd && !Number.isNaN(newEnd.getTime())
-        ? `\n\nNew deadline: ${newEnd.toLocaleString()}`
+        ? `\n\nNew deadline: ${fmtExamTime(newEnd.toISOString())}`
         : "") +
       "\n\nThe student's timer will update automatically within about 10 seconds."
     );
@@ -5699,7 +5727,23 @@
   });
 
   function fmt(value) {
-    return value ? new Date(value).toLocaleString() : "—";
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: EXAM_TIME_ZONE,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    }).format(date);
+  }
+
+  function fmtExamTime(value) {
+    return fmt(value);
   }
 
   function escapeHtml(value) {
