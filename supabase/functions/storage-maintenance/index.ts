@@ -104,37 +104,21 @@ Deno.serve(async (req) => {
 });
 
 async function getStatus(admin: any) {
-  const photoCutoff = new Date(Date.now() - PHOTO_RETENTION_DAYS * 86400000).toISOString();
-  const audioCutoff = new Date(Date.now() - AUDIO_RETENTION_DAYS * 86400000).toISOString();
+  const now = new Date().toISOString();
 
-  const [{ data: photoObjects, error: photoObjectError }, { data: audioObjects, error: audioObjectError }] =
+  const [{ count: photoRows, error: photoCountError }, { count: audioRows, error: audioCountError }] =
     await Promise.all([
-      admin.schema("storage").from("objects")
-        .select("name,metadata,created_at")
-        .eq("bucket_id", PHOTO_BUCKET)
-        .lte("created_at", photoCutoff)
-        .limit(1000),
-      admin.schema("storage").from("objects")
-        .select("name,metadata,created_at")
-        .eq("bucket_id", AUDIO_BUCKET)
-        .lte("created_at", audioCutoff)
-        .limit(1000),
+      admin
+        .from("proctor_photos")
+        .select("id", { count: "exact", head: true })
+        .eq("evidence_saved", false)
+        .lt("expires_at", now),
+      admin
+        .from("proctor_speech_clips")
+        .select("id", { count: "exact", head: true })
+        .eq("evidence_saved", false)
+        .lt("expires_at", now),
     ]);
-
-  if (photoObjectError) throw photoObjectError;
-  if (audioObjectError) throw audioObjectError;
-
-  const { count: photoRows, error: photoCountError } = await admin
-    .from("proctor_photos")
-    .select("id", { count: "exact", head: true })
-    .eq("evidence_saved", false)
-    .lt("expires_at", new Date().toISOString());
-
-  const { count: audioRows, error: audioCountError } = await admin
-    .from("proctor_speech_clips")
-    .select("id", { count: "exact", head: true })
-    .eq("evidence_saved", false)
-    .lt("expires_at", new Date().toISOString());
 
   if (photoCountError) throw photoCountError;
   if (audioCountError) throw audioCountError;
@@ -147,111 +131,77 @@ async function getStatus(admin: any) {
       photos: Number(photoRows || 0),
       audio: Number(audioRows || 0),
     },
-    sample: {
-      photo_objects_older_than_7d: (photoObjects || []).length,
-      photo_bytes_first_1000: sumBytes(photoObjects || []),
-      audio_objects_older_than_7d: (audioObjects || []).length,
-      audio_bytes_first_1000: sumBytes(audioObjects || []),
-    },
     r2,
     retention_days: 7,
   };
 }
 
 async function cleanupPhotos(admin: any, limit: number) {
-  const cutoff = new Date(Date.now() - PHOTO_RETENTION_DAYS * 86400000).toISOString();
-
-  const { data: objects, error } = await admin.schema("storage").from("objects")
-    .select("name,metadata")
-    .eq("bucket_id", PHOTO_BUCKET)
-    .lte("created_at", cutoff)
+  const { data: rows, error } = await admin
+    .from("proctor_photos")
+    .select("id,object_path,byte_size,storage_provider")
+    .eq("evidence_saved", false)
+    .eq("storage_provider", "supabase")
+    .lt("expires_at", new Date().toISOString())
     .limit(limit);
 
   if (error) throw error;
-  const candidates = objects || [];
-  if (!candidates.length) return { deleted: 0, bytes: 0 };
+  if (!rows?.length) return { deleted: 0, bytes: 0 };
 
-  const paths = candidates.map((row: any) => String(row.name || "")).filter(Boolean);
-  const { data: protectedRows, error: protectedError } = await admin
-    .from("proctor_photos")
-    .select("object_path")
-    .in("object_path", paths)
-    .eq("evidence_saved", true);
+  const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
+  if (paths.length) {
+    const { error: removeError } = await admin.storage.from(PHOTO_BUCKET).remove(paths);
+    if (removeError) throw removeError;
+  }
 
-  if (protectedError) throw protectedError;
-
-  const protectedPaths = new Set((protectedRows || []).map((row: any) => String(row.object_path)));
-  const deletable = candidates.filter((row: any) => !protectedPaths.has(String(row.name)));
-  const deletablePaths = deletable.map((row: any) => String(row.name));
-
-  if (!deletablePaths.length) return { deleted: 0, bytes: 0 };
-
-  const { error: removeError } = await admin.storage.from(PHOTO_BUCKET).remove(deletablePaths);
-  if (removeError) throw removeError;
-
+  const ids = rows.map((row: any) => row.id);
   const { error: rowDeleteError } = await admin
     .from("proctor_photos")
     .delete()
-    .in("object_path", deletablePaths)
+    .in("id", ids)
+    .eq("storage_provider", "supabase")
     .eq("evidence_saved", false);
 
   if (rowDeleteError) throw rowDeleteError;
 
-  return { deleted: deletablePaths.length, bytes: sumBytes(deletable) };
+  return {
+    deleted: ids.length,
+    bytes: rows.reduce((sum: number, row: any) => sum + Number(row.byte_size || 0), 0),
+  };
 }
 
 async function cleanupAudio(admin: any, limit: number) {
-  const cutoff = new Date(Date.now() - AUDIO_RETENTION_DAYS * 86400000).toISOString();
-  const now = new Date().toISOString();
-
-  const { data: objects, error: objectError } = await admin.schema("storage").from("objects")
-    .select("name,metadata")
-    .eq("bucket_id", AUDIO_BUCKET)
-    .lte("created_at", cutoff)
+  const { data: rows, error } = await admin
+    .from("proctor_speech_clips")
+    .select("id,object_path,byte_size,storage_provider")
+    .eq("evidence_saved", false)
+    .eq("storage_provider", "supabase")
+    .lt("expires_at", new Date().toISOString())
     .limit(limit);
 
-  if (objectError) throw objectError;
-  const candidates = objects || [];
-  if (!candidates.length) return { deleted: 0, bytes: 0 };
+  if (error) throw error;
+  if (!rows?.length) return { deleted: 0, bytes: 0 };
 
-  const paths = candidates.map((row: any) => String(row.name || "")).filter(Boolean);
-
-  const { data: rows, error: rowError } = await admin
-    .from("proctor_speech_clips")
-    .select("id,object_path,evidence_saved,expires_at")
-    .in("object_path", paths);
-
-  if (rowError) throw rowError;
-
-  const rowByPath = new Map((rows || []).map((row: any) => [String(row.object_path), row]));
-  const deletable = candidates.filter((object: any) => {
-    const path = String(object.name || "");
-    const row: any = rowByPath.get(path);
-    if (!row) return true; // orphaned old object
-    if (row.evidence_saved) return false;
-    return Boolean(row.expires_at && String(row.expires_at) < now);
-  });
-
-  const deletablePaths = deletable.map((row: any) => String(row.name || "")).filter(Boolean);
-  if (!deletablePaths.length) return { deleted: 0, bytes: 0 };
-
-  const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(deletablePaths);
-  if (removeError) throw removeError;
-
-  const matchingIds = (rows || [])
-    .filter((row: any) => deletablePaths.includes(String(row.object_path)) && !row.evidence_saved)
-    .map((row: any) => row.id);
-
-  if (matchingIds.length) {
-    const { error: deleteError } = await admin
-      .from("proctor_speech_clips")
-      .delete()
-      .in("id", matchingIds)
-      .eq("evidence_saved", false);
-    if (deleteError) throw deleteError;
+  const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
+  if (paths.length) {
+    const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(paths);
+    if (removeError) throw removeError;
   }
 
-  return { deleted: deletablePaths.length, bytes: sumBytes(deletable) };
+  const ids = rows.map((row: any) => row.id);
+  const { error: rowDeleteError } = await admin
+    .from("proctor_speech_clips")
+    .delete()
+    .in("id", ids)
+    .eq("storage_provider", "supabase")
+    .eq("evidence_saved", false);
+
+  if (rowDeleteError) throw rowDeleteError;
+
+  return {
+    deleted: ids.length,
+    bytes: rows.reduce((sum: number, row: any) => sum + Number(row.byte_size || 0), 0),
+  };
 }
 
 async function cleanupR2Rows(admin: any, table: string, limit: number) {
