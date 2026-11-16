@@ -82,6 +82,7 @@
     $("tabProctorsBtn").onclick = () => activateTab("proctors");
     $("tabStudentsBtn").onclick = () => activateTab("students");
     $("tabTeachersBtn").onclick = () => activateTab("teachers");
+    $("tabStorageBtn").onclick = () => activateTab("storage");
   }
 
   function activateTab(name) {
@@ -91,7 +92,8 @@
       manage: { btn: $("tabManageBtn"), section: $("manageSection") },
       proctors: { btn: $("tabProctorsBtn"), section: $("proctorsSection") },
       students: { btn: $("tabStudentsBtn"), section: $("studentsSection") },
-      teachers: { btn: $("tabTeachersBtn"), section: $("teachersSection") }
+      teachers: { btn: $("tabTeachersBtn"), section: $("teachersSection") },
+      storage: { btn: $("tabStorageBtn"), section: $("storageSection") }
     };
 
     Object.values(map).forEach(({btn, section}) => {
@@ -106,6 +108,7 @@
     if (name === "proctors") loadProctorManagement();
     if (name === "students") window.StudentAdmin?.loadStudents?.();
     if (name === "teachers") loadTeacherAccessList();
+    if (name === "storage") loadStorageMaintenanceStatus();
   }
 
   async function initializeTeacherWorkspace() {
@@ -136,6 +139,7 @@
     }
     $("teacherWorkspaceBar")?.classList.toggle("hidden", !isMainAdmin);
     $("tabTeachersBtn")?.classList.toggle("hidden", !isMainAdmin);
+    $("tabStorageBtn")?.classList.toggle("hidden", !isMainAdmin);
 
     if (!isMainAdmin) return;
 
@@ -218,6 +222,165 @@
 
     return ownerId === selected;
   }
+
+  function formatStorageCount(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toLocaleString() : "—";
+  }
+
+  function formatStorageBytes(bytes) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return "0 B";
+    const units = ["B","KB","MB","GB","TB"];
+    let amount = value;
+    let index = 0;
+    while (amount >= 1024 && index < units.length - 1) {
+      amount /= 1024;
+      index += 1;
+    }
+    return `${amount >= 100 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
+  }
+
+  async function invokeStorageMaintenance(body) {
+    const { data, error } = await db.functions.invoke("storage-maintenance", { body });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function loadStorageMaintenanceStatus() {
+    if (currentTeacherProfile?.role !== "main_admin") return;
+
+    const status = $("storageCleanupStatus");
+    const refreshBtn = $("refreshStorageBtn");
+    if (status) {
+      status.textContent = "Checking storage…";
+      status.classList.remove("error","success");
+    }
+    if (refreshBtn) refreshBtn.disabled = true;
+
+    try {
+      const data = await invokeStorageMaintenance({ mode:"status" });
+      $("storageExpiredPhotos").textContent = formatStorageCount(data?.expired?.photos);
+      $("storageExpiredAudio").textContent = formatStorageCount(data?.expired?.audio);
+      $("storageRetentionDays").textContent = `${Number(data?.retention_days || 7)} days`;
+      if (status) status.textContent = "Storage status updated.";
+    } catch (error) {
+      console.error("Storage maintenance status error:", error);
+      if (status) {
+        status.textContent = error?.message || "Could not check storage.";
+        status.classList.add("error");
+      }
+    } finally {
+      if (refreshBtn) refreshBtn.disabled = false;
+    }
+  }
+
+  async function cleanExpiredStorage() {
+    if (currentTeacherProfile?.role !== "main_admin") return;
+
+    const expiredPhotos = Number(String($("storageExpiredPhotos")?.textContent || "").replace(/,/g,"")) || 0;
+    const expiredAudio = Number(String($("storageExpiredAudio")?.textContent || "").replace(/,/g,"")) || 0;
+
+    if (!expiredPhotos && !expiredAudio) {
+      await loadStorageMaintenanceStatus();
+      const refreshedPhotos = Number(String($("storageExpiredPhotos")?.textContent || "").replace(/,/g,"")) || 0;
+      const refreshedAudio = Number(String($("storageExpiredAudio")?.textContent || "").replace(/,/g,"")) || 0;
+      if (!refreshedPhotos && !refreshedAudio) {
+        alert("There are no expired proctoring files to clean.");
+        return;
+      }
+    }
+
+    const ok = confirm(
+      "Clean expired Supabase proctoring storage now?\n\n" +
+      "This permanently removes expired/orphaned proctor photos and audio clips older than the retention period. " +
+      "Files saved as evidence are protected. Student photos, ID copies, exam files, answers, and scores are not touched."
+    );
+    if (!ok) return;
+
+    const button = $("cleanExpiredStorageBtn");
+    const status = $("storageCleanupStatus");
+    const result = $("storageCleanupResult");
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Cleaning…";
+    }
+    if (status) {
+      status.textContent = "Cleaning expired files in safe batches…";
+      status.classList.remove("error","success");
+    }
+    if (result) result.classList.add("hidden");
+
+    let totalFiles = 0;
+    let totalBytes = 0;
+    let photoFiles = 0;
+    let audioFiles = 0;
+
+    try {
+      // Run multiple bounded calls so large storage cleanups do not depend on
+      // one long Edge Function execution.
+      for (let pass = 0; pass < 8; pass += 1) {
+        const data = await invokeStorageMaintenance({ mode:"cleanup", max_batches:5 });
+        const deleted = data?.deleted || {};
+        const passTotal = Number(deleted.total || 0);
+
+        totalFiles += passTotal;
+        totalBytes += Number(deleted.bytes || 0);
+        photoFiles += Number(deleted.photos || 0);
+        audioFiles += Number(deleted.audio || 0);
+
+        const remainingPhotos = Number(data?.status?.expired?.photos || 0);
+        const remainingAudio = Number(data?.status?.expired?.audio || 0);
+
+        $("storageExpiredPhotos").textContent = formatStorageCount(remainingPhotos);
+        $("storageExpiredAudio").textContent = formatStorageCount(remainingAudio);
+
+        if (status) {
+          status.textContent = `Deleted ${formatStorageCount(totalFiles)} files so far…`;
+        }
+
+        if (passTotal === 0 || (remainingPhotos === 0 && remainingAudio === 0)) break;
+      }
+
+      $("storageLastCleanup").textContent = new Date().toLocaleString();
+      if (status) {
+        status.textContent = totalFiles
+          ? "Storage cleanup completed."
+          : "No removable expired files were found.";
+        status.classList.add("success");
+      }
+
+      if (result) {
+        result.innerHTML = `
+          <strong>Cleanup completed</strong>
+          <div class="storage-cleanup-summary">
+            <span><b>${formatStorageCount(photoFiles)}</b> proctor photos removed</span>
+            <span><b>${formatStorageCount(audioFiles)}</b> audio files removed</span>
+            <span><b>${formatStorageBytes(totalBytes)}</b> reclaimed in processed files</span>
+          </div>
+        `;
+        result.classList.remove("hidden");
+      }
+
+      await loadStorageMaintenanceStatus();
+    } catch (error) {
+      console.error("Storage cleanup error:", error);
+      if (status) {
+        status.textContent = error?.message || "Storage cleanup failed.";
+        status.classList.add("error");
+      }
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Clean Expired Proctoring Files";
+      }
+    }
+  }
+
+  $("refreshStorageBtn")?.addEventListener("click", loadStorageMaintenanceStatus);
+  $("cleanExpiredStorageBtn")?.addEventListener("click", cleanExpiredStorage);
 
   function bindTeacherManagement() {
     if (teacherManagementBound) return;
