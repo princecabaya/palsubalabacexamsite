@@ -318,10 +318,12 @@ async function getR2Status() {
       bucket: String(Deno.env.get("R2_BUCKET") || "").trim(),
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("R2 connectivity exception", message);
     return {
       configured: true,
       connected: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: message.slice(0, 300),
     };
   }
 }
