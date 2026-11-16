@@ -194,8 +194,8 @@ async function cleanupPhotos(admin: any, limit: number) {
   }
 
   if (deletedIds.length) {
-    for (let i = 0; i < deletedIds.length; i += 500) {
-      const ids = deletedIds.slice(i, i + 500);
+    for (let i = 0; i < deletedIds.length; i += 50) {
+      const ids = deletedIds.slice(i, i + 50);
       const { error: rowDeleteError } = await admin
         .from("proctor_photos")
         .delete()
@@ -266,8 +266,8 @@ async function cleanupAudio(admin: any, limit: number) {
   }
 
   if (deletedIds.length) {
-    for (let i = 0; i < deletedIds.length; i += 500) {
-      const ids = deletedIds.slice(i, i + 500);
+    for (let i = 0; i < deletedIds.length; i += 50) {
+      const ids = deletedIds.slice(i, i + 50);
       const { error: rowDeleteError } = await admin
         .from("proctor_speech_clips")
         .delete()
