@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "npm:@aws-sdk/client-s3@3.922.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -299,63 +300,68 @@ async function getR2Status() {
     return { configured: false, connected: false, message: "R2 secrets are not configured." };
   }
 
-  const testPath = `diagnostics/exam-guard-r2-check-${crypto.randomUUID()}.txt`;
+  const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
+  const endpointSecret = String(Deno.env.get("R2_ENDPOINT") || "").trim().replace(/\/+$/, "");
+  const endpoint = endpointSecret || `https://${account}.r2.cloudflarestorage.com`;
+  const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
+  const accessKeyId = String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim();
+  const secretAccessKey = String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim();
+  const key = `diagnostics/exam-guard-r2-check-${crypto.randomUUID()}.txt`;
+
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
 
   try {
-    const putResponse = await r2Client().fetch(r2ObjectUrl(testPath), {
-      method: "PUT",
-      headers: {
-        "Content-Type": "text/plain",
-        "Cache-Control": "no-store",
-      },
-      body: new TextEncoder().encode("exam-guard-r2-ok"),
-    });
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: new TextEncoder().encode("exam-guard-r2-ok"),
+      ContentType: "text/plain",
+      CacheControl: "no-store",
+    }));
 
-    if (!putResponse.ok) {
-      const detail = (await putResponse.text()).slice(0, 300);
-      console.error("R2 upload connectivity check failed", {
-        status: putResponse.status,
-        detail,
-      });
-      return {
-        configured: true,
-        connected: false,
-        status: putResponse.status,
-        operation: "put-object",
-        message: detail,
-      };
-    }
-
-    const deleteResponse = await r2Client().fetch(r2ObjectUrl(testPath), { method: "DELETE" });
-    if (!deleteResponse.ok && deleteResponse.status !== 404) {
-      const detail = (await deleteResponse.text()).slice(0, 300);
-      console.error("R2 delete connectivity check failed", {
-        status: deleteResponse.status,
-        detail,
-      });
-      return {
-        configured: true,
-        connected: false,
-        status: deleteResponse.status,
-        operation: "delete-object",
-        message: detail,
-      };
-    }
+    await s3.send(new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    }));
 
     return {
       configured: true,
       connected: true,
-      bucket: String(Deno.env.get("R2_BUCKET") || "").trim(),
-      operation: "put-delete-object",
+      bucket,
+      endpoint,
+      operation: "aws-sdk-put-delete",
     };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("R2 connectivity exception", message);
+  } catch (error: any) {
+    const status = Number(error?.$metadata?.httpStatusCode || 0) || undefined;
+    const code = String(error?.name || error?.Code || "").slice(0, 80);
+    const message = String(error?.message || error || "").slice(0, 300);
+
+    console.error("R2 AWS SDK connectivity check failed", {
+      status,
+      code,
+      message,
+      endpoint,
+      bucket,
+    });
+
     return {
       configured: true,
       connected: false,
-      message: message.slice(0, 300),
+      status,
+      code,
+      operation: "aws-sdk-put-object",
+      message,
     };
+  } finally {
+    s3.destroy();
   }
 }
 
