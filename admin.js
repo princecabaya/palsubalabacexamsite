@@ -336,7 +336,15 @@
       $("storageExpiredPhotos").textContent = formatStorageCount(data?.expired?.photos);
       $("storageExpiredAudio").textContent = formatStorageCount(data?.expired?.audio);
       $("storageRetentionDays").textContent = `${Number(data?.retention_days || 7)} days`;
-      if (status) status.textContent = "Storage status updated.";
+      if ($("storageR2Status")) {
+        const r2 = data?.r2 || {};
+        $("storageR2Status").textContent = r2.connected
+          ? `Connected — ${r2.bucket || "R2"}`
+          : (r2.configured ? "Configured, connection failed" : "Not configured");
+      }
+      if (status) status.textContent = data?.r2?.connected
+        ? "Storage status updated. R2 is connected."
+        : "Storage status updated. R2 connection needs attention.";
     } catch (error) {
       console.error("Storage maintenance status error:", error);
       if (status) {
