@@ -45,19 +45,91 @@
     }
   }
 
+  let adminLoginInFlight = false;
+
+  async function signInAdminWithRetry(email, password) {
+    const maxAttempts = 4;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const { error } = await db.auth.signInWithPassword({ email, password });
+
+      if (!error) return { ok: true };
+
+      lastError = error;
+      const message = String(error.message || "");
+      const status = Number(error.status || 0);
+      const transient =
+        status >= 500 ||
+        /522|523|524|525|504|gateway|timeout|temporar|network|fetch/i.test(message);
+
+      if (!transient || attempt === maxAttempts) break;
+
+      const delay = Math.min(3500, 600 * Math.pow(2, attempt - 1));
+      $("adminLoginMsg").textContent =
+        `Supabase is temporarily unavailable. Retrying sign-in (${attempt}/${maxAttempts})…`;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    return { ok: false, error: lastError };
+  }
+
   $("adminLoginBtn").addEventListener("click", async () => {
-    $("adminLoginBtn").disabled = true;
-    $("adminLoginMsg").textContent = "";
-    const { error } = await db.auth.signInWithPassword({
-      email: $("adminEmail").value.trim(),
-      password: $("adminPassword").value
-    });
-    $("adminLoginBtn").disabled = false;
-    if (error) {
-      $("adminLoginMsg").textContent = error.message;
+    if (adminLoginInFlight) return;
+
+    const email = $("adminEmail").value.trim();
+    const password = $("adminPassword").value;
+
+    if (!email || !password) {
+      $("adminLoginMsg").textContent = "Enter your admin email and password.";
       return;
     }
-    await showDashboard();
+
+    adminLoginInFlight = true;
+    const button = $("adminLoginBtn");
+    button.disabled = true;
+    button.textContent = "Signing in…";
+    $("adminLoginMsg").textContent = "Connecting to Exam Guard…";
+
+    try {
+      const result = await signInAdminWithRetry(email, password);
+
+      if (!result.ok) {
+        const raw = String(result.error?.message || "");
+        const status = Number(result.error?.status || 0);
+
+        if (
+          status >= 500 ||
+          /522|523|524|525|504|gateway|timeout|temporar|network|fetch/i.test(raw)
+        ) {
+          $("adminLoginMsg").textContent =
+            "Supabase Auth is temporarily unreachable. Your account may still be valid. Please try again in a moment or switch networks.";
+        } else if (/invalid login credentials/i.test(raw)) {
+          $("adminLoginMsg").textContent =
+            "The email or password is incorrect. Please check your credentials and try again.";
+        } else {
+          $("adminLoginMsg").textContent = raw || "Sign-in failed.";
+        }
+        return;
+      }
+
+      $("adminLoginMsg").textContent = "Signed in. Loading dashboard…";
+      await showDashboard();
+    } catch (error) {
+      console.error("Admin sign-in error:", error);
+      $("adminLoginMsg").textContent =
+        "Could not complete sign-in because of a temporary connection problem. Please try again.";
+    } finally {
+      adminLoginInFlight = false;
+      button.disabled = false;
+      button.textContent = "Sign in";
+    }
+  });
+
+  $("adminPassword")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !adminLoginInFlight) {
+      $("adminLoginBtn")?.click();
+    }
   });
 
   async function showDashboard() {
