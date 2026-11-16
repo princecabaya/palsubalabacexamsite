@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
 
     const { data: photos, error: photoError } = await admin
       .from("proctor_photos")
-      .select("id,object_path,captured_at,expires_at,evidence_saved,evidence_saved_at")
+      .select("id,object_path,captured_at,expires_at,evidence_saved,evidence_saved_at,storage_provider")
       .eq("attempt_id", attemptId)
       .or(`evidence_saved.eq.true,expires_at.gt.${new Date().toISOString()}`)
       .order("captured_at", { ascending: true });
@@ -82,17 +83,30 @@ Deno.serve(async (req) => {
 
     const output = [];
     for (const photo of photos || []) {
-      const { data: signed, error: signedError } = await admin.storage
-        .from(BUCKET)
-        .createSignedUrl(photo.object_path, 300);
-      if (signedError) continue;
+      let url = "";
+      if (photo.storage_provider === "r2") {
+        try {
+          url = await r2SignedGetUrl(photo.object_path, 300);
+        } catch (error) {
+          console.error("R2 signed photo URL error", error);
+          continue;
+        }
+      } else {
+        const { data: signed, error: signedError } = await admin.storage
+          .from(BUCKET)
+          .createSignedUrl(photo.object_path, 300);
+        if (signedError) continue;
+        url = signed.signedUrl;
+      }
+
       output.push({
         id: photo.id,
         captured_at: photo.captured_at,
         expires_at: photo.expires_at,
         evidence_saved: Boolean(photo.evidence_saved),
         evidence_saved_at: photo.evidence_saved_at,
-        url: signed.signedUrl,
+        storage_provider: photo.storage_provider || "supabase",
+        url,
       });
     }
 
@@ -102,6 +116,31 @@ Deno.serve(async (req) => {
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
+
+function r2Client() {
+  return new AwsClient({
+    accessKeyId: String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim(),
+    secretAccessKey: String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim(),
+    service: "s3",
+    region: "auto",
+  });
+}
+
+function r2ObjectUrl(path: string): string {
+  const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
+  const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
+  if (!account || !bucket) throw new Error("R2 storage is not configured.");
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encoded}`;
+}
+
+async function r2SignedGetUrl(path: string, expiresSeconds = 300): Promise<string> {
+  const signed = await r2Client().sign(
+    new Request(`${r2ObjectUrl(path)}?X-Amz-Expires=${expiresSeconds}`),
+    { aws: { signQuery: true } },
+  );
+  return signed.url.toString();
+}
 
 function getSupabaseAdminKey(): string {
   const modern = String(Deno.env.get("SUPABASE_SECRET_KEYS") || "").trim();
