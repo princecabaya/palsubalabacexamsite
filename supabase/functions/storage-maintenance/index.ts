@@ -149,27 +149,64 @@ async function cleanupPhotos(admin: any, limit: number) {
   if (error) throw error;
   if (!rows?.length) return { deleted: 0, bytes: 0 };
 
-  const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
-  for (let i = 0; i < paths.length; i += 100) {
-    const chunk = paths.slice(i, i + 100);
-    const { error: removeError } = await admin.storage.from(PHOTO_BUCKET).remove(chunk);
-    if (removeError) throw removeError;
+  const deletedIds: string[] = [];
+  let bytes = 0;
+
+  for (let i = 0; i < rows.length; i += 20) {
+    const chunk = rows.slice(i, i + 20);
+    const chunkPaths = chunk.map((row: any) => String(row.object_path || "")).filter(Boolean);
+
+    if (!chunkPaths.length) continue;
+
+    const { error: chunkError } = await admin.storage.from(PHOTO_BUCKET).remove(chunkPaths);
+    if (!chunkError) {
+      for (const row of chunk) {
+        if (row.object_path) {
+          deletedIds.push(row.id);
+          bytes += Number(row.byte_size || 0);
+        }
+      }
+      continue;
+    }
+
+    console.warn("cleanupPhotos chunk delete failed; retrying individually", chunkError);
+
+    for (const row of chunk) {
+      const path = String(row.object_path || "").trim();
+      if (!path) {
+        console.warn("cleanupPhotos skipping empty object path", row.id);
+        continue;
+      }
+
+      const { error: singleError } = await admin.storage.from(PHOTO_BUCKET).remove([path]);
+      if (singleError) {
+        console.warn("cleanupPhotos object delete skipped", {
+          id: row.id,
+          path,
+          message: singleError.message,
+        });
+        continue;
+      }
+
+      deletedIds.push(row.id);
+      bytes += Number(row.byte_size || 0);
+    }
   }
 
-  const ids = rows.map((row: any) => row.id);
-  const { error: rowDeleteError } = await admin
-    .from("proctor_photos")
-    .delete()
-    .in("id", ids)
-    .eq("storage_provider", "supabase")
-    .eq("evidence_saved", false);
+  if (deletedIds.length) {
+    for (let i = 0; i < deletedIds.length; i += 500) {
+      const ids = deletedIds.slice(i, i + 500);
+      const { error: rowDeleteError } = await admin
+        .from("proctor_photos")
+        .delete()
+        .in("id", ids)
+        .eq("storage_provider", "supabase")
+        .eq("evidence_saved", false);
+      if (rowDeleteError) throw rowDeleteError;
+    }
+  }
 
-  if (rowDeleteError) throw rowDeleteError;
-
-  return {
-    deleted: ids.length,
-    bytes: rows.reduce((sum: number, row: any) => sum + Number(row.byte_size || 0), 0),
-  };
+  return { deleted: deletedIds.length, bytes };
 }
 
 async function cleanupAudio(admin: any, limit: number) {
@@ -184,27 +221,64 @@ async function cleanupAudio(admin: any, limit: number) {
   if (error) throw error;
   if (!rows?.length) return { deleted: 0, bytes: 0 };
 
-  const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
-  for (let i = 0; i < paths.length; i += 100) {
-    const chunk = paths.slice(i, i + 100);
-    const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(chunk);
-    if (removeError) throw removeError;
+  const deletedIds: string[] = [];
+  let bytes = 0;
+
+  for (let i = 0; i < rows.length; i += 20) {
+    const chunk = rows.slice(i, i + 20);
+    const chunkPaths = chunk.map((row: any) => String(row.object_path || "")).filter(Boolean);
+
+    if (!chunkPaths.length) continue;
+
+    const { error: chunkError } = await admin.storage.from(AUDIO_BUCKET).remove(chunkPaths);
+    if (!chunkError) {
+      for (const row of chunk) {
+        if (row.object_path) {
+          deletedIds.push(row.id);
+          bytes += Number(row.byte_size || 0);
+        }
+      }
+      continue;
+    }
+
+    console.warn("cleanupAudio chunk delete failed; retrying individually", chunkError);
+
+    for (const row of chunk) {
+      const path = String(row.object_path || "").trim();
+      if (!path) {
+        console.warn("cleanupAudio skipping empty object path", row.id);
+        continue;
+      }
+
+      const { error: singleError } = await admin.storage.from(AUDIO_BUCKET).remove([path]);
+      if (singleError) {
+        console.warn("cleanupAudio object delete skipped", {
+          id: row.id,
+          path,
+          message: singleError.message,
+        });
+        continue;
+      }
+
+      deletedIds.push(row.id);
+      bytes += Number(row.byte_size || 0);
+    }
   }
 
-  const ids = rows.map((row: any) => row.id);
-  const { error: rowDeleteError } = await admin
-    .from("proctor_speech_clips")
-    .delete()
-    .in("id", ids)
-    .eq("storage_provider", "supabase")
-    .eq("evidence_saved", false);
+  if (deletedIds.length) {
+    for (let i = 0; i < deletedIds.length; i += 500) {
+      const ids = deletedIds.slice(i, i + 500);
+      const { error: rowDeleteError } = await admin
+        .from("proctor_speech_clips")
+        .delete()
+        .in("id", ids)
+        .eq("storage_provider", "supabase")
+        .eq("evidence_saved", false);
+      if (rowDeleteError) throw rowDeleteError;
+    }
+  }
 
-  if (rowDeleteError) throw rowDeleteError;
-
-  return {
-    deleted: ids.length,
-    bytes: rows.reduce((sum: number, row: any) => sum + Number(row.byte_size || 0), 0),
-  };
+  return { deleted: deletedIds.length, bytes };
 }
 
 async function cleanupR2Rows(admin: any, table: string, limit: number) {
