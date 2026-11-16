@@ -51,6 +51,24 @@ Deno.serve(async (req) => {
       return json(await getStatus(admin));
     }
 
+    if (mode === "purge_supabase_photos") {
+      const result = await cleanupPhotos(admin, 250, false);
+      return json({
+        ok: true,
+        deleted: { photos: result.deleted, audio: 0, total: result.deleted, bytes: result.bytes },
+        status: await getStatus(admin),
+      });
+    }
+
+    if (mode === "purge_supabase_audio") {
+      const result = await cleanupAudio(admin, 250, false);
+      return json({
+        ok: true,
+        deleted: { photos: 0, audio: result.deleted, total: result.deleted, bytes: result.bytes },
+        status: await getStatus(admin),
+      });
+    }
+
     if (mode !== "cleanup") return json({ error: "Invalid cleanup mode." }, 400);
 
     let photoDeleted = 0;
@@ -59,14 +77,14 @@ Deno.serve(async (req) => {
     let audioBytes = 0;
 
     for (let batch = 0; batch < maxBatches; batch += 1) {
-      const result = await cleanupPhotos(admin, 1000);
+      const result = await cleanupPhotos(admin, 1000, true);
       photoDeleted += result.deleted;
       photoBytes += result.bytes;
       if (result.deleted < 1000) break;
     }
 
     for (let batch = 0; batch < maxBatches; batch += 1) {
-      const result = await cleanupAudio(admin, 1000);
+      const result = await cleanupAudio(admin, 1000, true);
       audioDeleted += result.deleted;
       audioBytes += result.bytes;
       if (result.deleted < 1000) break;
@@ -107,22 +125,38 @@ Deno.serve(async (req) => {
 async function getStatus(admin: any) {
   const now = new Date().toISOString();
 
-  const [{ count: photoRows, error: photoCountError }, { count: audioRows, error: audioCountError }] =
-    await Promise.all([
-      admin
-        .from("proctor_photos")
-        .select("id", { count: "exact", head: true })
-        .eq("evidence_saved", false)
-        .lt("expires_at", now),
-      admin
-        .from("proctor_speech_clips")
-        .select("id", { count: "exact", head: true })
-        .eq("evidence_saved", false)
-        .lt("expires_at", now),
-    ]);
+  const [
+    { count: photoRows, error: photoCountError },
+    { count: audioRows, error: audioCountError },
+    { count: legacyPhotos, error: legacyPhotoError },
+    { count: legacyAudio, error: legacyAudioError },
+  ] = await Promise.all([
+    admin
+      .from("proctor_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("evidence_saved", false)
+      .lt("expires_at", now),
+    admin
+      .from("proctor_speech_clips")
+      .select("id", { count: "exact", head: true })
+      .eq("evidence_saved", false)
+      .lt("expires_at", now),
+    admin
+      .from("proctor_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("storage_provider", "supabase")
+      .eq("evidence_saved", false),
+    admin
+      .from("proctor_speech_clips")
+      .select("id", { count: "exact", head: true })
+      .eq("storage_provider", "supabase")
+      .eq("evidence_saved", false),
+  ]);
 
   if (photoCountError) throw photoCountError;
   if (audioCountError) throw audioCountError;
+  if (legacyPhotoError) throw legacyPhotoError;
+  if (legacyAudioError) throw legacyAudioError;
 
   const r2 = await getR2Status();
 
@@ -132,19 +166,24 @@ async function getStatus(admin: any) {
       photos: Number(photoRows || 0),
       audio: Number(audioRows || 0),
     },
+    legacy_supabase: {
+      photos: Number(legacyPhotos || 0),
+      audio: Number(legacyAudio || 0),
+    },
     r2,
     retention_days: 7,
   };
 }
 
-async function cleanupPhotos(admin: any, limit: number) {
-  const { data: rows, error } = await admin
+async function cleanupPhotos(admin: any, limit: number, expiredOnly = true) {
+  let query = admin
     .from("proctor_photos")
     .select("id,object_path,byte_size,storage_provider")
     .eq("evidence_saved", false)
-    .eq("storage_provider", "supabase")
-    .lt("expires_at", new Date().toISOString())
-    .limit(limit);
+    .eq("storage_provider", "supabase");
+
+  if (expiredOnly) query = query.lt("expires_at", new Date().toISOString());
+  const { data: rows, error } = await query.limit(limit);
 
   if (error) throw error;
   if (!rows?.length) return { deleted: 0, bytes: 0 };
@@ -209,14 +248,15 @@ async function cleanupPhotos(admin: any, limit: number) {
   return { deleted: deletedIds.length, bytes };
 }
 
-async function cleanupAudio(admin: any, limit: number) {
-  const { data: rows, error } = await admin
+async function cleanupAudio(admin: any, limit: number, expiredOnly = true) {
+  let query = admin
     .from("proctor_speech_clips")
     .select("id,object_path,byte_size,storage_provider")
     .eq("evidence_saved", false)
-    .eq("storage_provider", "supabase")
-    .lt("expires_at", new Date().toISOString())
-    .limit(limit);
+    .eq("storage_provider", "supabase");
+
+  if (expiredOnly) query = query.lt("expires_at", new Date().toISOString());
+  const { data: rows, error } = await query.limit(limit);
 
   if (error) throw error;
   if (!rows?.length) return { deleted: 0, bytes: 0 };
