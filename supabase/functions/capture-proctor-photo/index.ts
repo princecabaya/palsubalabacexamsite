@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,15 +62,36 @@ Deno.serve(async (req) => {
       return json({ error: "Photo is too large." }, 413);
     }
 
-    const objectPath = `${attempt.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
-    const { error: uploadError } = await admin.storage
-      .from(BUCKET)
-      .upload(objectPath, bytes, {
-        contentType: "image/jpeg",
-        cacheControl: "3600",
-        upsert: false,
-      });
-    if (uploadError) throw uploadError;
+    let storageProvider = "supabase";
+    let objectPath = `${attempt.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
+
+    if (r2Configured()) {
+      try {
+        objectPath = `photos/${attempt.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
+        await r2Put(objectPath, bytes, "image/jpeg");
+        storageProvider = "r2";
+      } catch (error) {
+        console.error("R2 photo upload failed; falling back to Supabase Storage", error);
+        objectPath = `${attempt.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
+        const { error: fallbackError } = await admin.storage
+          .from(BUCKET)
+          .upload(objectPath, bytes, {
+            contentType: "image/jpeg",
+            cacheControl: "3600",
+            upsert: false,
+          });
+        if (fallbackError) throw fallbackError;
+      }
+    } else {
+      const { error: uploadError } = await admin.storage
+        .from(BUCKET)
+        .upload(objectPath, bytes, {
+          contentType: "image/jpeg",
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+    }
 
     const capturedAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -81,19 +103,76 @@ Deno.serve(async (req) => {
         object_path: objectPath,
         captured_at: capturedAt,
         expires_at: expiresAt,
+        storage_provider: storageProvider,
+        byte_size: bytes.byteLength,
       });
 
     if (metaError) {
-      await admin.storage.from(BUCKET).remove([objectPath]);
+      if (storageProvider === "r2") {
+        await r2Delete(objectPath).catch(() => {});
+      } else {
+        await admin.storage.from(BUCKET).remove([objectPath]);
+      }
       throw metaError;
     }
 
-    return json({ ok: true, captured_at: capturedAt, expires_at: expiresAt });
+    return json({
+      ok: true,
+      captured_at: capturedAt,
+      expires_at: expiresAt,
+      storage_provider: storageProvider,
+    });
   } catch (error) {
     console.error("capture-proctor-photo error", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
+
+function r2Configured(): boolean {
+  return Boolean(
+    String(Deno.env.get("R2_ACCOUNT_ID") || "").trim() &&
+    String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim() &&
+    String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim() &&
+    String(Deno.env.get("R2_BUCKET") || "").trim()
+  );
+}
+
+function r2Client() {
+  return new AwsClient({
+    accessKeyId: String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim(),
+    secretAccessKey: String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim(),
+    service: "s3",
+    region: "auto",
+  });
+}
+
+function r2ObjectUrl(path: string): string {
+  const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
+  const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encoded}`;
+}
+
+async function r2Put(path: string, bytes: Uint8Array, contentType: string) {
+  const response = await r2Client().fetch(r2ObjectUrl(path), {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=300",
+    },
+    body: bytes,
+  });
+  if (!response.ok) {
+    throw new Error(`R2 upload failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+  }
+}
+
+async function r2Delete(path: string) {
+  const response = await r2Client().fetch(r2ObjectUrl(path), { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+  }
+}
 
 function decodeBase64Image(value: string): Uint8Array {
   const raw = value.includes(",") ? value.slice(value.indexOf(",") + 1) : value;
