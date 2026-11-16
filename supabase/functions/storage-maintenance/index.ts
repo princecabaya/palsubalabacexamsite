@@ -183,37 +183,57 @@ async function cleanupPhotos(admin: any, limit: number) {
 }
 
 async function cleanupAudio(admin: any, limit: number) {
+  const cutoff = new Date(Date.now() - AUDIO_RETENTION_DAYS * 86400000).toISOString();
   const now = new Date().toISOString();
 
-  const { data: rows, error } = await admin
-    .from("proctor_speech_clips")
-    .select("id,object_path,byte_size")
-    .eq("evidence_saved", false)
-    .lt("expires_at", now)
+  const { data: objects, error: objectError } = await admin.schema("storage").from("objects")
+    .select("name,metadata")
+    .eq("bucket_id", AUDIO_BUCKET)
+    .lte("created_at", cutoff)
     .limit(limit);
 
-  if (error) throw error;
-  if (!rows?.length) return { deleted: 0, bytes: 0 };
+  if (objectError) throw objectError;
+  const candidates = objects || [];
+  if (!candidates.length) return { deleted: 0, bytes: 0 };
 
-  const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
-  if (paths.length) {
-    const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(paths);
-    if (removeError) throw removeError;
+  const paths = candidates.map((row: any) => String(row.name || "")).filter(Boolean);
+
+  const { data: rows, error: rowError } = await admin
+    .from("proctor_speech_clips")
+    .select("id,object_path,evidence_saved,expires_at")
+    .in("object_path", paths);
+
+  if (rowError) throw rowError;
+
+  const rowByPath = new Map((rows || []).map((row: any) => [String(row.object_path), row]));
+  const deletable = candidates.filter((object: any) => {
+    const path = String(object.name || "");
+    const row: any = rowByPath.get(path);
+    if (!row) return true; // orphaned old object
+    if (row.evidence_saved) return false;
+    return Boolean(row.expires_at && String(row.expires_at) < now);
+  });
+
+  const deletablePaths = deletable.map((row: any) => String(row.name || "")).filter(Boolean);
+  if (!deletablePaths.length) return { deleted: 0, bytes: 0 };
+
+  const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(deletablePaths);
+  if (removeError) throw removeError;
+
+  const matchingIds = (rows || [])
+    .filter((row: any) => deletablePaths.includes(String(row.object_path)) && !row.evidence_saved)
+    .map((row: any) => row.id);
+
+  if (matchingIds.length) {
+    const { error: deleteError } = await admin
+      .from("proctor_speech_clips")
+      .delete()
+      .in("id", matchingIds)
+      .eq("evidence_saved", false);
+    if (deleteError) throw deleteError;
   }
 
-  const ids = rows.map((row: any) => row.id);
-  const { error: rowDeleteError } = await admin
-    .from("proctor_speech_clips")
-    .delete()
-    .in("id", ids)
-    .eq("evidence_saved", false);
-
-  if (rowDeleteError) throw rowDeleteError;
-
-  return {
-    deleted: ids.length,
-    bytes: rows.reduce((sum: number, row: any) => sum + Number(row.byte_size || 0), 0),
-  };
+  return { deleted: deletablePaths.length, bytes: sumBytes(deletable) };
 }
 
 function sumBytes(rows: any[]) {
