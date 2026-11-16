@@ -277,7 +277,9 @@ function r2Client() {
 function r2BaseUrl(): string {
   const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
   const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
-  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}`;
+  const endpoint = String(Deno.env.get("R2_ENDPOINT") || "").trim().replace(/\/+$/,"");
+  const base = endpoint || `https://${account}.r2.cloudflarestorage.com`;
+  return `${base}/${encodeURIComponent(bucket)}`;
 }
 
 function r2ObjectUrl(path: string): string {
