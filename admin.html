@@ -247,9 +247,10 @@
                   <div class="row">
                     <button id="saveSelectedEvidenceBtn" type="button" class="primary" disabled>Save Selected as Evidence</button>
                     <button id="releaseSelectedEvidenceBtn" type="button" disabled>Release Selected Evidence</button>
+                    <button id="deleteSelectedProctorPhotosBtn" type="button" class="danger-outline" disabled>Delete Selected</button>
                   </div>
                 </div>
-                <p class="muted evidence-note">Preserved photos are excluded from the normal 7-day cleanup until released. A photo is a review record and should be considered together with other exam evidence.</p>
+                <p class="muted evidence-note">Preserved photos are excluded from deletion until released. Unpreserved photos may be deleted manually at any time; otherwise they are removed automatically after 7 days.</p>
                 <div id="proctorPhotoGrid" class="proctor-photo-grid"></div>
               </div>
             </details>
@@ -268,9 +269,10 @@
                   <div class="row">
                     <button id="saveSelectedSpeechEvidenceBtn" type="button" class="primary" disabled>Save Selected as Evidence</button>
                     <button id="releaseSelectedSpeechEvidenceBtn" type="button" disabled>Release Selected Evidence</button>
+                    <button id="deleteSelectedSpeechClipsBtn" type="button" class="danger-outline" disabled>Delete Selected</button>
                   </div>
                 </div>
-                <p class="muted evidence-note">Transcripts are machine-generated review aids. Listen to the original clip before drawing conclusions, especially for background speech, Filipino-English code-switching, names, and mathematics.</p>
+                <p class="muted evidence-note">Unpreserved clips may be deleted manually at any time; otherwise they are removed automatically after 7 days. Preserved evidence must be released before deletion.</p>
                 <div id="speechClipList" class="speech-clip-list"></div>
               </div>
             </details>
