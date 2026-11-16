@@ -72,9 +72,11 @@ function r2Client() {
 function r2ObjectUrl(path: string): string {
   const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
   const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
-  if (!account || !bucket) throw new Error("R2 storage is not configured.");
+  const endpoint = String(Deno.env.get("R2_ENDPOINT") || "").trim().replace(/\/+$/,"");
+  if ((!account && !endpoint) || !bucket) throw new Error("R2 storage is not configured.");
+  const base = endpoint || `https://${account}.r2.cloudflarestorage.com`;
   const encoded = path.split("/").map(encodeURIComponent).join("/");
-  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encoded}`;
+  return `${base}/${encodeURIComponent(bucket)}/${encoded}`;
 }
 
 async function r2Delete(path: string) {
