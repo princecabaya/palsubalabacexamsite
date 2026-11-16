@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,20 @@ Deno.serve(async (req) => {
       if (result.deleted < 1000) break;
     }
 
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      const result = await cleanupR2Rows(admin, "proctor_photos", 250);
+      photoDeleted += result.deleted;
+      photoBytes += result.bytes;
+      if (result.deleted < 250) break;
+    }
+
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      const result = await cleanupR2Rows(admin, "proctor_speech_clips", 250);
+      audioDeleted += result.deleted;
+      audioBytes += result.bytes;
+      if (result.deleted < 250) break;
+    }
+
     const status = await getStatus(admin);
 
     return json({
@@ -124,6 +139,8 @@ async function getStatus(admin: any) {
   if (photoCountError) throw photoCountError;
   if (audioCountError) throw audioCountError;
 
+  const r2 = await getR2Status();
+
   return {
     ok: true,
     expired: {
@@ -136,6 +153,7 @@ async function getStatus(admin: any) {
       audio_objects_older_than_7d: (audioObjects || []).length,
       audio_bytes_first_1000: sumBytes(audioObjects || []),
     },
+    r2,
     retention_days: 7,
   };
 }
@@ -234,6 +252,123 @@ async function cleanupAudio(admin: any, limit: number) {
   }
 
   return { deleted: deletablePaths.length, bytes: sumBytes(deletable) };
+}
+
+async function cleanupR2Rows(admin: any, table: string, limit: number) {
+  if (!r2Configured()) return { deleted: 0, bytes: 0 };
+
+  const selectColumns = table === "proctor_photos"
+    ? "id,object_path,byte_size"
+    : "id,object_path,byte_size";
+
+  const { data: rows, error } = await admin
+    .from(table)
+    .select(selectColumns)
+    .eq("storage_provider", "r2")
+    .eq("evidence_saved", false)
+    .lt("expires_at", new Date().toISOString())
+    .limit(limit);
+
+  if (error) throw error;
+  if (!rows?.length) return { deleted: 0, bytes: 0 };
+
+  const deletedIds: string[] = [];
+  let bytes = 0;
+
+  for (let i = 0; i < rows.length; i += 20) {
+    const chunk = rows.slice(i, i + 20);
+    const results = await Promise.all(chunk.map(async (row: any) => {
+      try {
+        await r2Delete(String(row.object_path || ""));
+        return row;
+      } catch (error) {
+        console.error("R2 cleanup object failed", row.object_path, error);
+        return null;
+      }
+    }));
+
+    for (const row of results.filter(Boolean) as any[]) {
+      deletedIds.push(row.id);
+      bytes += Number(row.byte_size || 0);
+    }
+  }
+
+  if (deletedIds.length) {
+    const { error: deleteError } = await admin
+      .from(table)
+      .delete()
+      .in("id", deletedIds)
+      .eq("storage_provider", "r2")
+      .eq("evidence_saved", false);
+    if (deleteError) throw deleteError;
+  }
+
+  return { deleted: deletedIds.length, bytes };
+}
+
+function r2Configured(): boolean {
+  return Boolean(
+    String(Deno.env.get("R2_ACCOUNT_ID") || "").trim() &&
+    String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim() &&
+    String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim() &&
+    String(Deno.env.get("R2_BUCKET") || "").trim()
+  );
+}
+
+function r2Client() {
+  return new AwsClient({
+    accessKeyId: String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim(),
+    secretAccessKey: String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim(),
+    service: "s3",
+    region: "auto",
+  });
+}
+
+function r2BaseUrl(): string {
+  const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
+  const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
+  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}`;
+}
+
+function r2ObjectUrl(path: string): string {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `${r2BaseUrl()}/${encoded}`;
+}
+
+async function r2Delete(path: string) {
+  const response = await r2Client().fetch(r2ObjectUrl(path), { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+  }
+}
+
+async function getR2Status() {
+  if (!r2Configured()) {
+    return { configured: false, connected: false, message: "R2 secrets are not configured." };
+  }
+
+  try {
+    const response = await r2Client().fetch(`${r2BaseUrl()}?list-type=2&max-keys=1`);
+    if (!response.ok) {
+      return {
+        configured: true,
+        connected: false,
+        status: response.status,
+        message: (await response.text()).slice(0, 300),
+      };
+    }
+    return {
+      configured: true,
+      connected: true,
+      bucket: String(Deno.env.get("R2_BUCKET") || "").trim(),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      connected: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function sumBytes(rows: any[]) {
