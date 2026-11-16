@@ -800,6 +800,8 @@
           <div class="storage-maintenance-metrics">
             <div class="metric-card"><span>Expired Proctor Photos</span><strong id="storageExpiredPhotos">—</strong></div>
             <div class="metric-card"><span>Expired Audio Clips</span><strong id="storageExpiredAudio">—</strong></div>
+            <div class="metric-card"><span>Legacy Supabase Photos</span><strong id="storageLegacyPhotos">—</strong></div>
+            <div class="metric-card"><span>Legacy Supabase Audio</span><strong id="storageLegacyAudio">—</strong></div>
             <div class="metric-card"><span>Retention</span><strong id="storageRetentionDays">7 days</strong></div>
             <div class="metric-card"><span>R2 Connection</span><strong id="storageR2Status">Checking…</strong></div>
             <div class="metric-card"><span>Last Cleanup</span><strong id="storageLastCleanup">Not run</strong></div>
@@ -807,11 +809,13 @@
 
           <div class="storage-cleanup-warning">
             <strong>Safe cleanup scope</strong>
-            <p>This cleanup targets expired/orphaned files in <code>exam-proctor-photos</code> and <code>exam-proctor-audio</code>. Files explicitly saved as evidence are protected. Student profile photos, ID copies, exam stimuli, examinations, answers, and scores are not deleted.</p>
+            <p>Expired cleanup follows the normal 7-day retention. The emergency delete buttons remove all unpreserved legacy proctor photos or audio still stored in Supabase immediately, including unexpired files. Files explicitly saved as evidence are protected. Cloudflare R2 media, student profile photos, ID copies, exam stimuli, examinations, answers, and scores are not deleted.</p>
           </div>
 
           <div class="storage-cleanup-actions">
             <button id="cleanExpiredStorageBtn" type="button" class="danger-outline">Clean Expired Proctoring Files</button>
+            <button id="purgeSupabasePhotosBtn" type="button" class="danger-outline">Delete Supabase Proctor Photos Now</button>
+            <button id="purgeSupabaseAudioBtn" type="button" class="danger-outline">Delete Supabase Audio Clips Now</button>
             <span id="storageCleanupStatus" class="message-inline" role="status"></span>
           </div>
 
