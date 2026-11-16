@@ -342,9 +342,19 @@
           ? `Connected — ${r2.bucket || "R2"}`
           : (r2.configured ? "Configured, connection failed" : "Not configured");
       }
-      if (status) status.textContent = data?.r2?.connected
-        ? "Storage status updated. R2 is connected."
-        : "Storage status updated. R2 connection needs attention.";
+      if (status) {
+        if (data?.r2?.connected) {
+          status.textContent = "Storage status updated. R2 is connected.";
+        } else {
+          const r2 = data?.r2 || {};
+          const detail = [r2.status ? `HTTP ${r2.status}` : "", r2.message || ""]
+            .filter(Boolean)
+            .join(" — ");
+          status.textContent = detail
+            ? `R2 connection failed: ${detail}`
+            : "Storage status updated. R2 connection needs attention.";
+        }
+      }
     } catch (error) {
       console.error("Storage maintenance status error:", error);
       if (status) {
