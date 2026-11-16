@@ -411,8 +411,8 @@
     try {
       // Run multiple bounded calls so large storage cleanups do not depend on
       // one long Edge Function execution.
-      for (let pass = 0; pass < 12; pass += 1) {
-        const data = await invokeStorageMaintenance({ mode:"cleanup", max_batches:5 });
+      for (let pass = 0; pass < 50; pass += 1) {
+        const data = await invokeStorageMaintenance({ mode:"cleanup", max_batches:1 });
         const deleted = data?.deleted || {};
         const passTotal = Number(deleted.total || 0);
 
