@@ -1624,6 +1624,7 @@
     const selection = $("proctorPhotoSelection");
     const saveBtn = $("saveSelectedEvidenceBtn");
     const releaseBtn = $("releaseSelectedEvidenceBtn");
+    const deleteBtn = $("deleteSelectedProctorPhotosBtn");
 
     if (selection) selection.textContent = `${selectedIds.length} selected`;
 
@@ -1633,6 +1634,7 @@
 
     if (saveBtn) saveBtn.disabled = !hasUnsaved;
     if (releaseBtn) releaseBtn.disabled = !hasSaved;
+    if (deleteBtn) deleteBtn.disabled = !selectedPhotos.some(p => !p.evidence_saved);
   }
 
   async function setSelectedPhotoEvidence(saved) {
@@ -1804,12 +1806,14 @@
     const selection = $("speechClipSelection");
     const saveBtn = $("saveSelectedSpeechEvidenceBtn");
     const releaseBtn = $("releaseSelectedSpeechEvidenceBtn");
+    const deleteBtn = $("deleteSelectedSpeechClipsBtn");
 
     if (selection) selection.textContent = `${selectedIds.length} selected`;
 
     const selected = currentSpeechClips.filter(c => selectedIds.includes(c.id));
     if (saveBtn) saveBtn.disabled = !selected.some(c => !c.evidence_saved);
     if (releaseBtn) releaseBtn.disabled = !selected.some(c => c.evidence_saved);
+    if (deleteBtn) deleteBtn.disabled = !selected.some(c => !c.evidence_saved);
   }
 
   async function setSelectedSpeechEvidence(saved) {
@@ -1848,6 +1852,75 @@
     await loadSpeechClips(currentDetailAttempt);
   }
 
+
+
+  async function deleteSelectedProctorMedia(mediaType) {
+    if (!currentDetailAttempt) return;
+
+    const isPhoto = mediaType === "photo";
+    const selectedIds = isPhoto ? getSelectedProctorPhotoIds() : getSelectedSpeechClipIds();
+    const currentItems = isPhoto ? currentProctorPhotos : currentSpeechClips;
+    const targetIds = currentItems
+      .filter(item => selectedIds.includes(item.id) && !item.evidence_saved)
+      .map(item => item.id);
+
+    if (!targetIds.length) {
+      alert("Select at least one unpreserved proctor media file. Preserved evidence must be released before it can be deleted.");
+      return;
+    }
+
+    const noun = isPhoto ? "photo" : "speech clip";
+    const ok = confirm(
+      `Permanently delete ${targetIds.length} selected ${noun}${targetIds.length === 1 ? "" : "s"} now?\n\n` +
+      "This deletes the file immediately from Supabase Storage or Cloudflare R2 and removes its metadata. " +
+      "This cannot be undone. Files you do not delete manually will continue to follow the normal 7-day retention."
+    );
+    if (!ok) return;
+
+    const button = isPhoto ? $("deleteSelectedProctorPhotosBtn") : $("deleteSelectedSpeechClipsBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Deleting…";
+    }
+
+    try {
+      const { data, error } = await db.functions.invoke("delete-proctor-media", {
+        body: {
+          attempt_id: currentDetailAttempt.id,
+          media_type: mediaType,
+          ids: targetIds
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const deletedCount = Array.isArray(data?.deleted) ? data.deleted.length : 0;
+      const protectedCount = Array.isArray(data?.protected) ? data.protected.length : 0;
+      const failedCount = Array.isArray(data?.failed) ? data.failed.length : 0;
+
+      if (failedCount) {
+        alert(`${deletedCount} file${deletedCount === 1 ? "" : "s"} deleted, but ${failedCount} could not be removed. Preserved evidence was not deleted.`);
+      } else {
+        alert(`${deletedCount} ${noun}${deletedCount === 1 ? "" : "s"} deleted permanently.${protectedCount ? " Preserved evidence was protected." : ""}`);
+      }
+
+      if (isPhoto) {
+        await loadProctorPhotos(currentDetailAttempt);
+      } else {
+        await loadSpeechClips(currentDetailAttempt);
+      }
+    } catch (error) {
+      console.error("Delete proctor media error:", error);
+      alert(`Could not delete selected proctor media: ${error?.message || error}`);
+    } finally {
+      if (button) {
+        button.textContent = "Delete Selected";
+      }
+      if (isPhoto) updateProctorPhotoSelection();
+      else updateSpeechClipSelection();
+    }
+  }
 
   async function waitForSavedResponseRestoreAck(attemptId, sentAt, { timeoutMs = 15000 } = {}) {
     const deadline = Date.now() + timeoutMs;
@@ -5968,8 +6041,10 @@
 
   $("saveSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(true));
   $("releaseSelectedEvidenceBtn")?.addEventListener("click", () => setSelectedPhotoEvidence(false));
+  $("deleteSelectedProctorPhotosBtn")?.addEventListener("click", () => deleteSelectedProctorMedia("photo"));
   $("saveSelectedSpeechEvidenceBtn")?.addEventListener("click", () => setSelectedSpeechEvidence(true));
   $("releaseSelectedSpeechEvidenceBtn")?.addEventListener("click", () => setSelectedSpeechEvidence(false));
+  $("deleteSelectedSpeechClipsBtn")?.addEventListener("click", () => deleteSelectedProctorMedia("audio"));
 
   $("assignProctorBtn")?.addEventListener("click", assignSelectedProctor);
   $("reloadProctorsBtn")?.addEventListener("click", loadProctorManagement);
