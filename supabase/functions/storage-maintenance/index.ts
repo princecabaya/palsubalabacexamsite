@@ -311,7 +311,6 @@ async function getR2Status() {
   const s3 = new S3Client({
     region: "auto",
     endpoint,
-    forcePathStyle: true,
     credentials: {
       accessKeyId,
       secretAccessKey,
