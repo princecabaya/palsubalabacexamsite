@@ -297,25 +297,54 @@ async function getR2Status() {
     return { configured: false, connected: false, message: "R2 secrets are not configured." };
   }
 
+  const testPath = `diagnostics/exam-guard-r2-check-${crypto.randomUUID()}.txt`;
+
   try {
-    const response = await r2Client().fetch(`${r2BaseUrl()}?list-type=2&max-keys=1`);
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 300);
-      console.error("R2 connectivity check failed", {
-        status: response.status,
+    const putResponse = await r2Client().fetch(r2ObjectUrl(testPath), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "text/plain",
+        "Cache-Control": "no-store",
+      },
+      body: new TextEncoder().encode("exam-guard-r2-ok"),
+    });
+
+    if (!putResponse.ok) {
+      const detail = (await putResponse.text()).slice(0, 300);
+      console.error("R2 upload connectivity check failed", {
+        status: putResponse.status,
         detail,
       });
       return {
         configured: true,
         connected: false,
-        status: response.status,
+        status: putResponse.status,
+        operation: "put-object",
         message: detail,
       };
     }
+
+    const deleteResponse = await r2Client().fetch(r2ObjectUrl(testPath), { method: "DELETE" });
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      const detail = (await deleteResponse.text()).slice(0, 300);
+      console.error("R2 delete connectivity check failed", {
+        status: deleteResponse.status,
+        detail,
+      });
+      return {
+        configured: true,
+        connected: false,
+        status: deleteResponse.status,
+        operation: "delete-object",
+        message: detail,
+      };
+    }
+
     return {
       configured: true,
       connected: true,
       bucket: String(Deno.env.get("R2_BUCKET") || "").trim(),
+      operation: "put-delete-object",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
