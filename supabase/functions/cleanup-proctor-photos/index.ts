@@ -24,43 +24,30 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    // Query Storage metadata so cleanup also removes orphaned objects if an
-    // attempt was deleted before its 7-day photo-retention period elapsed.
-    const { data: expiredObjects, error: objectError } = await admin
-      .schema("storage")
-      .from("objects")
-      .select("name,created_at")
-      .eq("bucket_id", BUCKET)
-      .lte("created_at", cutoff)
+    const { data: expiredRows, error: expiredError } = await admin
+      .from("proctor_photos")
+      .select("id,object_path")
+      .eq("storage_provider", "supabase")
+      .eq("evidence_saved", false)
+      .lt("expires_at", new Date().toISOString())
       .limit(1000);
 
-    if (objectError) throw objectError;
-    const candidatePaths = (expiredObjects || []).map((r) => String(r.name || "")).filter(Boolean);
-    if (!candidatePaths.length) return json({ ok: true, deleted: 0 });
+    if (expiredError) throw expiredError;
 
-    const { data: protectedRows, error: protectedError } = await admin
-      .from("proctor_photos")
-      .select("object_path")
-      .in("object_path", candidatePaths)
-      .eq("evidence_saved", true);
+    const paths = (expiredRows || []).map((r) => String(r.object_path || "")).filter(Boolean);
+    if (paths.length) {
+      const { error: removeError } = await admin.storage.from(BUCKET).remove(paths);
+      if (removeError) throw removeError;
 
-    if (protectedError) throw protectedError;
-    const protectedPaths = new Set((protectedRows || []).map((r) => String(r.object_path)));
-    const paths = candidatePaths.filter((p) => !protectedPaths.has(p));
-    if (!paths.length) return json({ ok: true, deleted: 0 });
-
-    const { error: removeError } = await admin.storage.from(BUCKET).remove(paths);
-    if (removeError) throw removeError;
-
-    // Metadata rows normally disappear here as well. Delete explicitly in case
-    // a row remains after a partial earlier cleanup.
-    const { error: deleteError } = await admin
-      .from("proctor_photos")
-      .delete()
-      .in("object_path", paths);
-    if (deleteError) throw deleteError;
+      const ids = (expiredRows || []).map((r) => r.id);
+      const { error: deleteError } = await admin
+        .from("proctor_photos")
+        .delete()
+        .in("id", ids)
+        .eq("storage_provider", "supabase")
+        .eq("evidence_saved", false);
+      if (deleteError) throw deleteError;
+    }
 
     let r2Deleted = 0;
     if (r2Configured()) {
