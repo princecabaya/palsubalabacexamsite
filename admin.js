@@ -335,6 +335,8 @@
       const data = await invokeStorageMaintenance({ mode:"status" });
       $("storageExpiredPhotos").textContent = formatStorageCount(data?.expired?.photos);
       $("storageExpiredAudio").textContent = formatStorageCount(data?.expired?.audio);
+      if ($("storageLegacyPhotos")) $("storageLegacyPhotos").textContent = formatStorageCount(data?.legacy_supabase?.photos);
+      if ($("storageLegacyAudio")) $("storageLegacyAudio").textContent = formatStorageCount(data?.legacy_supabase?.audio);
       $("storageRetentionDays").textContent = `${Number(data?.retention_days || 7)} days`;
       if ($("storageR2Status")) {
         const r2 = data?.r2 || {};
@@ -469,8 +471,96 @@
     }
   }
 
+  async function purgeLegacySupabaseMedia(kind) {
+    if (currentTeacherProfile?.role !== "main_admin") return;
+
+    const isPhoto = kind === "photos";
+    const button = isPhoto ? $("purgeSupabasePhotosBtn") : $("purgeSupabaseAudioBtn");
+    const status = $("storageCleanupStatus");
+    const result = $("storageCleanupResult");
+    const label = isPhoto ? "proctor photos" : "audio clips";
+    const mode = isPhoto ? "purge_supabase_photos" : "purge_supabase_audio";
+
+    const ok = confirm(
+      `Permanently delete ALL unpreserved legacy Supabase ${label} now?\n\n` +
+      "This includes files captured today if they are still stored in Supabase. " +
+      "Saved evidence is protected. Cloudflare R2 media, exams, answers, scores, student profile photos, and ID copies are not touched. " +
+      "This cannot be undone."
+    );
+    if (!ok) return;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Deleting…";
+    }
+    if (status) {
+      status.textContent = `Deleting legacy Supabase ${label} in safe batches…`;
+      status.classList.remove("error","success");
+    }
+    if (result) result.classList.add("hidden");
+
+    let deletedTotal = 0;
+    let deletedBytes = 0;
+
+    try {
+      for (let pass = 0; pass < 200; pass += 1) {
+        const data = await invokeStorageMaintenance({ mode });
+        const deleted = Number(data?.deleted?.total || 0);
+        deletedTotal += deleted;
+        deletedBytes += Number(data?.deleted?.bytes || 0);
+
+        const remaining = isPhoto
+          ? Number(data?.status?.legacy_supabase?.photos || 0)
+          : Number(data?.status?.legacy_supabase?.audio || 0);
+
+        if ($("storageLegacyPhotos")) $("storageLegacyPhotos").textContent = formatStorageCount(data?.status?.legacy_supabase?.photos);
+        if ($("storageLegacyAudio")) $("storageLegacyAudio").textContent = formatStorageCount(data?.status?.legacy_supabase?.audio);
+        $("storageExpiredPhotos").textContent = formatStorageCount(data?.status?.expired?.photos);
+        $("storageExpiredAudio").textContent = formatStorageCount(data?.status?.expired?.audio);
+
+        if (status) {
+          status.textContent = `Deleted ${formatStorageCount(deletedTotal)} legacy Supabase ${label} so far…`;
+        }
+
+        if (deleted === 0 || remaining === 0) break;
+      }
+
+      $("storageLastCleanup").textContent = new Date().toLocaleString();
+      if (status) {
+        status.textContent = `Immediate Supabase ${label} cleanup completed.`;
+        status.classList.add("success");
+      }
+      if (result) {
+        result.innerHTML = `
+          <strong>Immediate cleanup completed</strong>
+          <div class="storage-cleanup-summary">
+            <span><b>${formatStorageCount(deletedTotal)}</b> ${label} removed</span>
+            <span><b>${formatStorageBytes(deletedBytes)}</b> reclaimed in tracked files</span>
+            <span>Saved evidence and R2 media were protected</span>
+          </div>
+        `;
+        result.classList.remove("hidden");
+      }
+
+      await loadStorageMaintenanceStatus();
+    } catch (error) {
+      console.error("Immediate Supabase media cleanup error:", error);
+      if (status) {
+        status.textContent = error?.message || `Could not delete Supabase ${label}.`;
+        status.classList.add("error");
+      }
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = isPhoto ? "Delete Supabase Proctor Photos Now" : "Delete Supabase Audio Clips Now";
+      }
+    }
+  }
+
   $("refreshStorageBtn")?.addEventListener("click", loadStorageMaintenanceStatus);
   $("cleanExpiredStorageBtn")?.addEventListener("click", cleanExpiredStorage);
+  $("purgeSupabasePhotosBtn")?.addEventListener("click", () => purgeLegacySupabaseMedia("photos"));
+  $("purgeSupabaseAudioBtn")?.addEventListener("click", () => purgeLegacySupabaseMedia("audio"));
 
   function bindTeacherManagement() {
     if (teacherManagementBound) return;
