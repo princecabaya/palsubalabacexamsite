@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,12 +62,83 @@ Deno.serve(async (req) => {
       .in("object_path", paths);
     if (deleteError) throw deleteError;
 
-    return json({ ok: true, deleted: paths.length });
+    let r2Deleted = 0;
+    if (r2Configured()) {
+      const { data: r2Rows, error: r2RowsError } = await admin
+        .from("proctor_photos")
+        .select("id,object_path")
+        .eq("storage_provider", "r2")
+        .eq("evidence_saved", false)
+        .lt("expires_at", new Date().toISOString())
+        .limit(500);
+
+      if (r2RowsError) throw r2RowsError;
+
+      const deletedIds = [];
+      for (let i = 0; i < (r2Rows || []).length; i += 20) {
+        const chunk = (r2Rows || []).slice(i, i + 20);
+        const results = await Promise.all(chunk.map(async (row) => {
+          try {
+            await r2Delete(String(row.object_path || ""));
+            return row.id;
+          } catch (error) {
+            console.error("R2 photo cleanup failed", row.object_path, error);
+            return null;
+          }
+        }));
+        deletedIds.push(...results.filter(Boolean));
+      }
+
+      if (deletedIds.length) {
+        const { error: r2DeleteRowsError } = await admin
+          .from("proctor_photos")
+          .delete()
+          .in("id", deletedIds)
+          .eq("storage_provider", "r2")
+          .eq("evidence_saved", false);
+        if (r2DeleteRowsError) throw r2DeleteRowsError;
+        r2Deleted = deletedIds.length;
+      }
+    }
+
+    return json({ ok: true, deleted: paths.length + r2Deleted, supabase_deleted: paths.length, r2_deleted: r2Deleted });
   } catch (error) {
     console.error("cleanup-proctor-photos error", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
+
+function r2Configured(): boolean {
+  return Boolean(
+    String(Deno.env.get("R2_ACCOUNT_ID") || "").trim() &&
+    String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim() &&
+    String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim() &&
+    String(Deno.env.get("R2_BUCKET") || "").trim()
+  );
+}
+
+function r2Client() {
+  return new AwsClient({
+    accessKeyId: String(Deno.env.get("R2_ACCESS_KEY_ID") || "").trim(),
+    secretAccessKey: String(Deno.env.get("R2_SECRET_ACCESS_KEY") || "").trim(),
+    service: "s3",
+    region: "auto",
+  });
+}
+
+function r2ObjectUrl(path: string): string {
+  const account = String(Deno.env.get("R2_ACCOUNT_ID") || "").trim();
+  const bucket = String(Deno.env.get("R2_BUCKET") || "").trim();
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `https://${account}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${encoded}`;
+}
+
+async function r2Delete(path: string) {
+  const response = await r2Client().fetch(r2ObjectUrl(path), { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`R2 delete failed (${response.status}): ${(await response.text()).slice(0,300)}`);
+  }
+}
 
 function getSupabaseAdminKey(): string {
   const modern = String(Deno.env.get("SUPABASE_SECRET_KEYS") || "").trim();
