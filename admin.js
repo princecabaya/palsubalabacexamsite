@@ -2421,7 +2421,7 @@
     draftAutosaveTimer = setTimeout(() => autosaveExamDraft(), 900);
   }
 
-  async function autosaveExamDraft() {
+  async function autosaveExamDraft(force = false) {
     clearTimeout(draftAutosaveTimer);
     draftAutosaveTimer = null;
 
@@ -2433,7 +2433,7 @@
       exam: editingExamId,
       snapshot
     });
-    if (fingerprint === draftLastFingerprint && editingExamId) return;
+    if (!force && fingerprint === draftLastFingerprint && editingExamId) return;
 
     if (draftAutosaveInFlight) {
       draftAutosaveQueued = true;
@@ -2496,12 +2496,70 @@
     }
   }
 
+  async function manualSaveExamDraft() {
+    const button = $("saveExamBtn");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Saving Draft…";
+    }
+
+    try {
+      const snapshot = collectExamDraftSnapshot();
+      if (!draftHasMeaningfulContent(snapshot)) {
+        setCreateMessage("Enter an exam title, code, or at least one question before saving the draft.", true);
+        return;
+      }
+
+      await autosaveExamDraft(true);
+
+      // Confirm the draft actually exists after the RPC instead of showing a
+      // success message solely from local browser state.
+      if (!editingExamId) {
+        setCreateMessage("Draft save did not complete. Please try again.", true);
+        return;
+      }
+
+      const { data: savedExam, error } = await db
+        .from("exams")
+        .select("id,title,code,status,draft_updated_at,draft_payload")
+        .eq("id", editingExamId)
+        .maybeSingle();
+
+      if (error || !savedExam) {
+        setCreateMessage(
+          `Draft was sent to Supabase but could not be verified: ${error?.message || "record not found"}`,
+          true
+        );
+        return;
+      }
+
+      const count = Array.isArray(savedExam.draft_payload?.questions)
+        ? savedExam.draft_payload.questions.length
+        : 0;
+
+      setCreateMessage(
+        `Draft "${savedExam.title || snapshot.title || "Untitled Draft"}" saved successfully` +
+        `${count ? ` with ${count} question${count === 1 ? "" : "s"}` : ""}.`
+      );
+
+      await loadExams();
+    } catch (error) {
+      console.error("Manual draft save error:", error);
+      setCreateMessage(`Draft save failed: ${error?.message || error}`, true);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Save Draft Now";
+      }
+    }
+  }
+
   function bindExamBuilder() {
     $("addQuestionBtn").addEventListener("click", () => addQuestionCard());
     $("addSectionBtn")?.addEventListener("click", () => addExamSection());
     $("clearExamFormBtn").addEventListener("click", clearExamForm);
     $("cancelEditExamBtn")?.addEventListener("click", clearExamForm);
-    $("saveExamBtn").addEventListener("click", saveExam);
+    $("saveExamBtn").addEventListener("click", manualSaveExamDraft);
     $("generateCodeBtn").addEventListener("click", generateExamCode);
     $("reloadExamsBtn").addEventListener("click", loadExams);
 
