@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       protected: protectedIds,
       missing,
       failed,
-    }, failed.length ? 207 : 200);
+    }, 200);
   } catch (error) {
     console.error("delete-proctor-media error", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
