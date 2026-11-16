@@ -300,11 +300,16 @@ async function getR2Status() {
   try {
     const response = await r2Client().fetch(`${r2BaseUrl()}?list-type=2&max-keys=1`);
     if (!response.ok) {
+      const detail = (await response.text()).slice(0, 300);
+      console.error("R2 connectivity check failed", {
+        status: response.status,
+        detail,
+      });
       return {
         configured: true,
         connected: false,
         status: response.status,
-        message: (await response.text()).slice(0, 300),
+        message: detail,
       };
     }
     return {
