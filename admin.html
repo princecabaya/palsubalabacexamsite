@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20261006-0918">
+  <link rel="stylesheet" href="style.css?v=20261116-0915">
 </head>
 <body>
   <main class="shell wide">
@@ -58,6 +58,7 @@
         <button id="tabProctorsBtn" class="tab-btn" type="button">Proctors</button>
         <button id="tabStudentsBtn" class="tab-btn" type="button">Students</button>
         <button id="tabTeachersBtn" class="tab-btn hidden" type="button">Teachers</button>
+        <button id="tabStorageBtn" class="tab-btn hidden" type="button">Storage</button>
       </div>
 
       <section id="attemptsSection" class="tab-section">
@@ -784,6 +785,37 @@
         </section>
       </section>
 
+      <section id="storageSection" class="tab-section hidden">
+        <section class="card storage-maintenance-card">
+          <div class="detail-head">
+            <div>
+              <h2>Supabase Storage Maintenance</h2>
+              <p class="muted">Main Admin only. Removes expired temporary proctoring files while preserving saved examination evidence, student photos, ID copies, and active files.</p>
+            </div>
+            <button id="refreshStorageBtn" type="button">Check Storage</button>
+          </div>
+
+          <div class="storage-maintenance-metrics">
+            <div class="metric-card"><span>Expired Proctor Photos</span><strong id="storageExpiredPhotos">—</strong></div>
+            <div class="metric-card"><span>Expired Audio Clips</span><strong id="storageExpiredAudio">—</strong></div>
+            <div class="metric-card"><span>Retention</span><strong id="storageRetentionDays">7 days</strong></div>
+            <div class="metric-card"><span>Last Cleanup</span><strong id="storageLastCleanup">Not run</strong></div>
+          </div>
+
+          <div class="storage-cleanup-warning">
+            <strong>Safe cleanup scope</strong>
+            <p>This cleanup targets expired/orphaned files in <code>exam-proctor-photos</code> and <code>exam-proctor-audio</code>. Files explicitly saved as evidence are protected. Student profile photos, ID copies, exam stimuli, examinations, answers, and scores are not deleted.</p>
+          </div>
+
+          <div class="storage-cleanup-actions">
+            <button id="cleanExpiredStorageBtn" type="button" class="danger-outline">Clean Expired Proctoring Files</button>
+            <span id="storageCleanupStatus" class="message-inline" role="status"></span>
+          </div>
+
+          <div id="storageCleanupResult" class="storage-cleanup-result hidden"></div>
+        </section>
+      </section>
+
       <section id="teachersSection" class="tab-section hidden">
         <section class="card">
           <div class="detail-head">
@@ -849,7 +881,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20261002-1700"></script>
-  <script src="admin.js?v=20261013-1630"></script>
+  <script src="admin.js?v=20261116-0915"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20261002-1648"></script>
   <script src="admin-analysis.js?v=20261002-1600"></script>
