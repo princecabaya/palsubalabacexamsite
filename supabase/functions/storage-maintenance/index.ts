@@ -150,8 +150,9 @@ async function cleanupPhotos(admin: any, limit: number) {
   if (!rows?.length) return { deleted: 0, bytes: 0 };
 
   const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
-  if (paths.length) {
-    const { error: removeError } = await admin.storage.from(PHOTO_BUCKET).remove(paths);
+  for (let i = 0; i < paths.length; i += 100) {
+    const chunk = paths.slice(i, i + 100);
+    const { error: removeError } = await admin.storage.from(PHOTO_BUCKET).remove(chunk);
     if (removeError) throw removeError;
   }
 
@@ -184,8 +185,9 @@ async function cleanupAudio(admin: any, limit: number) {
   if (!rows?.length) return { deleted: 0, bytes: 0 };
 
   const paths = rows.map((row: any) => String(row.object_path || "")).filter(Boolean);
-  if (paths.length) {
-    const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(paths);
+  for (let i = 0; i < paths.length; i += 100) {
+    const chunk = paths.slice(i, i + 100);
+    const { error: removeError } = await admin.storage.from(AUDIO_BUCKET).remove(chunk);
     if (removeError) throw removeError;
   }
 
