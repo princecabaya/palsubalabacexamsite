@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Exam Guard — Teacher</title>
-  <link rel="stylesheet" href="style.css?v=20261116-0925">
+  <link rel="stylesheet" href="style.css?v=20261116-2010">
 </head>
 <body>
   <main class="shell wide">
@@ -790,7 +790,7 @@
           <div class="detail-head">
             <div>
               <h2>Supabase Storage Maintenance</h2>
-              <p class="muted">Main Admin only. Removes expired temporary proctoring files while preserving saved examination evidence, student photos, ID copies, and active files.</p>
+              <p class="muted">Main Admin only. Monitors hybrid proctoring storage (Cloudflare R2 + legacy Supabase Storage) and removes expired temporary files while preserving saved evidence.</p>
             </div>
             <button id="refreshStorageBtn" type="button">Check Storage</button>
           </div>
@@ -799,6 +799,7 @@
             <div class="metric-card"><span>Expired Proctor Photos</span><strong id="storageExpiredPhotos">—</strong></div>
             <div class="metric-card"><span>Expired Audio Clips</span><strong id="storageExpiredAudio">—</strong></div>
             <div class="metric-card"><span>Retention</span><strong id="storageRetentionDays">7 days</strong></div>
+            <div class="metric-card"><span>R2 Connection</span><strong id="storageR2Status">Checking…</strong></div>
             <div class="metric-card"><span>Last Cleanup</span><strong id="storageLastCleanup">Not run</strong></div>
           </div>
 
@@ -881,7 +882,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script src="exam-report.js?v=20261002-1700"></script>
-  <script src="admin.js?v=20261116-1710"></script>
+  <script src="admin.js?v=20261116-2010"></script>
   <script src="admin-import.js?v=20260924-1638"></script>
   <script src="admin-results.js?v=20261002-1648"></script>
   <script src="admin-analysis.js?v=20261002-1600"></script>
