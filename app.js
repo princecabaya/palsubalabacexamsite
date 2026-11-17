@@ -776,10 +776,10 @@
     // upload fails, retry every 5 seconds up to 6 times.
     cameraInitialTimeout = setTimeout(tryInitialCapture, 2500);
 
-    // Continue normal periodic capture every 60 seconds.
+    // Continue periodic capture every 90 seconds to reduce backend load.
     cameraInterval = setInterval(() => {
       captureAndUploadProctorPhoto({ source: "scheduled" });
-    }, 60_000);
+    }, 90_000);
   }
 
   async function captureAndUploadProctorPhoto({ source = "scheduled" } = {}) {
@@ -2135,7 +2135,7 @@
   function startLiveCameraPolling() {
     clearInterval(liveCameraPollHandle);
     pollLiveCameraRequest().catch(()=>{});
-    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 2500);
+    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 15000);
   }
 
   function stopLiveCameraPolling() {
@@ -2212,7 +2212,7 @@
     // Start both teacher-message polling and live-camera request polling.
     startLiveCameraPolling();
     pollAttemptMessages({ initial: true });
-    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 3000);
+    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 15000);
   }
 
   function stopAttemptMessagePolling() {
@@ -2622,7 +2622,7 @@
             saveLocalDraft(q.question_id, ta.value);
             state.textContent = "Saving…";
             clearTimeout(debounce);
-            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 350);
+            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 1000);
           });
           wrap.appendChild(ta);
 
@@ -3533,7 +3533,7 @@
 
     timerSyncHandle = setInterval(() => {
       syncAttemptDeadline({ announce: true }).catch(() => {});
-    }, 10_000);
+    }, 30_000);
   }
 
   async function primeCompletionAudio() {
