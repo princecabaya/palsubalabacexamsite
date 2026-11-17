@@ -49,10 +49,28 @@
 
   async function signInAdminWithRetry(email, password) {
     const maxAttempts = 4;
+    const timeoutMs = 12000;
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const { error } = await db.auth.signInWithPassword({ email, password });
+      let result;
+
+      try {
+        result = await Promise.race([
+          db.auth.signInWithPassword({ email, password }),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              const timeoutError = new Error("Supabase Auth request timed out.");
+              timeoutError.status = 504;
+              reject(timeoutError);
+            }, timeoutMs)
+          )
+        ]);
+      } catch (error) {
+        result = { error };
+      }
+
+      const { error } = result || {};
 
       if (!error) return { ok: true };
 
