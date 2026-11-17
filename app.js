@@ -820,10 +820,6 @@
       if (data?.error) throw new Error(data.error);
 
       updateCameraStatus("Photo saved");
-      await logEvent("camera_photo_saved", {
-        capturedAt: data?.captured_at || null,
-        source
-      });
       setTimeout(() => {
         if (cameraStream?.active && !submitted) updateCameraStatus("Camera active");
       }, 1800);
@@ -2208,8 +2204,8 @@
     hideTeacherLiveMessage();
     if (!attempt?.attempt_token || submitted) return;
 
-    // Start both teacher-message polling and live-camera request polling.
-    startLiveCameraPolling();
+    // High-load exam mode: regular proctor photos remain active, but
+    // live-camera request polling is temporarily disabled to protect answer traffic.
     attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 30000);
   }
 
