@@ -51,6 +51,26 @@
     ].forEach(([key,state,detail]) => setPreflightStatus(key,state,detail));
   }
 
+  function scheduleJitteredLoop(callback, baseMs, jitterMs = 2000) {
+    let cancelled = false;
+    let timer = null;
+
+    const run = async () => {
+      if (cancelled) return;
+      try { await callback(); } catch (_) {}
+      if (cancelled) return;
+      const delay = Math.max(1000, baseMs + Math.floor(Math.random() * jitterMs));
+      timer = setTimeout(run, delay);
+    };
+
+    timer = setTimeout(run, Math.floor(Math.random() * Math.max(1000, jitterMs)));
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }
+
   function explainStartError(message = "") {
     const text = String(message || "");
     if (/not published|invalid.*exam code/i.test(text)) {
@@ -84,8 +104,10 @@
   let timerStartupValidated = false;
   let submitted = false;
   let attemptMessagePollHandle = null;
+  let stopAttemptMessagePollingLoop = null;
   let pendingRestoreMessage = null;
   let liveCameraPollHandle = null;
+  let stopLiveCameraPollingLoop = null;
   let studentLivePeer = null;
   let studentLiveSessionId = null;
   let pendingLiveCameraRequest = null;
@@ -776,10 +798,11 @@
     // upload fails, retry every 5 seconds up to 6 times.
     cameraInitialTimeout = setTimeout(tryInitialCapture, 2500);
 
-    // Continue normal periodic capture every 60 seconds.
+    // Continue periodic capture every 90 seconds to reduce request volume
+    // while preserving ongoing proctor evidence.
     cameraInterval = setInterval(() => {
       captureAndUploadProctorPhoto({ source: "scheduled" });
-    }, 60_000);
+    }, 90_000);
   }
 
   async function captureAndUploadProctorPhoto({ source = "scheduled" } = {}) {
@@ -2133,12 +2156,17 @@
   }
 
   function startLiveCameraPolling() {
-    clearInterval(liveCameraPollHandle);
-    pollLiveCameraRequest().catch(()=>{});
-    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 2500);
+    stopLiveCameraPollingLoop?.();
+    stopLiveCameraPollingLoop = scheduleJitteredLoop(
+      () => pollLiveCameraRequest(),
+      15_000,
+      4_000
+    );
   }
 
   function stopLiveCameraPolling() {
+    stopLiveCameraPollingLoop?.();
+    stopLiveCameraPollingLoop = null;
     clearInterval(liveCameraPollHandle);
     liveCameraPollHandle = null;
     closeStudentLiveCameraConnection();
@@ -2209,15 +2237,22 @@
     hideTeacherLiveMessage();
     if (!attempt?.attempt_token || submitted) return;
 
-    // Start both teacher-message polling and live-camera request polling.
+    // Use staggered low-frequency polling so large exam cohorts do not
+    // synchronize hundreds of requests to Supabase at the same instant.
     startLiveCameraPolling();
-    pollAttemptMessages({ initial: true });
-    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 3000);
+    pollAttemptMessages({ initial: true }).catch(()=>{});
+    stopAttemptMessagePollingLoop = scheduleJitteredLoop(
+      () => pollAttemptMessages(),
+      15_000,
+      4_000
+    );
   }
 
   function stopAttemptMessagePolling() {
     stopLiveCameraPolling();
     clearAwayNotificationTimer();
+    stopAttemptMessagePollingLoop?.();
+    stopAttemptMessagePollingLoop = null;
     clearInterval(attemptMessagePollHandle);
     attemptMessagePollHandle = null;
   }
@@ -2622,7 +2657,7 @@
             saveLocalDraft(q.question_id, ta.value);
             state.textContent = "Saving…";
             clearTimeout(debounce);
-            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 350);
+            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 1000);
           });
           wrap.appendChild(ta);
 
@@ -3533,7 +3568,7 @@
 
     timerSyncHandle = setInterval(() => {
       syncAttemptDeadline({ announce: true }).catch(() => {});
-    }, 10_000);
+    }, 30_000);
   }
 
   async function primeCompletionAudio() {
