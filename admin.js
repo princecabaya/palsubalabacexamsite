@@ -207,13 +207,19 @@
     clearExamForm();
     if (!$("questionBuilder").children.length) addQuestionCard();
 
-    // Do not hold the login screen hostage to secondary dashboard requests.
-    initializeTeacherWorkspace()
-      .then(() => loadProctorAssignments())
-      .catch(error => console.warn("Dashboard workspace loading delayed:", error));
-
-    Promise.allSettled([refreshAttempts(), loadExams()])
-      .catch(() => {});
+    // Show the dashboard immediately, but initialize identity/workspace BEFORE
+    // loading attempts so Main Admin filtering has the correct user/profile.
+    (async () => {
+      try {
+        await initializeTeacherWorkspace();
+        await loadProctorAssignments();
+        await Promise.allSettled([refreshAttempts(), loadExams()]);
+      } catch (error) {
+        console.warn("Dashboard initialization delayed:", error);
+        $("lastRefresh").textContent =
+          "Dashboard data could not load completely. Use Refresh to retry.";
+      }
+    })();
 
     clearInterval(pollHandle);
     pollHandle = setInterval(() => refreshAttempts().catch(()=>{}), 15000);
