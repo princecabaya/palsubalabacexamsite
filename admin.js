@@ -47,46 +47,95 @@
 
   let adminLoginInFlight = false;
 
+  async function directAdminPasswordSignIn(email, password) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(
+        `${cfg.SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": cfg.SUPABASE_PUBLISHABLE_KEY
+          },
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal
+        }
+      );
+
+      let payload = {};
+      try { payload = await response.json(); } catch (_) {}
+
+      if (!response.ok) {
+        const error = new Error(
+          payload?.msg ||
+          payload?.message ||
+          payload?.error_description ||
+          `Supabase Auth returned HTTP ${response.status}.`
+        );
+        error.status = response.status;
+        throw error;
+      }
+
+      if (!payload?.access_token || !payload?.refresh_token) {
+        const error = new Error("Supabase Auth returned an incomplete session.");
+        error.status = 502;
+        throw error;
+      }
+
+      const sessionResult = await Promise.race([
+        db.auth.setSession({
+          access_token: payload.access_token,
+          refresh_token: payload.refresh_token
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const error = new Error("Saving the admin session timed out.");
+            error.status = 504;
+            reject(error);
+          }, 8000)
+        )
+      ]);
+
+      if (sessionResult?.error) throw sessionResult.error;
+      return { ok: true };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("Supabase Auth request timed out.");
+        timeoutError.status = 504;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async function signInAdminWithRetry(email, password) {
-    const maxAttempts = 4;
-    const timeoutMs = 12000;
+    const maxAttempts = 3;
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      let result;
-
       try {
-        result = await Promise.race([
-          db.auth.signInWithPassword({ email, password }),
-          new Promise((_, reject) =>
-            setTimeout(() => {
-              const timeoutError = new Error("Supabase Auth request timed out.");
-              timeoutError.status = 504;
-              reject(timeoutError);
-            }, timeoutMs)
-          )
-        ]);
+        await directAdminPasswordSignIn(email, password);
+        return { ok: true };
       } catch (error) {
-        result = { error };
+        lastError = error;
       }
 
-      const { error } = result || {};
-
-      if (!error) return { ok: true };
-
-      lastError = error;
-      const message = String(error.message || "");
-      const status = Number(error.status || 0);
+      const message = String(lastError?.message || "");
+      const status = Number(lastError?.status || 0);
       const transient =
         status >= 500 ||
-        /522|523|524|525|504|gateway|timeout|temporar|network|fetch/i.test(message);
+        /520|521|522|523|524|525|504|502|gateway|timeout|temporar|network|fetch/i.test(message);
 
       if (!transient || attempt === maxAttempts) break;
 
-      const delay = Math.min(3500, 600 * Math.pow(2, attempt - 1));
       $("adminLoginMsg").textContent =
         `Supabase is temporarily unavailable. Retrying sign-in (${attempt}/${maxAttempts})…`;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
     }
 
     return { ok: false, error: lastError };
@@ -158,11 +207,16 @@
     clearExamForm();
     if (!$("questionBuilder").children.length) addQuestionCard();
 
-    await initializeTeacherWorkspace();
-    await loadProctorAssignments();
-    await Promise.all([refreshAttempts(), loadExams()]);
+    // Do not hold the login screen hostage to secondary dashboard requests.
+    initializeTeacherWorkspace()
+      .then(() => loadProctorAssignments())
+      .catch(error => console.warn("Dashboard workspace loading delayed:", error));
+
+    Promise.allSettled([refreshAttempts(), loadExams()])
+      .catch(() => {});
+
     clearInterval(pollHandle);
-    pollHandle = setInterval(refreshAttempts, 5000);
+    pollHandle = setInterval(() => refreshAttempts().catch(()=>{}), 15000);
   }
 
   function bindTabs() {
