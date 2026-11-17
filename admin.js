@@ -39,9 +39,18 @@
   const myProctoredExamIds = new Set();
 
   async function checkSession() {
-    const { data } = await db.auth.getSession();
-    if (data.session) {
-      await showDashboard();
+    try {
+      const result = await Promise.race([
+        db.auth.getSession(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session check timed out.")), 5000)
+        )
+      ]);
+      if (result?.data?.session) {
+        await showDashboard();
+      }
+    } catch (error) {
+      console.warn("Admin session check delayed:", error);
     }
   }
 
@@ -262,7 +271,19 @@
   }
 
   async function initializeTeacherWorkspace() {
-    const { data: sessionData } = await db.auth.getSession();
+    let sessionData = null;
+    try {
+      const sessionResult = await Promise.race([
+        db.auth.getSession(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session lookup timed out.")), 5000)
+        )
+      ]);
+      sessionData = sessionResult?.data || null;
+    } catch (error) {
+      console.warn("Admin workspace session lookup delayed:", error);
+    }
+
     currentUserId = sessionData?.session?.user?.id || null;
     if (!currentUserId) return;
 
@@ -6274,10 +6295,37 @@
     else changeGroupLivePage(-1);
   }, { passive:true });
   $("signOutBtn").addEventListener("click", async () => {
+    const btn = $("signOutBtn");
+    btn.disabled = true;
+    btn.textContent = "Signing out…";
+
     clearInterval(pollHandle);
-    await closeGroupLiveProctor({ notifyServer:true });
-    await db.auth.signOut();
-    location.reload();
+    clearInterval(teacherLivePollHandle);
+
+    // Close local live-proctor state immediately; server notification is best-effort.
+    closeGroupLiveProctor({ notifyServer:false }).catch(()=>{});
+
+    try {
+      await Promise.race([
+        db.auth.signOut({ scope: "local" }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Sign-out timed out.")), 5000)
+        )
+      ]);
+    } catch (error) {
+      console.warn("Remote/local Supabase sign-out delayed:", error);
+      // Clear the Supabase auth token from this browser as a fallback.
+      try {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith("sb-") && key.endsWith("-auth-token")) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (_) {}
+    }
+
+    sessionStorage.removeItem("exam_guard_admin_workspace");
+    location.replace("admin.html?logged_out=1");
   });
 
   function fmt(value) {
