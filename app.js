@@ -776,10 +776,10 @@
     // upload fails, retry every 5 seconds up to 6 times.
     cameraInitialTimeout = setTimeout(tryInitialCapture, 2500);
 
-    // Continue periodic capture every 90 seconds to reduce backend load.
+    // Continue periodic capture every 2 minutes to reduce backend load.
     cameraInterval = setInterval(() => {
       captureAndUploadProctorPhoto({ source: "scheduled" });
-    }, 90_000);
+    }, 120_000);
   }
 
   async function captureAndUploadProctorPhoto({ source = "scheduled" } = {}) {
@@ -2134,8 +2134,7 @@
 
   function startLiveCameraPolling() {
     clearInterval(liveCameraPollHandle);
-    pollLiveCameraRequest().catch(()=>{});
-    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 15000);
+    liveCameraPollHandle = setInterval(() => pollLiveCameraRequest().catch(()=>{}), 30000);
   }
 
   function stopLiveCameraPolling() {
@@ -2211,8 +2210,7 @@
 
     // Start both teacher-message polling and live-camera request polling.
     startLiveCameraPolling();
-    pollAttemptMessages({ initial: true });
-    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 15000);
+    attemptMessagePollHandle = setInterval(() => pollAttemptMessages(), 30000);
   }
 
   function stopAttemptMessagePolling() {
@@ -2622,7 +2620,7 @@
             saveLocalDraft(q.question_id, ta.value);
             state.textContent = "Saving…";
             clearTimeout(debounce);
-            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 1000);
+            debounce = setTimeout(() => saveAnswer(q.question_id, ta.value, state), 1200);
           });
           wrap.appendChild(ta);
 
@@ -3369,30 +3367,44 @@
   async function saveAnswer(questionId, answer, stateNode, { quiet = false } = {}) {
     if (!attempt?.attempt_token || submitted) return;
 
+    // Protect the student's work locally before any network request.
+    saveLocalDraft(questionId, answer);
+
     if (stateNode && !quiet) {
       stateNode.textContent = "Saving…";
     }
 
     const savePromise = (async () => {
-      const { error } = await db.rpc("save_exam_response", {
-        p_attempt_token: attempt.attempt_token,
-        p_question_id: questionId,
-        p_answer: answer
-      });
+      let lastError = null;
 
-      if (error) {
-        if (stateNode) {
-          stateNode.textContent = "Save failed — retry by changing the answer.";
-          stateNode.style.color = "#b42318";
+      for (let tryNo = 0; tryNo < 2; tryNo += 1) {
+        if (tryNo > 0) {
+          if (stateNode && !quiet) stateNode.textContent = "Retrying save…";
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        throw error;
+
+        const { error } = await db.rpc("save_exam_response", {
+          p_attempt_token: attempt.attempt_token,
+          p_question_id: questionId,
+          p_answer: answer
+        });
+
+        if (!error) {
+          if (stateNode) {
+            stateNode.textContent = `Saved ${new Date().toLocaleTimeString()}`;
+            stateNode.style.color = "";
+          }
+          return;
+        }
+
+        lastError = error;
       }
 
       if (stateNode) {
-        stateNode.textContent = `Saved ${new Date().toLocaleTimeString()}`;
-        stateNode.style.color = "";
+        stateNode.textContent = "Saved on this device — server retry needed.";
+        stateNode.style.color = "#b54708";
       }
-      saveLocalDraft(questionId, answer);
+      throw lastError || new Error("Answer could not be saved to the server.");
     })();
 
     pendingAnswerSaves.set(String(questionId), savePromise);
@@ -3533,7 +3545,7 @@
 
     timerSyncHandle = setInterval(() => {
       syncAttemptDeadline({ announce: true }).catch(() => {});
-    }, 30_000);
+    }, 60_000);
   }
 
   async function primeCompletionAudio() {
