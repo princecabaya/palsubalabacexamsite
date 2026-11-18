@@ -25,6 +25,7 @@
   let teacherLivePeer = null;
   let teacherLiveSessionId = null;
   let teacherLivePollHandle = null;
+  let teacherNotificationPollHandle = null;
   let groupLiveExam = null;
   const groupLivePeers = new Map();
   let groupLiveClosing = false;
@@ -221,6 +222,7 @@
     (async () => {
       try {
         await initializeTeacherWorkspace();
+        startTeacherExamNotificationPolling();
         await loadProctorAssignments();
         await Promise.allSettled([refreshAttempts(), loadExams()]);
       } catch (error) {
@@ -232,6 +234,66 @@
 
     clearInterval(pollHandle);
     pollHandle = setInterval(() => refreshAttempts().catch(()=>{}), 15000);
+  }
+
+  async function loadTeacherExamNotifications() {
+    const bar = $("teacherEditNotificationBar");
+    const list = $("teacherEditNotificationList");
+    const countNode = $("teacherEditNotificationCount");
+    if (!bar || !list || !countNode || !currentUserId) return;
+
+    const result = await db.rpc("get_my_exam_notifications");
+    if (result.error) {
+      console.warn("Exam notifications unavailable:", result.error);
+      return;
+    }
+
+    const notices = result.data || [];
+    const unread = notices.filter(item => !item.read_at);
+    countNode.textContent = String(unread.length);
+
+    if (!notices.length) {
+      list.innerHTML = '<div class="teacher-edit-notification-empty">No exam edit notifications.</div>';
+      bar.classList.add("hidden");
+      return;
+    }
+
+    bar.classList.remove("hidden");
+    list.innerHTML = "";
+
+    for (const notice of notices) {
+      const item = document.createElement("article");
+      item.className = "teacher-edit-notification-item" + (notice.read_at ? "" : " unread");
+      const meta = [notice.exam_code || "", notice.updated_at ? fmt(notice.updated_at) : ""].filter(Boolean).join(" • ");
+      item.innerHTML =
+        "<p><strong>" + escapeHtml(notice.exam_title || "Examination") + "</strong></p>" +
+        "<p>" + escapeHtml(notice.message || "Main Admin edited this examination.") + "</p>" +
+        '<div class="teacher-edit-notification-meta">' + escapeHtml(meta) + "</div>" +
+        '<div class="teacher-edit-notification-actions">' +
+          (notice.read_at ? "" : '<button type="button" class="mark-exam-notice-read">Mark as read</button>') +
+        "</div>";
+
+      const readBtn = item.querySelector(".mark-exam-notice-read");
+      if (readBtn) {
+        readBtn.addEventListener("click", async () => {
+          const readResult = await db.rpc("mark_exam_notification_read", {
+            p_notification_id: notice.notification_id
+          });
+          if (!readResult.error) await loadTeacherExamNotifications();
+        });
+      }
+
+      list.appendChild(item);
+    }
+  }
+
+  function startTeacherExamNotificationPolling() {
+    clearInterval(teacherNotificationPollHandle);
+    loadTeacherExamNotifications().catch(()=>{});
+    teacherNotificationPollHandle = setInterval(
+      () => loadTeacherExamNotifications().catch(()=>{}),
+      30000
+    );
   }
 
   function bindTabs() {
@@ -1473,7 +1535,7 @@
     $("detailTitle").textContent = a.students?.full_name || "Attempt";
     $("detailMeta").textContent = `${a.students?.student_no || ""} • ${a.exams?.title || ""} • ${a.status}`;
 
-    const proctorOnly = isProctorForExam(a.exams?.id) && a.exams?.owner_id !== currentUserId;
+    const proctorOnly = currentTeacherProfile?.role !== "main_admin" && isProctorForExam(a.exams?.id) && a.exams?.owner_id !== currentUserId;
     const reopenBtn = $("reopenAttemptBtn");
     if (reopenBtn) reopenBtn.classList.toggle("hidden", a.status !== "submitted" || proctorOnly);
     const permitEditBtn = $("permitEditAttemptBtn");
@@ -4262,9 +4324,47 @@
   async function editExam(exam) {
     if (!exam) return;
 
-    if (exam.status === "published") {
-      alert("Published examinations cannot be edited. Close the examination or return it to Draft status before editing.");
-      return;
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+
+    if (exam.status !== "draft") {
+      if (!isMainAdmin) {
+        alert("This examination must be returned to Draft status before editing.");
+        return;
+      }
+
+      if (exam.status === "published") {
+        const activeCheck = await db
+          .from("attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("exam_id", exam.id)
+          .eq("status", "active");
+
+        if (activeCheck.error) {
+          alert("Could not verify active student attempts: " + activeCheck.error.message);
+          return;
+        }
+
+        const activeCount = Number(activeCheck.count || 0);
+        if (activeCount > 0) {
+          alert("This published exam currently has active student attempts. For exam integrity, editing is blocked until the active attempts finish or the exam is closed.");
+          return;
+        }
+      }
+
+      const ok = confirm("Open this examination for Main Admin editing?\n\nThe examination will first be returned to Draft status. Teacher ownership will not change, and the teacher will receive an edit notification.");
+      if (!ok) return;
+
+      const draftResult = await db
+        .from("exams")
+        .update({ status: "draft" })
+        .eq("id", exam.id);
+
+      if (draftResult.error) {
+        alert("Could not return the examination to Draft: " + draftResult.error.message);
+        return;
+      }
+
+      exam = { ...exam, status: "draft" };
     }
 
     let questions = null;
@@ -4630,7 +4730,7 @@
         const archived = Boolean(exam.archived);
         tr.classList.toggle("archived-row", archived);
 
-        const isProctorOnly = isProctorForExam(exam.id) && exam.owner_id !== currentUserId;
+        const isProctorOnly = currentTeacherProfile?.role !== "main_admin" && isProctorForExam(exam.id) && exam.owner_id !== currentUserId;
         let actionMarkup = "";
 
         if (isProctorOnly) {
@@ -4673,6 +4773,7 @@
             <div class="exam-action-primary">
               <button type="button" data-exam-action="preview">Preview Exam</button>
               <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+              ${currentTeacherProfile?.role === "main_admin" ? '<button type="button" data-exam-action="edit">Edit Exam</button>' : ''}
               <button type="button" data-exam-action="extend-window">Extend Window</button>
               <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
             </div>
@@ -4691,6 +4792,7 @@
             <div class="exam-action-primary">
               <button type="button" data-exam-action="preview">Preview Exam</button>
               <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
+              ${currentTeacherProfile?.role === "main_admin" ? '<button type="button" data-exam-action="edit">Edit Exam</button>' : ''}
               <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
               <button type="button" data-exam-action="retake">Retake Exam</button>
             </div>
