@@ -4754,7 +4754,8 @@
             <details class="exam-more-actions">
               <summary>More Actions</summary>
               <div class="exam-more-actions-menu">
-                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>\n                <button type="button" data-exam-action="delete" class="danger-outline">Permanently Delete</button>
+                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>
+                <button type="button" data-exam-action="delete" class="danger-outline">Permanently Delete</button>
               </div>
             </details>
           `;
@@ -4768,7 +4769,8 @@
             <details class="exam-more-actions">
               <summary>More Actions</summary>
               <div class="exam-more-actions-menu">
-                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>\n                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
               </div>
             </details>
           `;
@@ -4787,7 +4789,8 @@
                 <button type="button" data-action="closed">Close Exam</button>
                 <button type="button" data-action="draft">Return to Draft</button>
                 <button type="button" data-exam-action="retake">Retake Exam</button>
-                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>\n                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
               </div>
             </details>
           `;
@@ -4805,7 +4808,8 @@
               <div class="exam-more-actions-menu">
                 <button type="button" data-action="draft">Return to Draft</button>
                 <button type="button" data-action="published">Publish Again</button>
-                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>\n                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
+                <button type="button" data-exam-action="duplicate">Duplicate Exam</button>
+                <button type="button" data-exam-action="archive" class="danger-outline">Move to Trash</button>
               </div>
             </details>
           `;
@@ -4846,7 +4850,8 @@
             if (action === "toggle-results") await toggleExamResultsRelease(exam);
             if (action === "archive") await archiveExam(exam);
             if (action === "restore") await restoreExam(exam);
-            if (action === "retake") await createRetakeExam(exam);\n            if (action === "duplicate") await duplicateExam(exam);
+            if (action === "retake") await createRetakeExam(exam);
+            if (action === "duplicate") await duplicateExam(exam);
             if (action === "delete") await deleteExam(exam);
           });
         });
@@ -4868,7 +4873,88 @@
     }
   }
 
-  function duplicateTargetLabel(teacher) {\n    if (!teacher) return "Teacher";\n    if (teacher.user_id === currentUserId) {\n      return `${teacher.display_name || teacher.email || "Main Admin"} — My Account`;\n    }\n    return teacher.display_name || teacher.email || "Teacher";\n  }\n\n  async function chooseDuplicateTargetOwner() {\n    const isMainAdmin = currentTeacherProfile?.role === "main_admin";\n    if (!isMainAdmin) return currentUserId;\n\n    const candidates = teacherWorkspaces.filter(t => t.is_admin);\n    if (!candidates.length) {\n      alert("No enabled teacher accounts are available as a duplication destination.");\n      return null;\n    }\n\n    const lines = candidates.map((teacher, index) => `${index + 1}. ${duplicateTargetLabel(teacher)}`);\n    const answer = prompt(\n      "Choose where to duplicate this examination.\n\n" + lines.join("\n") +\n      "\n\nEnter the number of the destination account:",\n      "1"\n    );\n\n    if (answer === null) return null;\n    const selectedIndex = Number.parseInt(String(answer).trim(), 10) - 1;\n    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= candidates.length) {\n      alert("Please enter a valid teacher number from the list.");\n      return null;\n    }\n    return candidates[selectedIndex].user_id;\n  }\n\n  async function duplicateExam(exam) {\n    if (!exam?.id) return;\n\n    const isMainAdmin = currentTeacherProfile?.role === "main_admin";\n    if (!isMainAdmin && exam.owner_id !== currentUserId) {\n      alert("You may duplicate only examinations that belong to your own account.");\n      return;\n    }\n\n    const targetOwnerId = await chooseDuplicateTargetOwner();\n    if (!targetOwnerId) return;\n\n    const targetTeacher = teacherWorkspaces.find(t => t.user_id === targetOwnerId);\n    const targetName = targetOwnerId === currentUserId\n      ? "your own account"\n      : (targetTeacher?.display_name || targetTeacher?.email || "the selected teacher account");\n\n    const ok = confirm(\n      `Duplicate "${exam.title}" into ${targetName}?\n\n` +\n      "The copy will be created as a Draft with a new exam code. " +\n      "Student attempts, scores, result-release settings, and the old exam schedule will not be copied."\n    );\n    if (!ok) return;\n\n    const { data, error } = await db.rpc("duplicate_exam", {\n      p_source_exam_id: exam.id,\n      p_target_owner_id: targetOwnerId\n    });\n\n    if (error) {\n      alert(`Could not duplicate this exam: ${error.message}`);\n      return;\n    }\n\n    const questionCount = Number(data?.question_count || 0);\n    alert(\n      `Exam duplicated successfully.\n\n` +\n      `Title: ${data?.title || "Duplicated Exam"}\n` +\n      `Code: ${data?.code || "New draft code"}\n` +\n      `Questions copied: ${questionCount}\n` +\n      `Destination: ${targetName}\n\n` +\n      "The duplicate is a Draft and can be edited before publishing."\n    );\n\n    await loadExams();\n  }\n\n  async function previewExam(exam) {
+  function duplicateTargetLabel(teacher) {
+    if (!teacher) return "Teacher";
+    if (teacher.user_id === currentUserId) {
+      return `${teacher.display_name || teacher.email || "Main Admin"} — My Account`;
+    }
+    return teacher.display_name || teacher.email || "Teacher";
+  }
+
+  async function chooseDuplicateTargetOwner() {
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    if (!isMainAdmin) return currentUserId;
+
+    const candidates = teacherWorkspaces.filter(t => t.is_admin);
+    if (!candidates.length) {
+      alert("No enabled teacher accounts are available as a duplication destination.");
+      return null;
+    }
+
+    const lines = candidates.map((teacher, index) => `${index + 1}. ${duplicateTargetLabel(teacher)}`);
+    const answer = prompt(
+      "Choose where to duplicate this examination.\\n\\n" + lines.join("\\n") +
+      "\\n\\nEnter the number of the destination account:",
+      "1"
+    );
+
+    if (answer === null) return null;
+    const selectedIndex = Number.parseInt(String(answer).trim(), 10) - 1;
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= candidates.length) {
+      alert("Please enter a valid teacher number from the list.");
+      return null;
+    }
+    return candidates[selectedIndex].user_id;
+  }
+
+  async function duplicateExam(exam) {
+    if (!exam?.id) return;
+
+    const isMainAdmin = currentTeacherProfile?.role === "main_admin";
+    if (!isMainAdmin && exam.owner_id !== currentUserId) {
+      alert("You may duplicate only examinations that belong to your own account.");
+      return;
+    }
+
+    const targetOwnerId = await chooseDuplicateTargetOwner();
+    if (!targetOwnerId) return;
+
+    const targetTeacher = teacherWorkspaces.find(t => t.user_id === targetOwnerId);
+    const targetName = targetOwnerId === currentUserId
+      ? "your own account"
+      : (targetTeacher?.display_name || targetTeacher?.email || "the selected teacher account");
+
+    const ok = confirm(
+      `Duplicate "${exam.title}" into ${targetName}?\\n\\n` +
+      "The copy will be created as a Draft with a new exam code. " +
+      "Student attempts, scores, result-release settings, and the old exam schedule will not be copied."
+    );
+    if (!ok) return;
+
+    const { data, error } = await db.rpc("duplicate_exam", {
+      p_source_exam_id: exam.id,
+      p_target_owner_id: targetOwnerId
+    });
+
+    if (error) {
+      alert(`Could not duplicate this exam: ${error.message}`);
+      return;
+    }
+
+    const questionCount = Number(data?.question_count || 0);
+    alert(
+      `Exam duplicated successfully.\\n\\n` +
+      `Title: ${data?.title || "Duplicated Exam"}\\n` +
+      `Code: ${data?.code || "New draft code"}\\n` +
+      `Questions copied: ${questionCount}\\n` +
+      `Destination: ${targetName}\\n\\n` +
+      "The duplicate is a Draft and can be edited before publishing."
+    );
+
+    await loadExams();
+  }
+
+  async function previewExam(exam) {
     const panel = $("examPreviewPanel");
     const questionsNode = $("examPreviewQuestions");
     if (!panel || !questionsNode) return;
