@@ -5183,3 +5183,83 @@ textarea{resize:vertical}
     grid-template-columns:1fr;
   }
 }
+
+
+.teacher-edit-notification-bar {
+  position: fixed;
+  left: 14px;
+  top: 88px;
+  width: min(320px, calc(100vw - 28px));
+  max-height: calc(100vh - 116px);
+  overflow: hidden;
+  z-index: 1200;
+  background: #ffffff;
+  border: 1px solid #d9dce3;
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.14);
+}
+
+.teacher-edit-notification-bar.hidden {
+  display: none !important;
+}
+
+.teacher-edit-notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e7e8ec;
+  background: #f7f8fb;
+}
+
+.teacher-edit-notification-list {
+  max-height: calc(100vh - 175px);
+  overflow: auto;
+  padding: 8px;
+}
+
+.teacher-edit-notification-item {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid #e2e4ea;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+
+.teacher-edit-notification-item.unread {
+  border-left: 4px solid #1f4b99;
+  background: #f7faff;
+}
+
+.teacher-edit-notification-item p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.teacher-edit-notification-meta {
+  font-size: .78rem;
+  color: #697386;
+}
+
+.teacher-edit-notification-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.teacher-edit-notification-empty {
+  padding: 12px;
+  color: #697386;
+  font-size: .9rem;
+}
+
+@media (max-width: 1100px) {
+  .teacher-edit-notification-bar {
+    left: 8px;
+    top: 74px;
+    width: min(300px, calc(100vw - 16px));
+  }
+}
