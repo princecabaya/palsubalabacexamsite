@@ -9,6 +9,7 @@
   let examsCache = [];
   let questionCounter = 0;
   let editingExamId = null;
+  let editingExamOwnerId = null;
   let draftAutosaveTimer = null;
   let draftAutosaveInFlight = false;
   let draftAutosaveQueued = false;
@@ -401,6 +402,7 @@
       activeWorkspaceOwnerId = select.value || currentUserId;
       sessionStorage.setItem("exam_guard_admin_workspace", activeWorkspaceOwnerId);
       editingExamId = null;
+      editingExamOwnerId = null;
       clearExamForm();
       $("examResultsPanel")?.classList.add("hidden");
       closeAttemptDrawer();
@@ -2843,7 +2845,7 @@
     if (!draftHasMeaningfulContent(snapshot)) return;
 
     const fingerprint = JSON.stringify({
-      owner: getActiveWorkspaceOwnerId(),
+      owner: editingExamOwnerId || getActiveWorkspaceOwnerId(),
       exam: editingExamId,
       snapshot
     });
@@ -2860,7 +2862,7 @@
     try {
       const { data, error } = await db.rpc("autosave_exam_draft", {
         p_exam_id: editingExamId,
-        p_owner_id: getActiveWorkspaceOwnerId(),
+        p_owner_id: editingExamOwnerId || getActiveWorkspaceOwnerId(),
         p_payload: snapshot
       });
 
@@ -2878,7 +2880,7 @@
       const row = data?.[0];
       if (row?.exam_id) editingExamId = row.exam_id;
       draftLastFingerprint = JSON.stringify({
-        owner: getActiveWorkspaceOwnerId(),
+        owner: editingExamOwnerId || getActiveWorkspaceOwnerId(),
         exam: editingExamId,
         snapshot
       });
@@ -3010,6 +3012,7 @@
     draftAutosaveQueued = false;
     draftLastFingerprint = "";
     editingExamId = null;
+    editingExamOwnerId = null;
     const heading = $("examFormHeading");
     const intro = $("examFormIntro");
     const saveBtn = $("saveExamBtn");
@@ -4389,6 +4392,7 @@
     }
 
     editingExamId = exam.id;
+    editingExamOwnerId = exam.owner_id || getActiveWorkspaceOwnerId();
     draftLastFingerprint = "";
 
     $("examTitleInput").value = draft?.title ?? exam.title ?? "";
