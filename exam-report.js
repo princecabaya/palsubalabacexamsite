@@ -224,8 +224,11 @@
     doc.setFont("times", "italic");
     doc.setFontSize(8.8);
     doc.setTextColor(85);
+    const noteText = report?.legacy_recovery_evidence
+      ? "This legacy attempt has preserved recovery answers, but the original question identifiers were replaced after submission. The main table shows the current exam structure; see the Preserved Recovery Answers appendix for the student's original saved answer evidence."
+      : "This report shows the student's saved answer and the answer key for auto-scored items.";
     const noteLines = doc.splitTextToSize(
-      "This report shows the student's saved answer and the answer key for auto-scored items.",
+      noteText,
       pageWidth - 36
     );
     doc.text(noteLines, 18, noteY);
@@ -291,6 +294,74 @@
         }
       }
     });
+
+    const recoveryAnswers = Array.isArray(report?.recovery_answers)
+      ? report.recovery_answers.filter(entry => String(entry?.answer ?? "").trim() !== "")
+      : [];
+
+    if (report?.legacy_recovery_evidence && recoveryAnswers.length) {
+      doc.addPage();
+
+      doc.setTextColor(20);
+      doc.setFont("times", "bold");
+      doc.setFontSize(13);
+      doc.text("PRESERVED RECOVERY ANSWERS", pageWidth / 2, 45, { align: "center" });
+
+      doc.setFont("times", "normal");
+      doc.setFontSize(8.8);
+      doc.setTextColor(70);
+      const recoveryNote = doc.splitTextToSize(
+        "These answers were recovered from the student's saved legacy attempt. The original question identifiers were replaced after submission, so these entries are reproduced exactly as preserved and are not assigned to current item numbers unless an exact historical mapping exists.",
+        pageWidth - 36
+      );
+      doc.text(recoveryNote, 18, 53);
+
+      const capturedLabel = report?.recovery_captured_at
+        ? `Recovery captured: ${fmtDate(report.recovery_captured_at)}`
+        : "Recovery snapshot preserved";
+      doc.setFont("times", "italic");
+      doc.setFontSize(8.2);
+      doc.text(
+        `${capturedLabel} • Preserved answers: ${recoveryAnswers.length}`,
+        18,
+        53 + recoveryNote.length * 4.2 + 2
+      );
+
+      const recoveryBody = recoveryAnswers.map((entry, index) => [
+        String(index + 1),
+        String(entry?.answer ?? "")
+      ]);
+
+      doc.autoTable({
+        startY: 53 + recoveryNote.length * 4.2 + 7,
+        margin: { top: 42, right: 18, bottom: 16, left: 18 },
+        head: [["Recovery Entry", "Preserved Student Answer"]],
+        body: recoveryBody,
+        theme: "grid",
+        styles: {
+          font: "times",
+          fontSize: 8.5,
+          cellPadding: 2.2,
+          valign: "top",
+          overflow: "linebreak",
+          lineColor: [190, 195, 205],
+          lineWidth: 0.15,
+          textColor: [30, 30, 30]
+        },
+        headStyles: {
+          font: "times",
+          fontStyle: "bold",
+          fillColor: [235, 239, 247],
+          textColor: [20, 32, 51],
+          lineColor: [160, 170, 185],
+          lineWidth: 0.2
+        },
+        columnStyles: {
+          0: { cellWidth: 28, halign: "center" },
+          1: { cellWidth: 146 }
+        }
+      });
+    }
 
     const pages = doc.getNumberOfPages();
     for (let page = 1; page <= pages; page += 1) {
