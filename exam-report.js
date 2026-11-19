@@ -233,16 +233,25 @@
     );
     doc.text(noteLines, 18, noteY);
 
-    const body = report.items.map(item => [
-      String(item.position ?? ""),
-      String(item.prompt || ""),
-      String(item.student_answer || "No answer"),
-      item.correct_answer == null ? "Not auto-scored" : String(item.correct_answer),
-      resultLabel(item),
-      item.points_awarded == null
-        ? "—"
-        : `${fmtNumber(item.points_awarded)}/${fmtNumber(item.points)}`
-    ]);
+    const body = report.items.map(item => {
+      const hasStudentAnswer = String(item?.student_answer ?? "").trim() !== "";
+      const legacyUnmapped = Boolean(report?.legacy_recovery_evidence) && !hasStudentAnswer;
+
+      return [
+        String(item.position ?? ""),
+        String(item.prompt || ""),
+        legacyUnmapped
+          ? "Preserved answer available — see recovery appendix"
+          : String(item.student_answer || "No answer"),
+        item.correct_answer == null ? "Not auto-scored" : String(item.correct_answer),
+        legacyUnmapped ? "LEGACY UNMAPPED" : resultLabel(item),
+        legacyUnmapped
+          ? "—"
+          : (item.points_awarded == null
+              ? "—"
+              : `${fmtNumber(item.points_awarded)}/${fmtNumber(item.points)}`)
+      ];
+    });
 
     if (typeof doc.autoTable !== "function") {
       throw new Error("PDF table library is not available. Refresh the page and try again.");
