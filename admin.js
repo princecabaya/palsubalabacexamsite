@@ -2308,6 +2308,13 @@
       button.textContent = `View 7-Day Recovery Snapshot (${count})`;
     }
 
+    if (attempt?.status === "submitted" && count > 0) {
+      const reopenButton = $("reopenAttemptBtn");
+      const permitButton = $("permitEditAttemptBtn");
+      if (reopenButton) reopenButton.textContent = "Restore Answers & Reopen";
+      if (permitButton) permitButton.textContent = "Restore Answers & Permit Editing";
+    }
+
     if (info) {
       info.classList.remove("hidden");
       info.innerHTML = `
@@ -2472,7 +2479,7 @@
 
     rows.innerHTML = '<tr><td colspan="4">Loading saved responses…</td></tr>';
     countBadge.textContent = "Loading…";
-    loadAttemptRecoverySnapshot(attempt);
+    await loadAttemptRecoverySnapshot(attempt);
 
     const examId = attempt.exams?.id;
     if (!examId) {
@@ -2513,7 +2520,11 @@
       return r && String(r.answer ?? "").trim() !== "";
     }).length;
 
-    if (attempt.status === "submitted") {
+    const recoveryCount = Number(currentRecoverySnapshot?.answered_count || 0);
+
+    if (attempt.status === "submitted" && answered === 0 && recoveryCount > 0) {
+      note.textContent = `No permanent response rows are currently attached to these question IDs, but a verified 7-day recovery snapshot contains ${recoveryCount} answered item${recoveryCount === 1 ? "" : "s"}. Reopening will first restore and verify those preserved answers; if the mapping is not safe, Exam Guard will refuse to reopen rather than guess.`;
+    } else if (attempt.status === "submitted") {
       note.textContent = "These are the responses saved in Supabase for the submitted examination.";
     } else if (attempt.status === "expired") {
       note.textContent = "These responses were autosaved before the examination attempt expired. They were not submitted.";
@@ -2521,7 +2532,9 @@
       note.textContent = "These responses are currently autosaved in Supabase. The student has not submitted the examination yet.";
     }
 
-    countBadge.textContent = `${answered}/${questions.length} answered`;
+    countBadge.textContent = attempt.status === "submitted" && answered === 0 && recoveryCount > 0
+      ? `0 permanent • ${recoveryCount} recovery`
+      : `${answered}/${questions.length} answered`;
     rows.innerHTML = "";
 
     if (!questions.length) {
@@ -5684,7 +5697,9 @@
 
     if (button) {
       button.disabled = false;
-      button.textContent = "Permit Editing After Submission";
+      button.textContent = Number(currentRecoverySnapshot?.answered_count || 0) > 0
+        ? "Restore Answers & Permit Editing"
+        : "Permit Editing After Submission";
     }
 
     if (error) {
@@ -5693,8 +5708,10 @@
     }
 
     const until = data?.permitted_until ? new Date(data.permitted_until) : null;
+    const restoredCount = Number(data?.restored_count || 0);
     alert(
       `${studentName} may now edit the submitted attempt${until ? ` until ${fmtExamTime(until.toISOString())}` : ""}.\n\n` +
+      (restoredCount > 0 ? `${restoredCount} preserved answer${restoredCount === 1 ? " was" : "s were"} restored and verified before editing was enabled.\n\n` : "") +
       "Ask the student to enter the same Exam Code and Student ID. Their previous answers will load for editing, and they must submit again when finished."
     );
 
@@ -6230,8 +6247,13 @@
     if (!a || a.status !== "submitted") return;
 
     const studentName = a.students?.full_name || "this student";
+    const recoveryCount = Number(currentRecoverySnapshot?.answered_count || 0);
+    const recoveryNote = recoveryCount > 0
+      ? `\n\nA recovery snapshot contains ${recoveryCount} answered item${recoveryCount === 1 ? "" : "s"}. Exam Guard will restore and verify those answers before reopening. If they cannot be mapped safely to the student's exam, reopening will be stopped instead of guessing.`
+      : "";
+
     const ok = confirm(
-      `Reopen the submitted attempt for ${studentName}?\n\nThe submitted score and submission time will be cleared, but the student's saved answers will be kept. The student can enter the same Exam Code and Student ID again and continue with the original remaining time.`
+      `Reopen the submitted attempt for ${studentName}?\n\nThe submitted score and submission time will be cleared only after the student's answers are safely preserved. The student can enter the same Exam Code and Student ID again and continue editing.${recoveryNote}`
     );
     if (!ok) return;
 
@@ -6260,7 +6282,10 @@
       return;
     }
 
-    alert(`${studentName}'s attempt is open again. Their saved answers were kept.`);
+    alert(
+      `${studentName}'s attempt is open again. Their preserved answers were restored before reopening.` +
+      (recoveryCount > 0 ? `\n\nRecovery snapshot available: ${recoveryCount} answered item${recoveryCount === 1 ? "" : "s"}.` : "")
+    );
     closeAttemptDrawer();
     await refreshAttempts();
   }
