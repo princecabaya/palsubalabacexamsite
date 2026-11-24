@@ -4797,7 +4797,6 @@
               <button type="button" data-exam-action="extend-window">Extend Window</button>
               <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
               <button type="button" data-exam-action="download-results">Download Results</button>
-              <button type="button" data-exam-action="download-results">Download Results</button>
             </div>
             <details class="exam-more-actions">
               <summary>More Actions</summary>
@@ -4817,6 +4816,7 @@
               <button type="button" data-exam-action="exam-pdf">Exam PDF</button>
               ${currentTeacherProfile?.role === "main_admin" ? '<button type="button" data-exam-action="edit">Edit Exam</button>' : ''}
               <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
+              <button type="button" data-exam-action="download-results">Download Results</button>
               <button type="button" data-exam-action="retake">Retake Exam</button>
             </div>
             <details class="exam-more-actions">
