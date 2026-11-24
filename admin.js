@@ -4767,6 +4767,7 @@
             <details class="exam-more-actions">
               <summary>More Actions</summary>
               <div class="exam-more-actions-menu">
+                <button type="button" data-exam-action="download-results">Download Results</button>
                 <button type="button" data-exam-action="duplicate">Duplicate Exam</button>
                 <button type="button" data-exam-action="delete" class="danger-outline">Permanently Delete</button>
               </div>
@@ -4795,6 +4796,8 @@
               ${currentTeacherProfile?.role === "main_admin" ? '<button type="button" data-exam-action="edit">Edit Exam</button>' : ''}
               <button type="button" data-exam-action="extend-window">Extend Window</button>
               <button type="button" data-exam-action="toggle-results">${exam.results_released ? "Hide Results" : "Release Results"}</button>
+              <button type="button" data-exam-action="download-results">Download Results</button>
+              <button type="button" data-exam-action="download-results">Download Results</button>
             </div>
             <details class="exam-more-actions">
               <summary>More Actions</summary>
@@ -4861,6 +4864,7 @@
             if (action === "exam-pdf") await window.ExamReport?.generateExamPdf(exam.id, btn);
             if (action === "extend-window") await extendExamWindow(exam);
             if (action === "toggle-results") await toggleExamResultsRelease(exam);
+            if (action === "download-results") await exportExamAttemptsExcel(exam.id, exam.title, exam.code, btn);
             if (action === "archive") await archiveExam(exam);
             if (action === "restore") await restoreExam(exam);
             if (action === "retake") await createRetakeExam(exam);
